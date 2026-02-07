@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPBA Scoreboard - STREAM</title>
+    <!-- PeerJS CDN -->
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <!-- Google Fonts: Oswald, Bebas Neue, Orbitron, Black Ops One, Roboto -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Bebas+Neue&family=Orbitron:wght@600&family=Black+Ops+One&family=Roboto:wght@400;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: rgba(30, 41, 59, 0.9);
+            --text-color: #e2e8f0;
+            --accent-color: #22d3ee;
+            --font-family: 'Oswald', sans-serif;
+            --font-narrow: 'Bebas Neue', sans-serif;
+            --team-a-color: #3b82f6;
+            --team-b-color: #ef4444;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            color: white;
+            background-color: #000000;
+            transition: background 0.5s ease;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* SCALER CONTAINER */
+        #scaler {
+            width: 1920px;
+            height: 1080px;
+            position: absolute;
+            transform-origin: center center;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* If loaded directly, show a connect dialog first */
+        #connect-ui {
+            background: #1e293b;
+            padding: 40px;
+            border-radius: 12px;
+            border: 2px solid var(--accent-color);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            z-index: 1000;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .bg-black {
+            background-color: #000000 !important;
+        }
+
+        .bg-white {
+            background-color: #ffffff !important;
+        }
+
+        .chroma-green {
+            background-color: #00ff00 !important;
+        }
+
+        .chroma-blue {
+            background-color: #0000ff !important;
+        }
+
+        /* TOP BAR NEXT MATCH */
+        #top-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 60px;
+            background: rgba(15, 23, 42, 0.95);
+            display: none;
+            /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+            color: #cbd5e1;
+            font-size: 30px;
+            font-weight: 500;
+            z-index: 500;
+            border-bottom: 2px solid var(--accent-color);
+            letter-spacing: 1px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .tb-live-score {
+            margin-left: 20px;
+            color: #fbbf24;
+            /* Amber */
+            font-weight: 700;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0 10px;
+            border-radius: 4px;
+        }
+
+        #scoreboard {
+            display: none;
+            width: 100%;
+            height: 100%;
+            display: grid;
+            grid-template-columns: 610px 620px 610px;
+            /* Exact fixed widths for symmetry */
+            gap: 20px;
+            /* Reduced gap */
+            align-items: center;
+            padding: 20px;
+            padding-top: 80px;
+            /* Space for Top Bar */
+            box-sizing: border-box;
+            justify-content: center;
+            /* Ensure grid is centered in the 1920 container */
+        }
+
+        .team-panel {
+            background: var(--panel-bg);
+            border-radius: 30px;
+            padding: 30px;
+            border-top: 15px solid white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            box-shadow: 0 15px 25px rgba(0, 0, 0, 0.5);
+            height: 940px;
+            /* Increased height slightly to fill space */
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        .team-name {
+            font-family: var(--font-narrow);
+            font-size: 80px;
+            /* Reverted to 80px as requested */
+            font-weight: 400;
+            text-align: center;
+            margin-bottom: 30px;
+            white-space: nowrap;
+            overflow: hidden;
+            width: 100%;
+            max-width: 610px;
+            /* Full panel width */
+            padding: 0;
+            text-transform: uppercase;
+            text-shadow: 4px 4px 8px rgba(0, 0, 0, 0.5);
+            flex-shrink: 0;
+            transform: scale(1.0, 2.1);
+            /* Reduced height (2.1) to avoid excessive stretching */
+            transform-origin: center;
+        }
+
+        .team-score {
+            font-size: 350px;
+            /* Scaling down score slightly */
+            font-weight: 900;
+            text-align: center;
+            line-height: 0.8;
+            padding: 0;
+            padding-top: 260px;
+            /* Push score down to clear penalty area */
+            width: 100%;
+            display: flex;
+            align-items: flex-start;
+            /* Align to top instead of center */
+            justify-content: center;
+            flex-grow: 1;
+            margin-bottom: 50px;
+        }
+
+        /* CENTER COLUMN */
+        .center-column {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            gap: 30px;
+        }
+
+        /* PENALTY BOXES */
+        .penalty-container {
+            display: flex;
+            width: 100%;
+            justify-content: space-between;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .penalty-box {
+            background: var(--panel-bg);
+            border-radius: 15px;
+            border-top: 8px solid white;
+            padding: 15px;
+            width: 48%;
+            height: 180px;
+            /* Fixed height */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+
+        .pen-active {
+            font-size: 36px;
+            /* Fixed */
+            color: #f59e0b;
+            font-weight: bold;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 5px 15px;
+            border-radius: 8px;
+            text-transform: uppercase;
+            margin-bottom: 40px;
+            /* Space for total */
+            z-index: 2;
+        }
+
+        .pen-total {
+            font-size: 28px;
+            /* Fixed */
+            color: #94a3b8;
+            font-weight: bold;
+            text-transform: uppercase;
+            border-top: 2px solid rgba(148, 163, 184, 0.2);
+            padding-top: 8px;
+            width: 90%;
+            text-align: center;
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .timer-display {
+            font-size: 200px;
+            /* Fixed Giant Timer - slightly reduced */
+            font-weight: bold;
+            font-variant-numeric: tabular-nums;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 30px 40px;
+            border-radius: 40px;
+            border: 6px solid white;
+            text-shadow: 6px 6px 12px rgba(0, 0, 0, 0.6);
+            line-height: 0.9;
+            margin: 0;
+            width: 100%;
+            text-align: center;
+            box-sizing: border-box;
+        }
+
+        .state-indicator {
+            font-size: 70px;
+            /* Fixed */
+            font-weight: 800;
+            padding: 15px 0;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 6px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 6px solid transparent;
+            margin-bottom: 0;
+            width: 100%;
+            text-align: center;
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+
+        .state-indicator.visible {
+            opacity: 1;
+        }
+
+        .state-active {
+            color: #22c55e;
+            border-color: #22c55e;
+            text-shadow: 0 0 30px rgba(34, 197, 94, 0.5);
+        }
+
+        .state-paused {
+            color: #f59e0b;
+            border-color: #f59e0b;
+            animation: pulse-border 1.5s infinite;
+        }
+
+        .state-interval {
+            color: #3b82f6;
+            border-color: #3b82f6;
+        }
+
+        .state-idle {
+            color: #64748b;
+            border-color: #475569;
+        }
+
+        @keyframes pulse-border {
+            0% {
+                border-color: #f59e0b;
+                box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4);
+            }
+
+            70% {
+                border-color: #f59e0b;
+                box-shadow: 0 0 0 30px rgba(245, 158, 11, 0);
+            }
+
+            100% {
+                border-color: #f59e0b;
+                box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+            }
+        }
+
+        /* VISUAL PENALTY POPUPS */
+        .penalty-label {
+            position: absolute;
+            top: 180px;
+            /* Positioned under Team Name */
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 60px;
+            font-weight: 800;
+            padding: 20px 50px;
+            border-radius: 15px;
+            text-transform: uppercase;
+            display: none;
+            z-index: 20;
+            background: rgba(0, 0, 0, 0.95);
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.9);
+            text-align: center;
+            line-height: 1.1;
+            white-space: nowrap;
+        }
+
+        .pen-minor {
+            color: #facc15;
+            border: 6px solid #facc15;
+        }
+
+        .pen-major {
+            color: #ef4444;
+            border: 6px solid #ef4444;
+        }
+
+        .flash-minor {
+            animation: flash-yellow 0.5s infinite alternate;
+        }
+
+        .flash-major {
+            animation: flash-red 0.5s infinite alternate;
+        }
+
+        @keyframes flash-yellow {
+            from {
+                text-shadow: none;
+            }
+
+            to {
+                text-shadow: 0 0 20px #facc15;
+                color: #facc15;
+            }
+        }
+
+        @keyframes flash-red {
+            from {
+                text-shadow: none;
+            }
+
+            to {
+                text-shadow: 0 0 20px #ef4444;
+                color: #ef4444;
+            }
+        }
+
+        .status-bar {
+            grid-column: span 3;
+            text-align: center;
+            font-size: 30px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-top: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 40px;
+            border-radius: 10px;
+            display: none;
+        }
+
+        input {
+            padding: 10px;
+            font-size: 1.2rem;
+            border-radius: 4px;
+            border: 1px solid #64748b;
+            background: #0f172a;
+            color: white;
+            text-align: center;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 1.2rem;
+            background: var(--accent-color);
+            color: #0f172a;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        .chroma-green {
+            background-color: #00ff00 !important;
+        }
+
+        .chroma-blue {
+            background-color: #0000ff !important;
+        }
+
+        .btn-sm {
+            font-size: 0.8rem;
+            padding: 5px;
+            background: #64748b;
+            color: white;
+            margin-top: 10px;
+        }
+
+        /* NEXT MATCH OVERLAY */
+        #next-match-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1920px;
+            height: 1080px;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            z-index: 2000;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .nm-header {
+            font-size: 100px;
+            font-weight: 900;
+            color: var(--accent-color);
+            margin-bottom: 50px;
+            text-transform: uppercase;
+            letter-spacing: 10px;
+        }
+
+        .nm-teams {
+            display: flex;
+            align-items: center;
+            gap: 80px;
+            font-size: 80px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .nm-team {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px 60px;
+            border-radius: 20px;
+            border: 4px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .nm-vs {
+            font-size: 60px;
+            color: #64748b;
+        }
+
+        .nm-timer {
+            margin-top: 100px;
+            font-size: 200px;
+            font-weight: bold;
+            font-variant-numeric: tabular-nums;
+            color: #f59e0b;
+        }
+
+        #next-match-footer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 1920px;
+            background: rgba(0, 0, 0, 0.85);
+            color: #cccccc;
+            text-align: center;
+            padding: 20px 0;
+            font-size: 40px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            border-top: 4px solid var(--accent-color);
+            z-index: 100;
+            display: none;
+        }
+
+        @keyframes pop {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.3);
+                color: #fff;
+                text-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .score-pop {
+            animation: pop 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-black">
+    <div id="connect-ui">
+        <h2 style="color: var(--accent-color); margin: 0; text-align: center;">Scoreboard Viewer</h2>
+        <p style="text-align: center; color: #94a3b8;">Inserisci il Match ID dalla finestra di Regia</p><input
+            type="text" id="match-id" placeholder="es. 1234" /><button id="connect-btn">CONNETTI</button>
+        <div style="text-align: center; margin-top: 10px;">
+            <button class="btn-sm" onclick="document.body.className='chroma-green'">Verde</button>
+            <button class="btn-sm" onclick="document.body.className='chroma-blue'">Blu</button>
+            <button class="btn-sm" onclick="document.body.className='bg-black'">Nero</button>
+            <button class="btn-sm" onclick="document.body.className='bg-white'">Bianco</button>
+            <button class="btn-sm" onclick="document.body.className=''">Trasp</button>
+        </div>
+    </div>
+
+    <!-- Scaler Wrapper -->
+    <div id="scaler">
+        <div id="scoreboard" style="display: none;">
+            <!-- TOP BAR -->
+            <div id="top-bar">
+                NEXT: <span id="tb-teams" style="color: white; margin-left: 10px;">-- vs --</span>
+                <span id="tb-score" class="tb-live-score" style="display:none;">0 - 0</span>
+            </div>
+
+            <!-- NEXT MATCH OVERLAY -->
+            <div id="next-match-layer">
+                <div class="nm-header">NEXT MATCH</div>
+                <div class="nm-teams">
+                    <div class="nm-team" id="nm-team-a">TEAM A</div>
+                    <div class="nm-vs">VS</div>
+                    <div class="nm-team" id="nm-team-b">TEAM B</div>
+                </div>
+                <div class="nm-timer" id="nm-timer">--:--</div>
+            </div>
+
+            <!-- PERSISTENT FOOTER -->
+            <div id="next-match-footer">NEXT: <span id="footer-match-info">-- vs --</span></div>
+
+            <div class="team-panel" id="panel-left">
+                <div class="team-name" id="name-left">TEAM A</div>
+                <div class="team-score" id="score-left">0</div>
+                <div class="penalty-label" id="pen-label-left"></div>
+            </div>
+
+            <div class="center-column">
+                <div class="penalty-container">
+                    <div class="penalty-box" id="pen-box-left">
+                        <div class="pen-active" id="pen-active-left" style="display:none;">PEN: 0</div>
+                        <div class="pen-total" id="pen-total-left">TOT: 0</div>
+                    </div>
+                    <div class="penalty-box" id="pen-box-right">
+                        <div class="pen-active" id="pen-active-right" style="display:none;">PEN: 0</div>
+                        <div class="pen-total" id="pen-total-right">TOT: 0</div>
+                    </div>
+                </div>
+
+                <div id="game-state-ind" class="state-indicator visible state-idle">PRONTO</div>
+                <div class="timer-display" id="timer">10:00</div>
+                <div class="status-bar" id="status-bar"></div>
+            </div>
+
+            <div class="team-panel" id="panel-right">
+                <div class="team-name" id="name-right">TEAM B</div>
+                <div class="team-score" id="score-right">0</div>
+                <div class="penalty-label" id="pen-label-right"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const btn = document.getElementById('connect-btn');
+        const input = document.getElementById('match-id');
+        const ui = document.getElementById('connect-ui');
+        const board = document.getElementById('scoreboard');
+        const scaler = document.getElementById('scaler');
+
+        // SCALING LOGIC
+        function scaleBoard() {
+            const targetWidth = 1920;
+            const targetHeight = 1080;
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+
+            const scaleW = winW / targetWidth;
+            const scaleH = winH / targetHeight;
+            const scale = Math.min(scaleW, scaleH); // Fit within window
+
+            scaler.style.transform = `scale(${scale})`;
+        }
+
+        window.addEventListener('resize', scaleBoard);
+        scaleBoard(); // Initial scale
+
+        // Auto-connect if ID is in URL
+        window.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const id = params.get('id');
+            if (id) {
+                input.value = id;
+                startClient(id);
+            }
+        });
+
+        btn.addEventListener('click', () => {
+            const id = input.value.trim();
+            if (!id) return alert("Inserisci un ID");
+            startClient(id);
+        });
+
+        function startClient(hostId) {
+            const peer = new Peer();
+
+            peer.on('open', (myId) => {
+                console.log("My peer ID: " + myId);
+                const conn = peer.connect(hostId);
+
+                conn.on('open', () => {
+                    console.log("Connected to " + hostId);
+                    ui.style.display = 'none';
+                    board.style.display = 'grid'; // Grid inside the scaler
+                    scaleBoard(); // Re-calc just in case
+                });
+
+                conn.on('data', (data) => {
+                    updateBoard(data);
+                });
+
+                conn.on('close', () => {
+                    alert("Connessione persa!");
+                    location.reload();
+                });
+
+                conn.on('error', (err) => {
+                    alert("Errore di connessione: " + err);
+                    ui.style.display = 'flex';
+                    board.style.display = 'none';
+                });
+            });
+
+            peer.on('error', err => alert("Errore PeerJS: " + err.type));
+        }
+
+        let currentData = null;
+
+        function updateBoard(d) {
+            currentData = d;
+            renderBoardState(d);
+        }
+
+        setInterval(() => {
+            if (currentData) {
+                if (currentData.teamLeft) updatePenaltyVisuals('left', currentData.teamLeft);
+                if (currentData.teamRight) updatePenaltyVisuals('right', currentData.teamRight);
+            }
+        }, 100);
+
+        function renderBoardState(d) {
+            // Timer
+            const tDiv = document.getElementById('timer');
+            tDiv.innerText = d.timer;
+            if (d.isBreak) tDiv.classList.add('timer-break');
+            else tDiv.classList.remove('timer-break');
+
+            // Apply Dynamic Styling
+            const style = d.teamStyle || { fontSize: 80, fontFamily: "'Oswald', sans-serif", bold: false, scaleX: 1.0, scaleY: 2.1, limit: 10, dot: '.' };
+            const names = document.querySelectorAll('.team-name');
+            names.forEach(n => {
+                n.style.fontSize = style.fontSize + 'px';
+                n.style.fontFamily = style.fontFamily || "'Oswald', sans-serif";
+                n.style.fontWeight = style.bold ? 'bold' : 'normal';
+                n.style.transform = `scale(${style.scaleX}, ${style.scaleY})`;
+            });
+
+            // Left Team
+            const lNameRaw = d.teamLeft.name || "";
+            const lNameTrunc = lNameRaw.length > style.limit ? lNameRaw.substring(0, style.limit) + style.dot : lNameRaw;
+            document.getElementById('name-left').innerText = lNameTrunc;
+
+            const lPanel = document.getElementById('panel-left');
+            lPanel.style.borderTopColor = d.teamLeft.color;
+
+            const lScore = document.getElementById('score-left');
+            if (lScore.innerText !== String(d.teamLeft.score)) {
+                lScore.innerText = d.teamLeft.score;
+                lScore.classList.remove('score-pop');
+                void lScore.offsetWidth; // Trigger reflow
+                lScore.classList.add('score-pop');
+            }
+
+            // Penalty Boxes Left
+            const lPenBox = document.getElementById('pen-box-left');
+            lPenBox.style.borderTopColor = d.teamLeft.color;
+            document.getElementById('pen-total-left').innerText = "TOT: " + (d.teamLeft.totalPenalties || 0);
+
+            const lPenActive = document.getElementById('pen-active-left');
+            if (d.teamLeft.penalties > 0) {
+                lPenActive.style.display = 'block';
+                lPenActive.innerText = "PEN: " + d.teamLeft.penalties;
+            } else {
+                lPenActive.style.display = 'none';
+            }
+
+            // Right Team
+            const rNameRaw = d.teamRight.name || "";
+            const rNameTrunc = rNameRaw.length > style.limit ? rNameRaw.substring(0, style.limit) + style.dot : rNameRaw;
+            document.getElementById('name-right').innerText = rNameTrunc;
+
+            const rPanel = document.getElementById('panel-right');
+            rPanel.style.borderTopColor = d.teamRight.color;
+
+            const rScore = document.getElementById('score-right');
+            if (rScore.innerText !== String(d.teamRight.score)) {
+                rScore.innerText = d.teamRight.score;
+                rScore.classList.remove('score-pop');
+                void rScore.offsetWidth; // Trigger reflow
+                rScore.classList.add('score-pop');
+            }
+
+            // Penalty Boxes Right
+            const rPenBox = document.getElementById('pen-box-right');
+            rPenBox.style.borderTopColor = d.teamRight.color;
+            document.getElementById('pen-total-right').innerText = "TOT: " + (d.teamRight.totalPenalties || 0);
+
+            const rPenActive = document.getElementById('pen-active-right');
+            if (d.teamRight.penalties > 0) {
+                rPenActive.style.display = 'block';
+                rPenActive.innerText = "PEN: " + d.teamRight.penalties;
+            } else {
+                rPenActive.style.display = 'none';
+            }
+
+            // Mercy
+            if (d.mercy) board.style.border = "10px solid red"; // Warning border scaled
+            else board.style.border = "none";
+
+            // Status Bar
+            const sBar = document.getElementById('status-bar');
+            if (d.mode === 'PAUSED') {
+                sBar.style.display = 'block';
+                sBar.innerText = "PAUSA";
+                sBar.style.color = "yellow";
+            } else if (d.isBreak) {
+                sBar.style.display = 'block';
+                sBar.innerText = "NEXT: " + d.breakLabel;
+                sBar.style.color = "white";
+            } else {
+                sBar.style.display = 'none';
+            }
+
+            // State Indicator
+            const ind = document.getElementById('game-state-ind');
+            if (d.statusText) {
+                ind.innerText = d.statusText;
+                ind.className = d.statusClass;
+            }
+
+            updatePenaltyVisuals('left', d.teamLeft);
+            updatePenaltyVisuals('right', d.teamRight);
+
+            // NEXT MATCH LOGIC (TOP BAR)
+            const topBar = document.getElementById('top-bar');
+            if (d.nextMatch) {
+                topBar.style.display = 'flex';
+                document.getElementById('tb-teams').innerText = `${d.nextMatch.teamA} vs ${d.nextMatch.teamB}`;
+
+                const tbScore = document.getElementById('tb-score');
+                if (d.nextMatch.isStarted) {
+                    tbScore.style.display = 'inline';
+                    tbScore.innerText = `[ ${d.nextMatch.scoreA} - ${d.nextMatch.scoreB} ]`;
+                } else {
+                    tbScore.style.display = 'none';
+                }
+            } else {
+                topBar.style.display = 'none';
+            }
+
+            // HIDE OLD FOOTER
+            document.getElementById('next-match-footer').style.display = 'none';
+
+            const nmLayer = document.getElementById('next-match-layer');
+
+            const showOverlay = d.showNextMatchOverlay || (d.isBreak && d.nextMatch);
+            if (showOverlay && d.nextMatch) {
+                nmLayer.style.display = 'flex';
+                document.getElementById('nm-team-a').innerText = d.nextMatch.teamA;
+                document.getElementById('nm-team-b').innerText = d.nextMatch.teamB;
+                document.getElementById('nm-timer').innerText = d.timer;
+            } else {
+                nmLayer.style.display = 'none';
+            }
+        }
+
+        function updatePenaltyVisuals(side, teamData) {
+            const panel = document.getElementById('panel-' + side);
+            const name = document.getElementById('name-' + side);
+            const label = document.getElementById('pen-label-' + side);
+
+            name.classList.remove('flash-minor', 'flash-major');
+            label.style.display = 'none';
+            label.className = 'penalty-label';
+
+            if (teamData.lastPenalty && (Date.now() - teamData.lastPenalty.timestamp < 5000)) {
+                const type = (teamData.lastPenalty.type || 'MINOR').toUpperCase();
+                label.style.display = 'block';
+                label.innerHTML = `<div>${type}</div><div>PENALTY</div>`;
+
+                if (type === 'MINOR') {
+                    label.classList.add('pen-minor');
+                    name.classList.add('flash-minor');
+                } else {
+                    label.classList.add('pen-major');
+                    name.classList.add('flash-major');
+                }
+            }
+        }
+    </script>
+</body>
+
+</html>
