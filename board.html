@@ -546,55 +546,52 @@
             }
         }
 
-        /* TECH INDICATOR STYLES */
         .tech-indicator {
             position: absolute;
-            top: 30px;
-            width: 100px;
-            height: 100px;
-            border: 5px solid rgba(255, 255, 255, 0.2);
-            border-radius: 15px;
+            top: 10px;
+            right: 10px;
+            width: 60px;
+            height: 60px;
+            border: 3px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
             background: rgba(0, 0, 0, 0.3);
             display: flex;
             justify-content: center;
             align-items: center;
             transition: all 0.3s ease;
+            z-index: 10;
         }
 
-        #panel-left .tech-indicator {
-            right: 30px;
-        }
-
-        #panel-right .tech-indicator {
-            left: 30px;
+        /* Position adjustment for right box to keep symmetry? Actually right-right or left-left is fine */
+        #pen-box-right .tech-indicator {
+            left: 10px;
+            right: auto;
         }
 
         .tech-indicator .tech-label {
             position: absolute;
-            bottom: -35px;
-            font-size: 24px;
+            bottom: -25px;
+            font-size: 16px;
             font-weight: 800;
             color: rgba(255, 255, 255, 0.4);
-            letter-spacing: 2px;
+            letter-spacing: 1px;
             text-transform: uppercase;
         }
 
         .tech-indicator.active {
             border-color: #22c55e;
-            background: rgba(34, 197, 94, 0.15);
-            box-shadow: 0 0 25px rgba(34, 197, 94, 0.4);
+            background: rgba(34, 197, 94, 0.2);
+            box-shadow: 0 0 15px rgba(34, 197, 94, 0.4);
         }
 
         .tech-indicator.active .tech-label {
             color: #22c55e;
-            text-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
         }
 
         .tech-indicator .checkmark {
-            font-size: 70px;
+            font-size: 40px;
             color: #22c55e;
             display: none;
-            filter: drop-shadow(0 0 10px rgba(34, 197, 94, 0.8));
         }
 
         .tech-indicator.active .checkmark {
@@ -641,10 +638,6 @@
             <div id="next-match-footer">NEXT: <span id="footer-match-info">-- vs --</span></div>
 
             <div class="team-panel" id="panel-left">
-                <div class="tech-indicator" id="tech-left">
-                    <div class="checkmark">✓</div>
-                    <div class="tech-label">TECH</div>
-                </div>
                 <div class="team-name" id="name-left">TEAM A</div>
                 <div class="team-score" id="score-left">0</div>
                 <div class="penalty-label" id="pen-label-left"></div>
@@ -653,10 +646,18 @@
             <div class="center-column">
                 <div class="penalty-container">
                     <div class="penalty-box" id="pen-box-left">
+                        <div class="tech-indicator" id="tech-left">
+                            <div class="checkmark">✓</div>
+                            <div class="tech-label">TECH</div>
+                        </div>
                         <div class="pen-active" id="pen-active-left" style="display:none;">PEN: 0</div>
                         <div class="pen-total" id="pen-total-left">TOT: 0</div>
                     </div>
                     <div class="penalty-box" id="pen-box-right">
+                        <div class="tech-indicator" id="tech-right">
+                            <div class="checkmark">✓</div>
+                            <div class="tech-label">TECH</div>
+                        </div>
                         <div class="pen-active" id="pen-active-right" style="display:none;">PEN: 0</div>
                         <div class="pen-total" id="pen-total-right">TOT: 0</div>
                     </div>
@@ -668,10 +669,6 @@
             </div>
 
             <div class="team-panel" id="panel-right">
-                <div class="tech-indicator" id="tech-right">
-                    <div class="checkmark">✓</div>
-                    <div class="tech-label">TECH</div>
-                </div>
                 <div class="team-name" id="name-right">TEAM B</div>
                 <div class="team-score" id="score-right">0</div>
                 <div class="penalty-label" id="pen-label-right"></div>
