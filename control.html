@@ -1425,8 +1425,8 @@
                 // Persistent ID logic
                 let targetId = state.settings.matchId;
 
-                if (!targetId) {
-                    // Generate random if none exists
+                if (!targetId || targetId === "undefined") {
+                    // Generate random if none exists or if it's the broken "undefined" string
                     targetId = Math.floor(1000 + Math.random() * 9000).toString();
                     state.settings.matchId = targetId;
                     localStorage.setItem('pm_settings', JSON.stringify(state.settings));
@@ -1436,7 +1436,13 @@
                 peer = new Peer(targetId);
 
                 peer.on('open', (id) => {
+                    if (!id) {
+                        console.error("PeerJS open event fired but ID is undefined");
+                        document.getElementById('my-peer-id').innerText = "ERRORE ID";
+                        return;
+                    }
                     document.getElementById('my-peer-id').innerText = id;
+                    document.getElementById('my-peer-id').style.color = 'var(--success-color)';
                     log("Rete pronta. ID: " + id);
                 });
 
@@ -1454,7 +1460,27 @@
 
                 peer.on('error', (err) => {
                     console.error(err);
-                    log("Errore Rete: " + err.type);
+                    if (err.type === 'unavailable-id') {
+                        document.getElementById('my-peer-id').innerText = "OCCUPATO (" + targetId + ")";
+                        document.getElementById('my-peer-id').style.color = 'var(--danger-color)';
+                        log(`ERRORE: L'ID '${targetId}' è già in uso globale. Scegline un altro nel Setup.`);
+
+                        // Suggerisci cambio rapido nei log
+                        const d = document.createElement('div');
+                        d.style.margin = "10px 0";
+                        d.style.padding = "10px";
+                        d.style.border = "1px solid var(--danger-color)";
+                        d.style.borderRadius = "8px";
+                        d.innerHTML = `
+                            <div style="color:var(--danger-color); margin-bottom:5px;">L'ID <b>${targetId}</b> non è disponibile.</div>
+                            <button class="btn" onclick="state.settings.matchId=''; localStorage.setItem('pm_settings', JSON.stringify(state.settings)); location.reload();">
+                                Usa ID Casuale
+                            </button>
+                        `;
+                        document.getElementById('event-log').prepend(d);
+                    } else {
+                        log("Errore Rete: " + err.type);
+                    }
                 });
             }
 
@@ -1462,41 +1488,63 @@
                 const qrMain = document.getElementById('qrcode-container');
                 qrMain.innerHTML = ''; // Clear previous
 
-                const peerId = document.getElementById('my-peer-id').innerText;
-                if (!peerId || peerId === "Generazione...") {
-                    alert("Match ID non ancora pronto.");
+                // Diagnostic Logs
+                console.log("DEBUG QR - Peer Object:", peer);
+                console.log("DEBUG QR - Peer ID:", (peer ? peer.id : "null"));
+                console.log("DEBUG QR - UI Match ID:", document.getElementById('my-peer-id').innerText);
+
+                let peerId = "";
+                if (peer && peer.id) peerId = peer.id;
+                if (!peerId) {
+                    const uiId = document.getElementById('my-peer-id').innerText;
+                    if (uiId && uiId !== "Generazione..." && !uiId.includes("OCCUPATO")) peerId = uiId;
+                }
+
+                if (!peerId || peerId === "undefined") {
+                    alert("Errore: Match ID non pronto.");
                     return;
                 }
 
-                // Get current URL to build the path to board.html
-                const currentUrl = window.location.href;
-                const baseUrl = currentUrl.substring(0, currentUrl.lastIndexOf('/') + 1);
-                const boardUrl = `${baseUrl}board.html?id=${peerId}`;
+                // URL construction - simple and effective
+                const baseDir = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+                const boardUrl = baseDir + "board.html?id=" + peerId;
+
+                console.log("DEBUG QR - URL GENERATO:", boardUrl);
+
+                document.getElementById('qr-url').innerText = boardUrl;
 
                 // Handle file:// warning
                 const warningEl = document.getElementById('qr-file-warning');
                 if (window.location.protocol === 'file:') {
                     warningEl.style.display = 'block';
+                    warningEl.innerHTML = `
+                        <div style="color:var(--danger-color); font-weight:bold; margin-bottom:5px;">⚠️ ATTENZIONE: FILE LOCALE</div>
+                        Il QR Code non funzionerà da cellulare perché il file è solo su questo PC.<br>
+                        Per testare, clicca qui:<br>
+                        <button class="btn-sm" onclick="window.open('${boardUrl}', '_blank')" style="margin-top:5px; background:var(--accent-color); color:var(--bg-color); border:none; border-radius:4px; padding:5px 10px; cursor:pointer; font-weight:bold;">
+                            APRI BOARD SU PC
+                        </button>
+                    `;
                 } else {
                     warningEl.style.display = 'none';
                 }
 
-                document.getElementById('qr-url').innerText = boardUrl;
-
                 if (typeof QRCode === 'undefined') {
-                    qrMain.innerHTML = '<p style="color:var(--danger-color)">Errore: Libreria QR non caricata. Controlla la connessione internet.</p>';
-                    document.getElementById('qr-modal').style.display = 'flex';
-                    return;
+                    qrMain.innerHTML = '<p style="color:var(--danger-color)">Libreria QR non caricata.</p>';
+                } else {
+                    try {
+                        new QRCode(qrMain, {
+                            text: String(boardUrl),
+                            width: 256,
+                            height: 256,
+                            colorDark: "#000000",
+                            colorLight: "#ffffff",
+                            correctLevel: QRCode.CorrectLevel.H
+                        });
+                    } catch (e) {
+                        qrMain.innerHTML = "Errore QR: " + e.message;
+                    }
                 }
-
-                new QRCode(qrMain, {
-                    text: boardUrl,
-                    width: 256,
-                    height: 256,
-                    colorDark: "#000000",
-                    colorLight: "#ffffff",
-                    correctLevel: QRCode.CorrectLevel.H
-                });
 
                 document.getElementById('qr-modal').style.display = 'flex';
                 log("Generazione QR Code per: " + peerId);
