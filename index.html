@@ -836,7 +836,7 @@
                                     </div>
                                     <div style="flex: 1; display: flex; align-items: flex-end; padding-bottom: 10px;">
                                         <label style="cursor: pointer; display: flex; align-items: center; gap: 5px;">
-                                            <input type="checkbox" id="style-bold"> <b>Grassetto</b>
+                                            <input type="checkbox" id="style-bold" checked> <b>Grassetto</b>
                                         </label>
                                     </div>
                                 </div>
@@ -848,7 +848,7 @@
                                     </div>
                                     <div>
                                         <small>Scale X</small>
-                                        <input type="number" id="style-scale-x" class="form-control" value="1.0"
+                                        <input type="number" id="style-scale-x" class="form-control" value="1.2"
                                             step="0.1" min="0.1" max="5.0">
                                     </div>
                                     <div>
@@ -858,7 +858,7 @@
                                     </div>
                                     <div>
                                         <small>Limit</small>
-                                        <input type="number" id="style-limit" class="form-control" value="10" min="1"
+                                        <input type="number" id="style-limit" class="form-control" value="11" min="1"
                                             max="50">
                                     </div>
                                 </div>
@@ -1234,10 +1234,10 @@
             let TEAM_STYLE = {
                 fontSize: 80,
                 fontFamily: "'Oswald', sans-serif",
-                bold: false,
-                scaleX: 1.0,
+                bold: true,
+                scaleX: 1.2,
                 scaleY: 2.1,
-                limit: 10,
+                limit: 11,
                 dot: '.',
                 ...JSON.parse(localStorage.getItem('pm_team_style') || "{}")
             };
