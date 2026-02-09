@@ -2721,7 +2721,9 @@
                 }
 
                 ind.innerText = statusText;
-                ind.classList.add(statusClass);
+                if (statusClass) {
+                    ind.classList.add(statusClass);
+                }
 
                 // Update Header Status as well
                 statusHeader.innerText = statusText;
