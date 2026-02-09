@@ -1492,7 +1492,7 @@
                     return;
                 }
                 const baseDir = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
-                const boardUrl = baseDir + "board.html?id=" + peerId;
+                const boardUrl = baseDir + "board.html?id=" + peerId + "&v=" + Date.now();
                 document.getElementById('qr-url').innerText = boardUrl;
                 const warningEl = document.getElementById('qr-file-warning');
                 if (window.location.protocol === 'file:') {
@@ -3621,6 +3621,7 @@
         window.addEventListener('resize', scaleControl);
         window.addEventListener('load', scaleControl);
     </script>
+    <!-- GitHub Force Redeploy: 2026-02-09 T 18:32 -->
 </body>
 
 </html>
