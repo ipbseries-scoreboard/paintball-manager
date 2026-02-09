@@ -1147,8 +1147,7 @@
                 </div>
                 <div style="width: 100%; display: flex; gap: 5px; margin-bottom: 5px;">
                     <button id="btn-export-log" class="btn" style="flex: 1; padding: 5px;" onclick="exportLogs()">📄
-                        Esporta
-                        Log (.txt)</button>
+                        Esporta</button>
                     <button id="btn-clear-log" class="btn btn-danger" style="width: auto; padding: 5px 15px;"
                         onclick="clearLogs()">🗑️</button>
                 </div>
@@ -1483,124 +1482,61 @@
                     }
                 });
             }
-
+            // ---------------------------------------------
             function showQRCode() {
                 const qrMain = document.getElementById('qrcode-container');
-                qrMain.innerHTML = ''; // Clear previous
-
-                // Diagnostic Logs
-                console.log("DEBUG QR - Peer Object:", peer);
-                console.log("DEBUG QR - Peer ID:", (peer ? peer.id : "null"));
-                console.log("DEBUG QR - UI Match ID:", document.getElementById('my-peer-id').innerText);
-
-                let peerId = "";
-                if (peer && peer.id) peerId = peer.id;
-                if (!peerId) {
-                    const uiId = document.getElementById('my-peer-id').innerText;
-                    if (uiId && uiId !== "Generazione..." && !uiId.includes("OCCUPATO")) peerId = uiId;
-                }
-
-                if (!peerId || peerId === "undefined") {
+                qrMain.innerHTML = '';
+                let peerId = (peer && peer.id) ? peer.id : document.getElementById('my-peer-id').innerText;
+                if (!peerId || peerId === "undefined" || peerId === "Generazione...") {
                     alert("Errore: Match ID non pronto.");
                     return;
                 }
-
-                // URL construction - simple and effective
                 const baseDir = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
                 const boardUrl = baseDir + "board.html?id=" + peerId;
-
-                console.log("DEBUG QR - URL GENERATO:", boardUrl);
-
                 document.getElementById('qr-url').innerText = boardUrl;
-
-                // Handle file:// warning
                 const warningEl = document.getElementById('qr-file-warning');
                 if (window.location.protocol === 'file:') {
                     warningEl.style.display = 'block';
-                    warningEl.innerHTML = `
-                        <div style="color:var(--danger-color); font-weight:bold; margin-bottom:5px;">⚠️ ATTENZIONE: FILE LOCALE</div>
-                        Il QR Code non funzionerà da cellulare perché il file è solo su questo PC.<br>
-                        Per testare, clicca qui:<br>
-                        <button class="btn-sm" onclick="window.open('${boardUrl}', '_blank')" style="margin-top:5px; background:var(--accent-color); color:var(--bg-color); border:none; border-radius:4px; padding:5px 10px; cursor:pointer; font-weight:bold;">
-                            APRI BOARD SU PC
-                        </button>
-                    `;
+                    warningEl.innerHTML = `⚠️ ATTENZIONE: FILE LOCALE. Il QR Code non funzionerà da cellulare.<br><button class="btn-sm" onclick="window.open('${boardUrl}', '_blank')" style="margin-top:5px; background:#3b82f6; color:white; border:none; padding:5px;">APRI BOARD SU PC</button>`;
                 } else {
                     warningEl.style.display = 'none';
                 }
-
-                if (typeof QRCode === 'undefined') {
-                    qrMain.innerHTML = '<p style="color:var(--danger-color)">Libreria QR non caricata.</p>';
-                } else {
-                    try {
-                        new QRCode(qrMain, {
-                            text: String(boardUrl),
-                            width: 256,
-                            height: 256,
-                            colorDark: "#000000",
-                            colorLight: "#ffffff",
-                            correctLevel: QRCode.CorrectLevel.H
-                        });
-                    } catch (e) {
-                        qrMain.innerHTML = "Errore QR: " + e.message;
-                    }
+                if (typeof QRCode !== 'undefined') {
+                    new QRCode(qrMain, { text: String(boardUrl), width: 256, height: 256 });
                 }
-
                 document.getElementById('qr-modal').style.display = 'flex';
-                log("Generazione QR Code per: " + peerId);
             }
 
-            // Helper to calculate total penalties for a team across the tournament
             function getTotalPenalties(teamName) {
                 let total = 0;
                 if (!teamName) return 0;
-
-                // 1. Iterate through ALL matches in the tournament schedule
                 state.tournament.matches.forEach((m, idx) => {
-                    // If this is the currently active match, use the live state
                     if (state.tournament.active && idx === state.tournament.currentIndex) {
                         if (state.teams.A.name === teamName) total += state.teams.A.penalties;
                         if (state.teams.B.name === teamName) total += state.teams.B.penalties;
-                    }
-                    // Otherwise, check if there is a saved state for this match
-                    else if (m.savedState) {
+                    } else if (m.savedState) {
                         if (m.teamA === teamName) total += (m.savedState.penaltiesA || 0);
                         if (m.teamB === teamName) total += (m.savedState.penaltiesB || 0);
                     }
                 });
-
-                // Fallback: If not in tournament mode, just return current state (Session Total)
-                if (!state.tournament.active) {
-                    if (state.teams.A.name === teamName) return state.teams.A.penalties;
-                    if (state.teams.B.name === teamName) return state.teams.B.penalties;
-                }
-
                 return total;
             }
 
             function getNextMatch() {
                 if (!state.tournament.active || state.tournament.currentIndex === -1) return null;
-
                 const currIdx = state.tournament.currentIndex;
                 const matches = state.tournament.matches;
                 const currentMatch = matches[currIdx];
-                const currentPit = currentMatch.pit;
-
                 let nextMatch = null;
-
-                // 1. Check for active Interleaved Peer (Swap logic)
                 if (matches[currIdx - 1] && matches[currIdx - 1].time === currentMatch.time && (!matches[currIdx - 1].savedState || !matches[currIdx - 1].savedState.finished)) {
                     nextMatch = matches[currIdx - 1];
                 } else if (matches[currIdx + 1] && matches[currIdx + 1].time === currentMatch.time && (!matches[currIdx + 1].savedState || !matches[currIdx + 1].savedState.finished)) {
                     nextMatch = matches[currIdx + 1];
                 }
-
-                // 2. If no Interleaved Peer, search forward
                 if (!nextMatch) {
                     for (let i = currIdx + 1; i < matches.length; i++) {
-                        const m = matches[i];
-                        if (!currentPit || m.pit === currentPit) {
-                            nextMatch = m;
+                        if (!currentMatch.pit || matches[i].pit === currentMatch.pit) {
+                            nextMatch = matches[i];
                             break;
                         }
                     }
@@ -1609,63 +1545,62 @@
             }
 
             function broadcastState() {
-                // Prepare package
-                const leftTeamId = state.basesSwapped ? 'B' : 'A';
-                const rightTeamId = state.basesSwapped ? 'A' : 'B';
+                const teamLeftId = state.basesSwapped ? 'B' : 'A';
+                const teamRightId = state.basesSwapped ? 'A' : 'B';
+                const teamLeftData = { ...state.teams[teamLeftId], totalPenalties: getTotalPenalties(state.teams[teamLeftId].name) };
+                const teamRightData = { ...state.teams[teamRightId], totalPenalties: getTotalPenalties(state.teams[teamRightId].name) };
 
-                // Calculate totals
-                const tNameL = state.teams[leftTeamId].name;
-                const tNameR = state.teams[rightTeamId].name;
-
-                // Inject total penalties into the team objects sent to board
-                // We clone to avoid modifying state directly if we were passing refs (though we rebuild packet anyway)
-                const teamLeftData = { ...state.teams[leftTeamId], totalPenalties: getTotalPenalties(tNameL) };
-                const teamRightData = { ...state.teams[rightTeamId], totalPenalties: getTotalPenalties(tNameR) };
-
-                // Get Next Match Info
-                let nextMatchInfo = null;
                 const nm = getNextMatch();
-
+                let nextMatchInfo = null;
                 if (nm) {
-                    let sA = 0;
-                    let sB = 0;
-                    let started = false;
-
-                    if (nm.savedState) {
-                        sA = nm.savedState.scoreA || 0;
-                        sB = nm.savedState.scoreB || 0;
-                        started = true;
-                    }
-
                     nextMatchInfo = {
-                        teamA: nm.teamA,
-                        teamB: nm.teamB,
-                        scoreA: sA,
-                        scoreB: sB,
-                        isStarted: started,
-                        time: nm.time
+                        teamA: nm.teamA, teamB: nm.teamB,
+                        scoreA: nm.savedState ? nm.savedState.scoreA : 0,
+                        scoreB: nm.savedState ? nm.savedState.scoreB : 0,
+                        isStarted: !!nm.savedState, time: nm.time
                     };
+                }
+
+                // Reliability Fix: Use nextMatch names for breakLabel if element is missing
+                let breakLabelText = '';
+                const breakEl = document.getElementById('next-match-names');
+                if (breakEl) {
+                    breakLabelText = breakEl.innerText;
+                } else if (nextMatchInfo) {
+                    breakLabelText = `${nextMatchInfo.teamA} vs ${nextMatchInfo.teamB}`;
                 }
 
                 const packet = {
                     timer: formatTimeSeconds(state.timer),
                     mode: state.mode,
-                    mercy: document.getElementById('mercy-msg').style.display === 'block',
+                    mercy: document.getElementById('mercy-msg') ? document.getElementById('mercy-msg').style.display === 'block' : false,
                     teamLeft: teamLeftData,
                     teamRight: teamRightData,
-                    breakLabel: document.getElementById('next-match-names').innerText,
-                    isBreak: state.mode === 'BREAK_MATCH',
-                    statusText: document.getElementById('game-state-ind').innerText,
-                    statusClass: document.getElementById('game-state-ind').className,
+                    breakLabel: breakLabelText,
+                    isBreak: state.mode === 'BREAK_MATCH' || state.mode === 'GOLDEN_BREAK', // Ensure GOLDEN_BREAK also triggers isBreak on board
+                    statusText: document.getElementById('game-state-ind') ? document.getElementById('game-state-ind').innerText : state.mode,
+                    statusClass: document.getElementById('game-state-ind') ? document.getElementById('game-state-ind').className : '',
                     nextMatch: nextMatchInfo,
-                    teamStyle: TEAM_STYLE // Use Global Style
+                    teamStyle: TEAM_STYLE,
+                    standingsData: calculateTournamentStats()
                 };
 
-                connections.forEach(conn => {
-                    if (conn.open) conn.send(packet);
-                });
+                try {
+                    connections.forEach(conn => {
+                        if (conn.open) {
+                            try {
+                                conn.send(packet);
+                            } catch (err) {
+                                console.error("PeerJS Send Error:", err);
+                                alert("SYNC ERROR (SEND): " + err.message);
+                            }
+                        }
+                    });
+                } catch (e) {
+                    console.error("Broadcast State Error:", e);
+                    alert("SYNC ERROR (General): " + e.message);
+                }
             }
-            // ---------------------------------------------
 
             // UTILS
             const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1937,6 +1872,7 @@
                 speak("Intervallo", "Interval");
                 log(`START INTERVALLO (TechStatus: A=${state.teams.A.techUsed}, B=${state.teams.B.techUsed})`);
                 render();
+                saveTournamentState();
                 startTimerLoop();
             }
             function startPoint() {
@@ -1946,46 +1882,61 @@
                 state.flags = { warn60: false };
                 playHorn(1.0);
                 log("START POINT (Gioco attivo)");
+                state.currentMatchEvents.push({ type: 'START', time: state.timer });
                 recordRealStartTime();
                 render();
+                saveTournamentState();
                 startTimerLoop();
             }
             function pause() {
-                if (state.mode === 'POINT' || state.mode === 'INTERVAL' || state.mode === 'OVERTIME') { stopTimerLoop(); if (state.mode === 'POINT' || state.mode === 'OVERTIME') state.gameTimeRemaining = state.timer; state.prevMode = state.mode; state.mode = 'PAUSED'; playBeep('stop'); speak("Pausa", "Pause"); log(`PAUSA (${state.prevMode})`); render(); }
-                else if (state.mode === 'PAUSED' || state.mode === 'TECH_PAUSED') { state.mode = state.prevMode; playBeep('go'); log(`RIPRESA DA PAUSA (${state.mode})`); startTimerLoop(); render(); }
+                if (state.mode === 'POINT' || state.mode === 'INTERVAL' || state.mode === 'OVERTIME') { stopTimerLoop(); if (state.mode === 'POINT' || state.mode === 'OVERTIME') state.gameTimeRemaining = state.timer; state.prevMode = state.mode; state.mode = 'PAUSED'; playBeep('stop'); speak("Pausa", "Pause"); log(`PAUSA (${state.prevMode})`); saveTournamentState(); render(); }
+                else if (state.mode === 'PAUSED' || state.mode === 'TECH_PAUSED') { state.mode = state.prevMode; playBeep('go'); log(`RIPRESA DA PAUSA (${state.mode})`); saveTournamentState(); startTimerLoop(); render(); }
             }
             function techPause(side) {
-                // Allow if PAUSED (from Interval) OR directly in INTERVAL
-                if ((state.mode === 'PAUSED' && state.prevMode === 'INTERVAL') || state.mode === 'INTERVAL') {
-                    // Determine Team
-                    let teamId = !state.basesSwapped ? (side === 'left' ? 'A' : 'B') : (side === 'left' ? 'B' : 'A');
+                try {
+                    // Allow if PAUSED (from Interval) OR directly in INTERVAL
+                    if ((state.mode === 'PAUSED' && state.prevMode === 'INTERVAL') || state.mode === 'INTERVAL') {
+                        // Determine Team
+                        let teamId = !state.basesSwapped ? (side === 'left' ? 'A' : 'B') : (side === 'left' ? 'B' : 'A');
 
-                    // Valid only if > 10s remaining
-                    if (state.timer <= 10) {
-                        // Log Late Attempt
-                        log(`TENTATIVO PAUSA TECNICA ${state.teams[teamId].name} (RIFIUTATO: ${formatTimeMs(state.timer)} < 10s)`);
-                        return;
+                        if (!state.teams[teamId]) {
+                            log(`ERRORE TECH: Team ${teamId} non trovato.`);
+                            return;
+                        }
+
+                        // Valid only if > 10s remaining
+                        if (state.timer <= 10) {
+                            // Log Late Attempt
+                            log(`TENTATIVO PAUSA TECNICA ${state.teams[teamId].name} (RIFIUTATO: ${formatTimeMs(state.timer)} < 10s)`);
+                            return;
+                        }
+
+                        if (state.teams[teamId].techUsed) {
+                            log(`TECH GIÀ USATO per ${state.teams[teamId].name}`);
+                            return;
+                        }
+
+                        state.teams[teamId].techUsed = true;
+                        if (typeof saveStateToHistory === 'function') saveStateToHistory();
+
+                        // Log remaining time before adding
+                        const remaining = state.timer;
+
+                        // Add 1 Minute to Timer
+                        state.timer += 60;
+                        updateTimerDisplay();
+
+                        // if (typeof speak === 'function') speak("Pausa Tecnica", "Technical Pause");
+                        log(`PAUSA TECNICA SCELTA DA ${state.teams[teamId].name} (+60s). Tempo rimanente: ${formatTimeMs(remaining)}`);
+
+                        if (state.tournament.active) {
+                            if (typeof saveMatchState === 'function') saveMatchState(state.tournament.currentIndex);
+                        }
+                        render();
                     }
-
-                    if (state.teams[teamId].techUsed) return;
-
-                    state.teams[teamId].techUsed = true;
-                    saveStateToHistory(); // Hook (Before timer mod)
-
-                    // Log remaining time before adding
-                    const remaining = state.timer;
-
-                    // Add 1 Minute to Timer
-                    state.timer += 60;
-                    updateTimerDisplay();
-
-                    // If we are PAUSED, we stay PAUSED. If INTERVAL (Running), we stay INTERVAL (Running).
-
-                    speak("Pausa Tecnica", "Technical Pause");
-                    log(`PAUSA TECNICA SCELTA DA ${state.teams[teamId].name} (+60s). Tempo rimanente: ${formatTimeMs(remaining)}`);
-                    log(`DEBUG: TechUsed impostato su TRUE per ${teamId}`);
-                    if (state.tournament.active) saveMatchState(state.tournament.currentIndex);
-                    render();
+                } catch (e) {
+                    console.error("Critical TechPause Error:", e);
+                    alert("ERRORE TECH PAUSE: " + e.message);
                 }
             }
             function startOvertime() {
@@ -1995,6 +1946,7 @@
                 log("START GOLDEN POINT (Overtime)");
                 playHorn(1.0);
                 render();
+                saveTournamentState();
                 startTimerLoop();
             }
 
@@ -2354,8 +2306,7 @@
             function resetAll(resetMatch = true) {
                 if (resetMatch && !confirm("Reset?")) return;
                 state.mode = 'IDLE'; state.timer = CONFIG.gameTime; state.timerMode = 'GAME'; state.gameTimeRemaining = CONFIG.gameTime; stopTimerLoop();
-                if (resetMatch) { state.teams.A.score = 0; state.teams.B.score = 0; state.teams.A.timeouts = 1; state.teams.B.timeouts = 1; state.teams.A.penalties = 0; state.teams.B.penalties = 0; state.teams.A.techUsed = false; state.teams.B.techUsed = false; }
-                else { state.teams.A.score = 0; state.teams.B.score = 0; state.teams.A.timeouts = 1; state.teams.B.timeouts = 1; state.teams.A.penalties = 0; state.teams.B.penalties = 0; state.teams.A.techUsed = false; state.teams.B.techUsed = false; }
+                state.teams.A.score = 0; state.teams.B.score = 0; state.teams.A.timeouts = 1; state.teams.B.timeouts = 1; state.teams.A.penalties = 0; state.teams.B.penalties = 0; state.teams.A.techUsed = false; state.teams.B.techUsed = false;
                 state.basesSwapped = false; document.getElementById('mercy-msg').style.display = 'none';
                 log("RESET MATCH EFFETTUATO");
                 render();
@@ -2384,9 +2335,6 @@
                     techUsedA: state.teams.A.techUsed,
                     techUsedB: state.teams.B.techUsed,
                     timer: state.timer,
-                    basesSwapped: state.basesSwapped,
-                    basesSwappedNext: !state.basesSwapped,
-                    basesSwapped: state.basesSwapped,
                     basesSwappedNext: !state.basesSwapped,
                     finished: finished,
                     history: state.currentMatchEvents || [], // Save Granular History
@@ -2421,8 +2369,13 @@
             function saveTournamentState() {
                 localStorage.setItem('pm_tournament_state', JSON.stringify({
                     tournament: state.tournament,
-                    teams: state.teams, // Save current team names/colors
-                    matchLog: state.matchLog // Save history log
+                    teams: state.teams,
+                    matchLog: state.matchLog,
+                    mode: state.mode,
+                    timer: state.timer,
+                    timerMode: state.timerMode,
+                    gameTimeRemaining: state.gameTimeRemaining,
+                    basesSwapped: state.basesSwapped
                 }));
                 log("TORNEO SALVATO IN LOCAL STORAGE");
             }
@@ -2436,17 +2389,198 @@
                         if (data.teams) state.teams = data.teams;
                         if (data.matchLog) state.matchLog = data.matchLog;
 
+                        // Cache restored values to prevent mangling during loadMatch
+                        const restoredMode = data.mode;
+                        const restoredTimer = data.timer;
+                        const restoredTimerMode = data.timerMode || 'GAME';
+                        const restoredGTR = data.gameTimeRemaining || CONFIG.gameTime;
+                        const restoredSwapped = data.basesSwapped || false;
+
                         log("TORNEO RIPRISTINATO DA LOCAL STORAGE");
 
-                        // If a match was active, load it
+                        // If a match was active, load it without auto-starting inter/timer
                         if (state.tournament.active && state.tournament.currentIndex !== -1) {
-                            loadMatch(state.tournament.currentIndex, true);
+                            loadMatch(state.tournament.currentIndex, true, false);
+
+                            // Re-apply correct state after loadMatch resets UI
+                            state.mode = restoredMode;
+                            state.timer = restoredTimer;
+                            state.timerMode = restoredTimerMode;
+                            state.gameTimeRemaining = restoredGTR;
+                            state.basesSwapped = restoredSwapped;
+
+                            // Force PAUSED to prevent accidental countdown on refresh
+                            if (state.mode === 'POINT' || state.mode === 'INTERVAL' || state.mode === 'OVERTIME' || state.mode === 'BREAK_MATCH' || state.mode === 'GOLDEN_BREAK') {
+                                state.prevMode = state.mode;
+                                state.mode = 'PAUSED';
+                                log("MATCH RIPRISTINATO IN PAUSA PER SICUREZZA");
+                            }
+                            render();
                         } else {
                             render();
                         }
                     } catch (e) {
                         console.error("Errore ripristino torneo:", e);
                     }
+                }
+            }
+
+            function calculateTournamentStats() {
+                const stats = {};
+                const fastestRounds = [];
+
+                state.tournament.matches.forEach(m => {
+                    if (!m.savedState) return; // Any saved state counts
+
+                    const teams = [
+                        { id: 'A', name: m.teamA, score: m.savedState.scoreA, penalties: m.savedState.penaltiesA, tech: m.savedState.techUsedA },
+                        { id: 'B', name: m.teamB, score: m.savedState.scoreB, penalties: m.savedState.penaltiesB, tech: m.savedState.techUsedB }
+                    ];
+
+                    teams.forEach((t, i) => {
+                        const name = t.name.trim().toUpperCase();
+                        if (!stats[name]) {
+                            stats[name] = { name: t.name, played: 0, wins: 0, losses: 0, rw: 0, rl: 0, pen: 0, tech: 0, fastest: 9999 };
+                        }
+                        const s = stats[name];
+                        const oppIdx = i === 0 ? 1 : 0;
+                        const opp = teams[oppIdx];
+
+                        s.played++;
+                        if (t.score > opp.score) s.wins++;
+                        else if (t.score < opp.score) s.losses++;
+
+                        s.rw += t.score;
+                        s.rl += opp.score;
+                        s.pen += t.penalties;
+                        if (t.tech) s.tech++;
+
+                        // Fastest Round Analysis
+                        if (m.savedState.history) {
+                            let lastEventTime = CONFIG.gameTime;
+                            m.savedState.history.forEach(ev => {
+                                console.log("History Event:", ev); // DEBUG
+                                if (ev.type === 'POINT' && ev.team === (i === 0 ? 'A' : 'B')) {
+                                    const duration = lastEventTime - ev.time;
+                                    console.log("Point Duration:", duration, "Team:", t.name); // DEBUG
+                                    if (duration < s.fastest) s.fastest = duration;
+                                    s.totalDuration = (s.totalDuration || 0) + duration;
+                                    s.totalPoints = (s.totalPoints || 0) + 1;
+                                    fastestRounds.push({ team: t.name, duration: duration, match: `Match ${m.id || ''}` });
+                                }
+                                if (ev.type === 'POINT' || ev.type === 'START') lastEventTime = ev.time;
+                            });
+                        }
+
+                        // Check for Mercy Win
+                        if ((t.score - opp.score) >= CONFIG.mercyDiff) {
+                            s.mercyWins = (s.mercyWins || 0) + 1;
+                        }
+                    });
+                });
+
+                // Calculate Averages and Lists
+                const averageTimes = Object.values(stats)
+                    .filter(s => s.totalPoints > 0)
+                    .map(s => ({
+                        team: s.name,
+                        avg: s.totalDuration / s.totalPoints,
+                        points: s.totalPoints
+                    }))
+                    .sort((a, b) => a.avg - b.avg);
+
+                const mercyKillers = Object.values(stats)
+                    .filter(s => s.mercyWins > 0)
+                    .map(s => ({ team: s.name, count: s.mercyWins }))
+                    .sort((a, b) => b.count - a.count);
+
+                const badBoys = Object.values(stats)
+                    .filter(s => s.pen > 0)
+                    .map(s => ({ team: s.name, count: s.pen }))
+                    .sort((a, b) => b.count - a.count);
+
+                // Match History (Completed Matches with Scores)
+                const matchHistory = state.tournament.matches
+                    .filter(m => m.savedState && (m.savedState.scoreA > 0 || m.savedState.scoreB > 0 || m.savedState.status === 'COMPLETED'))
+                    .map(m => ({
+                        id: m.id,
+                        teamA: m.teamA,
+                        scoreA: m.savedState.scoreA,
+                        teamB: m.teamB,
+                        scoreB: m.savedState.scoreB,
+                        winner: m.savedState.scoreA > m.savedState.scoreB ? 'A' : (m.savedState.scoreB > m.savedState.scoreA ? 'B' : 'DRAW')
+                    }))
+                    .sort((a, b) => b.id - a.id); // Newest first
+
+                return {
+                    standings: Object.values(stats).sort((a, b) => {
+                        if (b.wins !== a.wins) return b.wins - a.wins;
+                        const diffA = a.rw - a.rl;
+                        const diffB = b.rw - b.rl;
+                        if (diffB !== diffA) return diffB - diffA;
+                        return a.pen - b.pen;
+                    }),
+                    records: fastestRounds.sort((a, b) => a.duration - b.duration).slice(0, 5),
+                    averageTimes: averageTimes.slice(0, 5),
+                    mercyKillers: mercyKillers.slice(0, 5),
+                    badBoys: badBoys.slice(0, 5),
+                    matchHistory: matchHistory.slice(0, 10), // Last 10 matches
+                    techUsage: Object.values(stats).map(s => ({ name: s.name, tech: s.tech }))
+                };
+            }
+
+            function renderStats() {
+                const data = calculateTournamentStats();
+                const tbody = document.getElementById('standings-body');
+                if (!tbody) return;
+                tbody.innerHTML = '';
+
+                data.standings.forEach((s, idx) => {
+                    const tr = document.createElement('tr');
+                    const diff = s.rw - s.rl;
+                    tr.innerHTML = `
+                        <td><strong>${idx + 1}.</strong> ${s.name}</td>
+                        <td>${s.played}</td>
+                        <td>${s.wins}</td>
+                        <td>${s.losses}</td>
+                        <td style="color: #10b981;">${s.rw}</td>
+                        <td style="color: #ef4444;">${s.rl}</td>
+                        <td>${diff > 0 ? '+' : ''}${diff}</td>
+                        <td>${s.pen}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+                // Render Fastest
+                const fastestList = document.getElementById('fastest-rounds-list');
+                if (fastestList) {
+                    fastestList.innerHTML = data.records.length ? '' : '<li>Nessun dato</li>';
+                    data.records.forEach(r => {
+                        fastestList.innerHTML += `<li><strong>${formatTimeSeconds(r.duration)}</strong> - ${r.team}</li>`;
+                    });
+                }
+
+                // Render Tech
+                const techList = document.getElementById('tech-pause-list');
+                if (techList) {
+                    techList.innerHTML = '';
+                    data.techUsage.forEach(s => {
+                        if (s.tech > 0) techList.innerHTML += `<li>${s.name}: <strong>${s.tech}</strong></li>`;
+                    });
+                    if (!techList.innerHTML) techList.innerHTML = '<li>Nessun utilizzo</li>';
+                }
+
+                // Other Stats
+                const other = document.getElementById('other-stats-content');
+                if (other) {
+                    const totalPen = data.standings.reduce((sum, s) => sum + s.pen, 0);
+                    const mostPenTeam = [...data.standings].sort((a, b) => b.pen - a.pen)[0];
+
+                    other.innerHTML = `
+                        <div>Penalità totali torneo: <strong>${totalPen}</strong></div>
+                        ${mostPenTeam && mostPenTeam.pen > 0 ? `<div>Team più penalizzato: <span style="color:#ef4444">${mostPenTeam.name}</span> (${mostPenTeam.pen})</div>` : ''}
+                        <div style="margin-top:5px; font-style:italic; color:#6b7280; font-size:0.8rem;">* La classifica segue: Vittorie > Diff. Round > Minor Penalità.</div>
+                    `;
                 }
             }
 
@@ -2502,7 +2636,7 @@
                 }
             }
 
-            function loadMatch(i, resume = false) {
+            function loadMatch(i, resume = false, autoStart = true) {
                 if (i >= 0 && i < state.tournament.matches.length) {
                     const m = state.tournament.matches[i];
                     state.tournament.currentIndex = i;
@@ -2518,7 +2652,8 @@
                         if (m.savedState.goldenPending) {
                             // Resuming a match that was waiting for Golden Point
                             log("RIPRESA MATCH IN ATTESA DI GOLDEN POINT");
-                            startGoldenBreak(); // Auto-start the break
+                            if (autoStart) startGoldenBreak(); // Auto-start the break only if requested
+                            else state.mode = 'GOLDEN_BREAK'; // Just set mode if no autostart
                             m.savedState.goldenPending = false; // Clear flag
                         }
 
@@ -2529,33 +2664,17 @@
                         resetAll(false);
                         state.teams.A.name = m.teamA;
                         state.teams.B.name = m.teamB;
-                        // Initial Swap Logic for Fresh Load (only for Smart Slot init)
-                        // If we are fresh loading, use standard logic or stored logic?
-                        // User: "alternare le squadre".
-                        // If resuming, restoreMatchState handles it.
-
-                        // Check initial smart swap if NOT resuming
-                        const prev = state.tournament.matches[i - 1];
-                        if (!resume && prev && prev.time === m.time) {
-                            state.basesSwapped = true; // 2nd match default swap? Or No?
-                            // User said: "Non deve cambiare solo campo deve alternare... e poi cambiare anche il campo"
-                            // Usually 1st match Normal, 2nd match Normal?
-                            // Let's stick to default false (Normal) for fresh load unless we want to enforce structure.
-                            state.basesSwapped = false;
-                        }
-
-                        // Reset Granular History
+                        state.basesSwapped = false;
                         state.currentMatchEvents = [];
                     }
 
                     speak("Caricato", "Loaded");
                     log(`CARICATO MATCH ${i + 1}: ${m.teamA} vs ${m.teamB}`);
 
-                    // If we rotated, we should probably start Interval immediately?
-                    // User: "automatico quando premo punto confermato".
-                    // So yes, Start Interval.
+                    // Flow control
                     if (resume) {
-                        startInter();
+                        if (autoStart) startInter();
+                        else render();
                     } else {
                         render(); // Fresh load waits for "Start Game/Point"
                     }
@@ -2798,11 +2917,15 @@
             const MAX_HISTORY = 20;
 
             function saveStateToHistory() {
-                // Deep copy state
-                const snapshot = JSON.parse(JSON.stringify(state));
-                historyStack.push(snapshot);
-                if (historyStack.length > MAX_HISTORY) historyStack.shift();
-                // log("DEBUG: Stato salvato per Undo");
+                try {
+                    // Deep copy state
+                    const snapshot = JSON.parse(JSON.stringify(state));
+                    historyStack.push(snapshot);
+                    if (historyStack.length > MAX_HISTORY) historyStack.shift();
+                } catch (e) {
+                    console.error("Undo Save Error:", e);
+                    // Non-blocking error, we just lose the ability to undo this specific action
+                }
             }
 
             function undoLastAction() {

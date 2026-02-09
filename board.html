@@ -597,6 +597,161 @@
         .tech-indicator.active .checkmark {
             display: block;
         }
+
+        /* STATS OVERLAY */
+        #stats-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1920px;
+            height: 1080px;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            z-index: 3000;
+            display: none;
+            flex-direction: column;
+            padding: 50px;
+            box-sizing: border-box;
+            color: white;
+            animation: fadeIn 0.5s ease-out;
+            overflow-y: auto;
+            /* Enable vertical scrolling */
+        }
+
+        .stats-title {
+            font-size: 80px;
+            font-weight: 900;
+            color: var(--accent-color);
+            text-align: center;
+            margin-bottom: 40px;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            border-bottom: 5px solid var(--accent-color);
+            padding-bottom: 20px;
+        }
+
+        .stats-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 10px;
+            font-size: 45px;
+        }
+
+        .stats-table th {
+            text-align: left;
+            padding: 15px;
+            color: #94a3b8;
+            font-size: 30px;
+            text-transform: uppercase;
+        }
+
+        .stats-table tr {
+            background: rgba(255, 255, 255, 0.05);
+            transition: transform 0.2s;
+        }
+
+        .stats-table td {
+            padding: 20px 15px;
+            border-top: 2px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stats-table td:first-child {
+            border-left: 10px solid var(--accent-color);
+            border-top-left-radius: 15px;
+            border-bottom-left-radius: 15px;
+            font-weight: bold;
+        }
+
+        .stats-table td {
+            padding: 15px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stats-table td:last-child {
+            border-top-right-radius: 15px;
+            border-bottom-right-radius: 15px;
+        }
+
+        .stats-rank {
+            color: var(--accent-color);
+            font-weight: bold;
+            margin-right: 15px;
+        }
+
+        .stats-val-green {
+            color: #22c55e;
+            font-weight: bold;
+        }
+
+        .stats-val-red {
+            color: #ef4444;
+            font-weight: bold;
+        }
+
+        /* NEW ELEMENTS */
+        #btn-open-stats {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            width: 80px;
+            height: 80px;
+            background: rgba(59, 130, 246, 0.8);
+            border: none;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 2500;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            transition: all 0.2s;
+            font-size: 40px;
+            color: white;
+        }
+
+        #btn-open-stats:hover {
+            background: rgba(59, 130, 246, 1);
+            transform: scale(1.1);
+        }
+
+        #stats-legend {
+            margin-top: auto;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 25px;
+            border-radius: 15px;
+            font-size: 24px;
+            color: #94a3b8;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .legend-item b {
+            color: var(--accent-color);
+            margin-right: 10px;
+        }
+
+        #close-stats-btn {
+            position: absolute;
+            top: 40px;
+            right: 40px;
+            background: var(--danger-color);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 30px;
+            font-weight: bold;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            text-transform: uppercase;
+        }
+
+        .stats-val-neutral {
+            color: #fbbf24;
+            font-weight: bold;
+        }
     </style>
 </head>
 
@@ -632,6 +787,52 @@
                     <div class="nm-team" id="nm-team-b">TEAM B</div>
                 </div>
                 <div class="nm-timer" id="nm-timer">--:--</div>
+            </div>
+
+            <!-- STATS OVERLAY -->
+            <button id="btn-open-stats" title="Visualizza Classifica">📊</button>
+
+            <div id="stats-overlay">
+                <button id="close-stats-btn">Chiudi X</button>
+                <div class="stats-title">CLASSIFICA TORNEO</div>
+                <table class="stats-table">
+                    <thead>
+                        <tr>
+                            <th>Team</th>
+                            <th style="text-align: center">P</th>
+                            <th style="text-align: center">W</th>
+                            <th style="text-align: center">L</th>
+                            <th style="text-align: center">RW</th>
+                            <th style="text-align: center">RL</th>
+                            <th style="text-align: center">RD</th>
+                            <th style="text-align: center">PEN</th>
+                        </tr>
+                    </thead>
+                    <tbody id="board-standings-body"></tbody>
+                </table>
+
+                <div id="stats-extras"
+                    style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 30px; margin-top: 30px;">
+                    <!-- Legenda -->
+                    <!-- Match History -->
+                    <div id="stats-history">
+                        <div
+                            style="font-weight: bold; color: white; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 10px; text-transform: uppercase;">
+                            📜 Ultimi Match
+                        </div>
+                        <ul id="history-list" style="list-style: none; padding: 0; margin: 0; font-size: 24px;"></ul>
+                    </div>
+
+                    <!-- Fastest Rounds -->
+                    <div id="stats-records"
+                        style="background: rgba(255,255,255,0.05); padding: 25px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.1);">
+                        <div
+                            style="font-weight: bold; color: white; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 10px; text-transform: uppercase;">
+                            ⚡ Round Più Veloci</div>
+                        <ul id="board-fastest-list" style="list-style: none; padding: 0; margin: 0; font-size: 26px;">
+                        </ul>
+                    </div>
+                </div>
             </div>
 
             <!-- PERSISTENT FOOTER -->
@@ -763,7 +964,65 @@
             }
         }, 100);
 
+        // STATS OVERLAY LOGIC
+        let lastStandingsData = null;
+
+        function toggleStatsOverlay(show) {
+            const statsOverlay = document.getElementById('stats-overlay');
+            if (show) {
+                statsOverlay.style.display = 'flex';
+                renderStandingsTable();
+            } else {
+                statsOverlay.style.display = 'none';
+            }
+        }
+
+        function renderStandingsTable() {
+            if (!lastStandingsData) return;
+            const tbody = document.getElementById('board-standings-body');
+            tbody.innerHTML = '';
+            lastStandingsData.standings.slice(0, 10).forEach((s, idx) => {
+                const tr = document.createElement('tr');
+                const diff = s.rw - s.rl;
+                tr.innerHTML = `
+                    <td><span class="stats-rank">${idx + 1}.</span> ${s.name}</td>
+                    <td style="text-align: center">${s.played}</td>
+                    <td style="text-align: center" class="stats-val-green">${s.wins}</td>
+                    <td style="text-align: center" class="stats-val-red">${s.losses}</td>
+                    <td style="text-align: center">${s.rw}</td>
+                    <td style="text-align: center">${s.rl}</td>
+                    <td style="text-align: center" class="${diff >= 0 ? 'stats-val-green' : 'stats-val-red'}">${diff > 0 ? '+' : ''}${diff}</td>
+                    <td style="text-align: center; color: #94a3b8; font-weight: bold;">${s.pen}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Render Fastest Rounds
+            const fastestList = document.getElementById('board-fastest-list');
+            fastestList.innerHTML = '';
+            if (lastStandingsData.records && lastStandingsData.records.length > 0) {
+                lastStandingsData.records.slice(0, 5).forEach(r => {
+                    const li = document.createElement('li');
+                    li.style.marginBottom = '8px';
+                    li.innerHTML = `<span style="color:var(--accent-color); font-weight:bold;">${formatTimeSeconds(r.duration)}</span> - ${r.team}`;
+                    fastestList.appendChild(li);
+                });
+            } else {
+                fastestList.innerHTML = '<li>Nessun dato</li>';
+            }
+        }
+
+        document.getElementById('btn-open-stats').addEventListener('click', () => toggleStatsOverlay(true));
+        document.getElementById('close-stats-btn').addEventListener('click', () => toggleStatsOverlay(false));
+
         function renderBoardState(d) {
+            // Update standings cache
+            if (d.standingsData) {
+                lastStandingsData = d.standingsData;
+                if (document.getElementById('stats-overlay').style.display === 'flex') {
+                    renderStandingsTable();
+                }
+            }
             // Timer
             const tDiv = document.getElementById('timer');
             tDiv.innerText = d.timer;
@@ -771,7 +1030,7 @@
             else tDiv.classList.remove('timer-break');
 
             // Apply Dynamic Styling
-            const style = d.teamStyle || { fontSize: 80, fontFamily: "'Oswald', sans-serif", bold: false, scaleX: 1.0, scaleY: 2.1, limit: 10, dot: '.' };
+            const style = d.teamStyle || { fontSize: 80, fontFamily: "'Oswald', sans-serif", bold: true, scaleX: 1.2, scaleY: 2.1, limit: 11, dot: '.' };
             const names = document.querySelectorAll('.team-name');
             names.forEach(n => {
                 n.style.fontSize = style.fontSize + 'px';
@@ -913,6 +1172,123 @@
             } else {
                 nmLayer.style.display = 'none';
             }
+
+            // STATS RENDERING (FIXED)
+            if (d.standingsData) {
+                console.log("Stats Data Received:", d.standingsData); // DEBUG
+                // 1. Standings Table
+                const tbody = document.getElementById('board-standings-body');
+                if (tbody) {
+                    tbody.innerHTML = '';
+                    d.standingsData.standings.forEach((s, idx) => {
+                        const tr = document.createElement('tr');
+                        const diff = s.rw - s.rl;
+                        tr.innerHTML = `
+                            <td><span class="stats-rank">${idx + 1}.</span> ${s.name}</td>
+                            <td style="text-align: center">${s.played}</td>
+                            <td style="text-align: center; color: #22c55e; font-weight: bold;">${s.wins}</td>
+                            <td style="text-align: center; color: #ef4444; font-weight: bold;">${s.losses}</td>
+                            <td style="text-align: center; color: #10b981;">${s.rw}</td>
+                            <td style="text-align: center; color: #ef4444;">${s.rl}</td>
+                            <td style="text-align: center; font-weight: bold; color: ${diff > 0 ? '#22c55e' : (diff < 0 ? '#ef4444' : '#fbbf24')}">${diff > 0 ? '+' + diff : diff}</td>
+                            <td style="text-align: center; color: #f59e0b;">${s.pen}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+
+                // 2. Stats Grid (4 Quadrants)
+                const recContainer = document.getElementById('stats-records');
+                if (recContainer) {
+                    recContainer.innerHTML = '';
+                    recContainer.style.display = 'grid';
+                    recContainer.style.gridTemplateColumns = '1fr 1fr';
+                    recContainer.style.gap = '25px';
+                    recContainer.style.alignItems = 'start';
+
+                    // Helper to create a list section
+                    const createSection = (title, icon, data, formatter) => {
+                        const wrapper = document.createElement('div');
+                        wrapper.innerHTML = `
+                            <div style="font-weight: bold; color: white; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 10px; text-transform: uppercase; font-size: 0.9em; letter-spacing: 1px;">
+                                ${icon} ${title}
+                            </div>
+                            <ul style="list-style: none; padding: 0; margin: 0; font-size: 24px;"></ul>
+                        `;
+                        const list = wrapper.querySelector('ul');
+
+                        if (data && data.length > 0) {
+                            data.forEach(r => {
+                                const li = document.createElement('li');
+                                li.style.marginBottom = '10px';
+                                li.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+                                li.style.paddingBottom = '5px';
+                                li.style.display = 'flex';
+                                li.style.justifyContent = 'space-between';
+                                li.innerHTML = `
+                                    <span><strong style="color: var(--accent-color)">${r.team}</strong> <span style="font-size: 0.8em; color: #94a3b8; margin-left: 10px;">${r.match || ''}</span></span>
+                                    <span style="font-weight: bold; color: #fbbf24;">${formatter(r.duration || r.avg || r.count)}</span>
+                                `;
+                                list.appendChild(li);
+                            });
+                        } else {
+                            list.innerHTML = '<li style="color: #64748b; font-style: italic;">Nessun dato</li>';
+                        }
+                        return wrapper;
+                    };
+
+                    const formatCount = (val) => val;
+                    const formatTime = (val) => formatTimeSeconds(val) + 's';
+
+                    // Append Sections
+                    recContainer.appendChild(createSection('Round Veloci', '⚡', d.standingsData.records, formatTime));
+                    recContainer.appendChild(createSection('Tempo Medio', '⏱️', d.standingsData.averageTimes, formatTime));
+                    recContainer.appendChild(createSection('Mercy Killers', '💀', d.standingsData.mercyKillers, formatCount));
+                    recContainer.appendChild(createSection('Cattivi Ragazzi', '🟨', d.standingsData.badBoys, formatCount));
+                }
+
+                // 3. Match History
+                const histList = document.getElementById('history-list');
+                if (histList) {
+                    histList.innerHTML = '';
+                    if (d.standingsData.matchHistory && d.standingsData.matchHistory.length > 0) {
+                        d.standingsData.matchHistory.slice(0, 4).forEach(m => {
+                            const li = document.createElement('li');
+                            li.style.marginBottom = '12px';
+                            li.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+                            li.style.paddingBottom = '8px';
+                            li.style.display = 'flex';
+                            li.style.flexDirection = 'column'; // Stack for space
+
+                            const winnerColor = '#22c55e';
+                            const loserColor = '#94a3b8';
+                            const colorA = m.winner === 'A' ? winnerColor : (m.winner === 'B' ? loserColor : 'white');
+                            const colorB = m.winner === 'B' ? winnerColor : (m.winner === 'A' ? loserColor : 'white');
+
+                            li.innerHTML = `
+                                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                                    <span style="color:${colorA}; font-weight:${m.winner === 'A' ? 'bold' : 'normal'}">${m.teamA}</span>
+                                    <span style="font-weight:bold; color:#fbbf24; font-size:1.1em;">${m.scoreA}</span>
+                                </div>
+                                <div style="display:flex; justify-content:space-between;">
+                                    <span style="color:${colorB}; font-weight:${m.winner === 'B' ? 'bold' : 'normal'}">${m.teamB}</span>
+                                    <span style="font-weight:bold; color:#fbbf24; font-size:1.1em;">${m.scoreB}</span>
+                                </div>
+                            `;
+                            histList.appendChild(li);
+                        });
+                    } else {
+                        histList.innerHTML = '<li style="color: #64748b; font-style: italic;">Nessuna partita conclusa</li>';
+                    }
+                }
+            }
+        }
+
+        function formatTimeSeconds(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = Math.floor(seconds % 60);
+            const milliseconds = Math.floor((seconds % 1) * 100);
+            return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
         }
 
         function updatePenaltyVisuals(side, teamData) {
