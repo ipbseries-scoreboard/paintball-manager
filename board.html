@@ -799,6 +799,124 @@
             font-weight: bold;
         }
 
+        /* SCHEDULE OVERLAY */
+        #schedule-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1920px;
+            height: 1080px;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            z-index: 3000;
+            display: none;
+            flex-direction: column;
+            padding: 50px;
+            box-sizing: border-box;
+            color: white;
+            animation: fadeIn 0.5s ease-out;
+            overflow-y: auto;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .schedule-scroll-area {
+            flex: 1;
+            overflow-y: auto;
+            margin-top: 20px;
+            padding-right: 15px;
+        }
+
+        /* Custom Scrollbar */
+        .schedule-scroll-area::-webkit-scrollbar {
+            width: 12px;
+        }
+
+        .schedule-scroll-area::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+        }
+
+        .schedule-scroll-area::-webkit-scrollbar-thumb {
+            background: var(--accent-color);
+            border-radius: 10px;
+            border: 3px solid rgba(15, 23, 42, 1);
+        }
+
+        .schedule-title {
+            font-size: 80px;
+            font-weight: 900;
+            color: var(--accent-color);
+            text-align: center;
+            margin-bottom: 40px;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            border-bottom: 5px solid var(--accent-color);
+            padding-bottom: 20px;
+        }
+
+        .schedule-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 10px;
+            font-size: 35px;
+        }
+
+        .schedule-table th {
+            text-align: left;
+            padding: 20px;
+            color: #94a3b8;
+            font-size: 24px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+
+        .schedule-row {
+            background: rgba(255, 255, 255, 0.03);
+            transition: all 0.3s;
+        }
+
+        .schedule-row.active {
+            background: rgba(34, 211, 238, 0.2);
+            box-shadow: inset 5px 0 0 var(--accent-color);
+        }
+
+        .schedule-row.finished {
+            opacity: 0.4;
+            filter: grayscale(1);
+        }
+
+        .schedule-row td {
+            padding: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        #btn-open-schedule {
+            position: absolute;
+            bottom: 30px;
+            right: 230px;
+            /* Offset from layout and stats buttons */
+            width: 80px;
+            height: 80px;
+            background: rgba(14, 165, 233, 0.8);
+            border: none;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 2500;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            transition: all 0.2s;
+            font-size: 40px;
+            color: white;
+        }
+
+        #btn-open-schedule:hover {
+            background: rgba(14, 165, 233, 1);
+            transform: scale(1.1);
+        }
+
         /* SPOTLIGHT & LAYOUT ELEMENTS */
         #btn-open-layout {
             position: absolute;
@@ -995,7 +1113,31 @@
             <div class="nm-timer" id="nm-timer">--:--</div>
         </div>
 
-        <button id="btn-open-stats" title="Visualizza Classifica">📊</button>
+        <!-- Schedule Overlay -->
+        <div id="schedule-overlay">
+            <button id="close-schedule-btn" onclick="toggleSchedule()">CHIUDI</button>
+            <div class="schedule-title">PROGRAMMA TORNEO</div>
+            <div id="schedule-delay-board"
+                style="text-align: center; font-size: 40px; margin-top: -30px; margin-bottom: 20px;"></div>
+            <div class="schedule-scroll-area">
+                <table class="schedule-table">
+                    <thead>
+                        <tr>
+                            <th>ORA</th>
+                            <th>MATCH</th>
+                            <th>FASE</th>
+                            <th>CAMPO</th>
+                        </tr>
+                    </thead>
+                    <tbody id="schedule-body">
+                        <!-- Dynamic Rows -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <button id="btn-open-stats" onclick="toggleStats()">📊</button>
+        <button id="btn-open-schedule" onclick="toggleSchedule()">🗓️</button>
         <button id="btn-open-layout" title="Visualizza Layout Campo">📐</button>
 
 
@@ -1143,6 +1285,7 @@
         function updateBoard(d) {
             currentData = d;
             renderBoardState(d);
+            if (showSchedule) renderScheduleTable();
         }
 
         setInterval(() => {
@@ -1152,7 +1295,52 @@
             }
         }, 100);
 
-        // STATS OVERLAY LOGIC
+        // SCHEDULE OVERLAY LOGIC
+        let showSchedule = false;
+
+        function toggleSchedule() {
+            showSchedule = !showSchedule;
+            const overlay = document.getElementById('schedule-overlay');
+            overlay.style.display = showSchedule ? 'flex' : 'none';
+            if (showSchedule) renderScheduleTable();
+        }
+
+        function renderScheduleTable() {
+            if (!currentData || !currentData.tournament || !currentData.tournament.matches) return;
+            const tbody = document.getElementById('schedule-body');
+            tbody.innerHTML = '';
+
+            // Update Delay Info on Board
+            const delayEl = document.getElementById('schedule-delay-board');
+            if (delayEl) {
+                const d = currentData.tournament.delay || 0;
+                if (d > 0) {
+                    delayEl.innerText = `RITARDO PROSSIMO MATCH: +${d} MIN`;
+                    delayEl.style.color = '#ef4444'; // Red
+                } else if (d < 0) {
+                    delayEl.innerText = `ANTICIPO PROSSIMO MATCH: ${d} MIN`;
+                    delayEl.style.color = '#10b981'; // Green
+                } else {
+                    delayEl.innerText = "IL TORNEO È IN ORARIO";
+                    delayEl.style.color = '#94a3b8'; // Slate
+                }
+            }
+
+            currentData.tournament.matches.forEach((m, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = 'schedule-row';
+                if (idx === currentData.tournament.currentIndex) tr.classList.add('active');
+                if (m.savedState && m.savedState.finished) tr.classList.add('finished');
+
+                tr.innerHTML = `
+                    <td>${m.time || '--:--'}</td>
+                    <td>${m.teamA} vs ${m.teamB}</td>
+                    <td>${m.phase || 'GIRONI'}</td>
+                    <td>${m.field || 'Campo 1'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
         let lastStandingsData = null;
 
         document.getElementById('btn-open-stats').addEventListener('click', () => {

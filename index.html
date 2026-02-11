@@ -154,7 +154,95 @@
             gap: 20px;
             padding: 20px;
             height: calc(100% - 80px);
-            /* Adjusted for fixed container */
+            transition: grid-template-columns 0.4s ease;
+        }
+
+        .main-content.show-schedule {
+            grid-template-columns: 320px 1fr 320px 300px;
+        }
+
+        #schedule-panel {
+            display: none;
+            background-color: var(--panel-bg);
+            border-radius: 12px;
+            padding: 15px;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .main-content.show-schedule #schedule-panel {
+            display: flex;
+        }
+
+        .schedule-title {
+            font-size: 1.2rem;
+            color: var(--accent-color);
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid var(--accent-color);
+            padding-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .schedule-list {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .schedule-list::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .schedule-list::-webkit-scrollbar-thumb {
+            background: var(--accent-color);
+            border-radius: 10px;
+        }
+
+        .schedule-item {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+            border-left: 4px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .schedule-item.active {
+            background: rgba(34, 211, 238, 0.15);
+            border-left-color: var(--accent-color);
+            box-shadow: 0 0 10px rgba(34, 211, 238, 0.2);
+        }
+
+        .schedule-item.finished {
+            opacity: 0.5;
+            filter: grayscale(0.8);
+        }
+
+        .si-time {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-bottom: 4px;
+        }
+
+        .si-teams {
+            font-weight: bold;
+            color: white;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .si-info {
+            font-size: 0.75rem;
+            color: var(--accent-color);
+            margin-top: 4px;
         }
 
         .team-panel {
@@ -797,6 +885,10 @@
                             <div style="margin-bottom: 5px;"><input type="checkbox" id="opt-confirm-skip" checked>
                                 Richiedi
                                 conferma Salto Slot</div>
+                            <div style="margin-bottom: 5px;"><input type="checkbox" id="opt-confirm-no-point"> Richiedi
+                                conferma No Point</div>
+                            <div style="margin-bottom: 5px;"><input type="checkbox" id="opt-confirm-undo"> Richiedi
+                                conferma Annulla</div>
                         </div>
 
                         <!-- Mercy Rule -->
@@ -854,7 +946,7 @@
                                 <div><small>Game (min)</small><input type="number" id="game-duration-setting"
                                         class="form-control" value="10"></div>
                                 <div><small>Golden Point</small><input type="number" id="golden-duration-setting"
-                                        class="form-control" value="2"></div>
+                                        class="form-control" value="3"></div>
                             </div>
                         </div>
 
@@ -1277,6 +1369,7 @@
                     style="display: none; background: #c2410c; color: white; border-color: #ea580c; animation: pulse 2s infinite;"
                     onclick="reopenPhaseModal()">🏁 OPZIONI FINE</button>
                 <button id="btn-settings" class="btn">⚙️ Setup</button>
+                <button id="btn-toggle-schedule" class="btn" onclick="toggleSchedule()">🗓️ Programma</button>
             </div>
         </header>
 
@@ -1338,6 +1431,12 @@
                 <div style="width: 100%; display: flex; gap: 5px; margin-bottom: 5px;">
                     <button id="btn-export-log" class="btn" style="flex: 1; padding: 5px;" onclick="exportLogs()">📄
                         Esporta</button>
+                    <button id="btn-no-point" class="btn btn-warning"
+                        style="width: auto; padding: 5px 10px; font-weight: bold;">🚫 NO POINT</button>
+                    <button id="btn-undo" class="btn btn-warning"
+                        style="width: auto; padding: 5px 10px; font-weight: bold;">🔄 ANNULLA</button>
+                    <button id="btn-manual-swap" class="btn btn-warning"
+                        style="width: auto; padding: 5px 10px; font-weight: bold;">↔️ SWAP</button>
                     <button id="btn-clear-log" class="btn btn-danger" style="width: auto; padding: 5px 15px;"
                         onclick="clearLogs()">🗑️</button>
                 </div>
@@ -1376,6 +1475,18 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Schedule Panel -->
+            <div id="schedule-panel">
+                <div class="schedule-title">
+                    <span>🗓️ TUTTI I MATCH</span>
+                    <span id="schedule-delay-status"
+                        style="font-size: 0.8rem; font-weight: normal; margin-left: auto;"></span>
+                </div>
+                <div class="schedule-list" id="schedule-list">
+                    <!-- Dynamic Items -->
+                </div>
+            </div>
         </div>
 
         <!-- PDF.js from CDN -->
@@ -1390,22 +1501,32 @@
         <script>
             // Load Saved Settings
             const savedSettings = JSON.parse(localStorage.getItem('pm_settings') || "{}");
-            const CONFIG = { gameTime: 600, interTime: 120, mercyDiff: savedSettings.mercyDiff || 4, goldenTime: 120 };
+            const CONFIG = {
+                gameTime: (parseInt(savedSettings.gameDuration) || 10) * 60,
+                interTime: (parseInt(savedSettings.intervalDuration) || 120),
+                mercyDiff: parseInt(savedSettings.mercyDiff) || 4,
+                goldenTime: (parseInt(savedSettings.goldenDuration) || 3) * 60
+            };
 
             let state = {
                 mode: 'IDLE', timer: CONFIG.gameTime, timerMode: 'GAME',
                 teams: { A: { name: 'TEAM A', score: 0, timeouts: 1, penalties: 0, techUsed: false, color: '#3b82f6' }, B: { name: 'TEAM B', score: 0, timeouts: 1, penalties: 0, techUsed: false, color: '#ef4444' } },
                 basesSwapped: false,
                 settings: {
-                    voice: true,
-                    lang: 'it-IT',
-                    autoStart: true,
-                    confirmTowel: false,
-                    confirmSkipSlot: true,
-                    breakDuration: 0,
-                    voiceURI: null,
-                    mercyDiff: CONFIG.mercyDiff,
-                    ...savedSettings
+                    voice: savedSettings.voice !== false,
+                    lang: savedSettings.lang || 'it-IT',
+                    autoStart: savedSettings.autoStart !== false,
+                    confirmTowel: !!savedSettings.confirmTowel,
+                    confirmSkipSlot: savedSettings.confirmSkipSlot !== false,
+                    confirmNoPoint: savedSettings.confirmNoPoint !== false,
+                    confirmUndo: savedSettings.confirmUndo !== false, // NEW
+                    breakDuration: parseInt(savedSettings.breakDuration) || 0,
+                    intervalDuration: parseInt(savedSettings.intervalDuration) || 120,
+                    goldenDuration: parseInt(savedSettings.goldenDuration) || 3,
+                    voiceURI: savedSettings.voiceURI || null,
+                    mercyDiff: parseInt(savedSettings.mercyDiff) || 4,
+                    matchId: savedSettings.matchId || "",
+                    logPassword: savedSettings.logPassword || ""
                 },
                 tournament: {
                     active: false,
@@ -1415,10 +1536,12 @@
                     date: '',
                     location: '',
                     field: '',
-                    layoutUrl: ''
+                    layoutUrl: '',
+                    delay: 0 // Delay in minutes (positive: delay, negative: lead)
                 },
                 showNextMatchOverlay: false,
                 showLayoutOverlay: false,
+                showSchedule: false, // NEW
                 currentMatchEvents: [],
                 matchLog: [], intervalInstance: null, flags: { warn60: false, warn30: false, warn10: false }
             };
@@ -1607,7 +1730,6 @@
                         const prev = lineItems[i - 1];
                         const gap = item.x - (prev.x + prev.str.length * 4); // Approx char width? 
                         // Better: PDF.js usually gives width, but let's just use raw X difference compared to a constant?
-                        // Actually, let's use the X distance.
                         // If dist is huge relative to previous string length...
                         // Let's simpler: if (item.x - (prev.x + prev.w)) > threshold
                         // Note: prev.w might be undefined if not captured, but I added it above.
@@ -1797,6 +1919,7 @@
                     showNextMatchOverlay: state.showNextMatchOverlay,
                     fastestRound: statsData.records[0] || null,
                     teamStyle: TEAM_STYLE,
+                    tournament: state.tournament,
                     standingsData: statsData
                 };
 
@@ -2051,7 +2174,7 @@
                     }
                     else if (state.mode === 'GOLDEN_BREAK') {
                         log("FINE PAUSA GOLDEN POINT - START OVERTIME");
-                        startOvertime();
+                        startOvertime(true); // Pass true to skip confirmation
                     }
                 }
             }
@@ -2071,6 +2194,43 @@
                     const m = state.tournament.matches[state.tournament.currentIndex];
                     m.realEndTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                     log(`ORARIO FINE REGISTRATO: ${m.realEndTime}`);
+                    updateTournamentDelay(); // Update delay when a match ends
+                }
+            }
+
+            function updateTournamentDelay() {
+                if (!state.tournament.active) return;
+
+                // We calculate delay based on the NEXT match (or the current one if not started)
+                let targetM = null;
+                const matches = state.tournament.matches;
+                const currIdx = state.tournament.currentIndex;
+
+                // If currently in a match, look at the next one to see if we are late for its start
+                if (currIdx < matches.length - 1) {
+                    targetM = matches[currIdx + 1];
+                } else if (currIdx !== -1) {
+                    targetM = matches[currIdx]; // Last match
+                }
+
+                if (!targetM || !targetM.time || targetM.time === "00:00") return;
+
+                try {
+                    const now = new Date();
+                    const [schedH, schedM] = targetM.time.split(':').map(Number);
+
+                    const scheduledDate = new Date();
+                    scheduledDate.setHours(schedH, schedM, 0, 0);
+
+                    // If scheduled time is significantly earlier than now (e.g. 10:00 schedule and now is 10:05)
+                    // Difference in minutes
+                    const diffMs = now - scheduledDate;
+                    const diffMin = Math.round(diffMs / 60000);
+
+                    state.tournament.delay = diffMin;
+                    log(`CALCOLO PUNTUALITÀ: ${diffMin >= 0 ? '+' : ''}${diffMin} min rispetto a ${targetM.time}`);
+                } catch (err) {
+                    console.error("Delay Calculation Error:", err);
                 }
             }
 
@@ -2092,6 +2252,12 @@
                 startTimerLoop();
             }
             function startPoint() {
+                // If in Golden Break, "Start Point" should start the Golden Point instead!
+                if (state.mode === 'GOLDEN_BREAK') {
+                    startOvertime(true);
+                    return;
+                }
+
                 state.mode = 'POINT';
                 state.timerMode = 'GAME';
                 state.timer = state.gameTimeRemaining;
@@ -2155,11 +2321,12 @@
                     alert("ERRORE TECH PAUSE: " + e.message);
                 }
             }
-            function startOvertime() {
+            function startOvertime(isAuto = false) {
                 if (state.mode === 'POINT' || state.mode === 'TECH_PAUSED') { alert("Non puoi avviare il Golden Point durante il gioco o pausa tecnica!"); return; }
-                if (!confirm("Avviare GOLDEN POINT? Il timer verrà impostato a " + (CONFIG.goldenTime / 60) + " minuti.")) return;
+                if (!isAuto && !confirm("Avviare GOLDEN POINT? Il timer verrà impostato a " + (CONFIG.goldenTime / 60) + " minuti.")) return;
+                state.basesSwapped = false; // Official Rule: Return to original sides
                 state.mode = 'OVERTIME'; state.timerMode = 'GAME'; state.timer = CONFIG.goldenTime; state.gameTimeRemaining = CONFIG.goldenTime; state.flags = { warn60: false };
-                log("START GOLDEN POINT (Overtime)");
+                log(`START GOLDEN POINT (Overtime: ${Math.floor(CONFIG.goldenTime / 60)} min)`);
                 playHorn(1.0);
                 render();
                 saveTournamentState();
@@ -2452,13 +2619,10 @@
             }
 
             function startGoldenBreak() {
-                state.mode = 'BREAK_MATCH'; // Use same mode for timer logic? Or custom?
-                // If we use BREAK_MATCH, tick will try to load Next Match when done.
-                // We need a specific mode or a flag.
-                // Let's use specific mode or just 'GOLDEN_BREAK'.
+                state.basesSwapped = false; // Official Rule: Return to original sides
                 state.mode = 'GOLDEN_BREAK';
                 state.timerMode = 'BREAK';
-                state.timer = state.settings.intervalDuration || 120; // Unified Interval
+                state.timer = state.settings.intervalDuration;
                 state.flags = { warn60: false, warn30: false, warn10: false };
                 log(`INIZIO PAUSA GOLDEN POINT (${state.timer}s)`);
                 startTimerLoop();
@@ -2514,6 +2678,42 @@
                 render();
             }
 
+            function toggleSchedule() {
+                state.showSchedule = !state.showSchedule;
+                const container = document.querySelector('.main-content');
+                const btn = document.getElementById('btn-toggle-schedule');
+                if (state.showSchedule) {
+                    container.classList.add('show-schedule');
+                    btn.classList.add('btn-active');
+                } else {
+                    container.classList.remove('show-schedule');
+                    btn.classList.remove('btn-active');
+                }
+                render(); // To populate list
+            }
+
+            function handleNoPoint() {
+                if (state.settings.confirmNoPoint) {
+                    if (!confirm("Avviare NO POINT? Non verranno assegnati punti e le squadre NON cambieranno campo.")) return;
+                }
+                log("NO POINT: Nessun buzzer toccato. Salto slot senza cambio campo.");
+                if (state.tournament.active) {
+                    rotateMatch(false); // false = NO swap side (internally calls saveMatchState)
+                } else {
+                    // Manual mode: just start a new interval without swapping
+                    state.basesSwapped = state.basesSwapped; // redundant but clear
+                    startInter();
+                }
+            }
+
+            function manualSwapSides() {
+                saveStateToHistory();
+                state.basesSwapped = !state.basesSwapped;
+                log("MANUAL SWAP: Posizioni squadre invertite manualmente.");
+                if (state.tournament.active) saveMatchState(state.tournament.currentIndex, false, false); // Save current orientation
+                render();
+            }
+
             function adjustTimer(delta) {
                 saveStateToHistory(); // Hook
                 state.timer += delta;
@@ -2562,7 +2762,7 @@
                 });
             }
             // State Persistence
-            function saveMatchState(idx, finished = false) {
+            function saveMatchState(idx, finished = false, shouldSwapNext = true) {
                 const m = state.tournament.matches[idx];
                 if (!m) return;
                 m.savedState = {
@@ -2573,7 +2773,7 @@
                     techUsedA: state.teams.A.techUsed,
                     techUsedB: state.teams.B.techUsed,
                     timer: state.timer,
-                    basesSwappedNext: !state.basesSwapped,
+                    basesSwappedNext: shouldSwapNext ? !state.basesSwapped : state.basesSwapped,
                     finished: finished,
                     history: state.currentMatchEvents || [], // Save Granular History
                     realStartTime: m.realStartTime,
@@ -2824,7 +3024,7 @@
                 }
             }
 
-            function rotateMatch() {
+            function rotateMatch(swapSide = true) {
                 // 1. Check End Conditions
                 if (state.timer <= 0 || checkMercy()) {
                     matchOver();
@@ -2851,7 +3051,7 @@
                 }
 
                 // 3. Save Logic
-                saveMatchState(currIdx);
+                saveMatchState(currIdx, false, swapSide);
 
                 // 4. Load Logic
                 if (nextSlotIdx !== -1) {
@@ -2862,7 +3062,7 @@
                     if (peer.savedState && peer.savedState.finished) {
                         // Peer is done. We become Single Slot.
                         log("PEER MATCH TERMINATO -> STANDARD ROTATION (Single Mode)");
-                        state.basesSwapped = !state.basesSwapped;
+                        if (swapSide) state.basesSwapped = !state.basesSwapped;
                         startInter();
                     } else {
                         log(`ROTAZIONE SLOT: Match ${currIdx + 1} -> Match ${nextSlotIdx + 1}`);
@@ -2870,8 +3070,12 @@
                     }
                 } else {
                     // Single Slot
-                    state.basesSwapped = !state.basesSwapped;
-                    log("ROTAZIONE STANDARD (Single Slot) -> SWAP SIDE");
+                    if (swapSide) {
+                        state.basesSwapped = !state.basesSwapped;
+                        log("ROTAZIONE STANDARD (Single Slot) -> SWAP SIDE");
+                    } else {
+                        log("ROTAZIONE NO-POINT -> MANTENIMENTO LATI");
+                    }
                     startInter();
                 }
             }
@@ -2882,19 +3086,21 @@
                     state.tournament.currentIndex = i;
                     state.tournament.active = true;
 
+                    let isGoldenPending = false;
                     // If resume is requested AND we have state, restore it
                     if (resume && m.savedState) {
+                        isGoldenPending = !!m.savedState.goldenPending;
                         resetAll(false); // Clean UI
                         restoreMatchState(i);
                         state.teams.A.name = m.teamA;
                         state.teams.B.name = m.teamB;
 
-                        if (m.savedState.goldenPending) {
+                        if (isGoldenPending) {
                             // Resuming a match that was waiting for Golden Point
                             log("RIPRESA MATCH IN ATTESA DI GOLDEN POINT");
                             if (autoStart) startGoldenBreak(); // Auto-start the break only if requested
                             else state.mode = 'GOLDEN_BREAK'; // Just set mode if no autostart
-                            m.savedState.goldenPending = false; // Clear flag
+                            m.savedState.goldenPending = false; // Clear flag NOW that we've used it
                         }
 
                         // Restore Granular History
@@ -2913,8 +3119,14 @@
 
                     // Flow control
                     if (resume) {
-                        if (autoStart) startInter();
-                        else render();
+                        // CRITICAL: If we already started startGoldenBreak above, do NOT call startInter here!
+                        if (isGoldenPending) {
+                            // Already handled in the goldenPending block above
+                        } else if (autoStart) {
+                            startInter();
+                        } else {
+                            render();
+                        }
                     } else {
                         render(); // Fresh load waits for "Start Game/Point"
                     }
@@ -2940,7 +3152,7 @@
                 } else if (state.mode === 'PAUSED') {
                     statusText = "PAUSA";
                     statusClass = 'state-paused';
-                } else if (state.mode === 'INTERVAL') {
+                } else if (state.mode === 'INTERVAL' || state.mode === 'GOLDEN_BREAK') {
                     statusText = "INTERVALLO";
                     statusClass = 'state-interval';
                 } else if (state.mode === 'IDLE') {
@@ -3057,6 +3269,18 @@
                     rBtn.disabled = true;
                 }
 
+                // Main Game Controls Safety
+                const isPlaying = (state.mode === 'POINT' || state.mode === 'OVERTIME');
+                const isInterval = (state.mode === 'INTERVAL' || state.mode === 'BREAK_MATCH');
+
+                const btnStartPoint = document.getElementById('btn-start-point');
+                const btnOvertime = document.getElementById('btn-overtime');
+                const btnStartInter = document.getElementById('btn-start-inter');
+
+                if (btnStartPoint) btnStartPoint.disabled = isPlaying;
+                if (btnOvertime) btnOvertime.disabled = isPlaying;
+                if (btnStartInter) btnStartInter.disabled = isInterval;
+
                 // PENALTY BUTTONS LOGIC
                 // Disable penalty buttons during Interval/Breaks (only active during Game/Overtime)
                 const penDisabled = !(state.mode === 'POINT' || state.mode === 'OVERTIME');
@@ -3075,17 +3299,14 @@
                 document.getElementById('tourney-status').style.display = state.tournament.active ? "inline" : "none";
 
                 // TOP BAR NEXT MATCH UPDATE
-                const topBar = document.getElementById('top-bar');
                 if (state.tournament.active) {
                     const nextMatch = getNextMatch();
-
                     if (nextMatch) {
-                        document.getElementById('tb-teams').innerText = `${nextMatch.teamA} vs ${nextMatch.teamB}`;
-
+                        document.getElementById('tb-teams').innerText = `${nextMatch.teamA} vs ${nextMatch.teamB} `;
                         const tbScore = document.getElementById('tb-score');
                         if (nextMatch.savedState) {
                             tbScore.style.display = 'inline';
-                            tbScore.innerText = `[ ${(nextMatch.savedState.scoreA || 0)} - ${(nextMatch.savedState.scoreB || 0)} ]`;
+                            tbScore.innerText = `[${(nextMatch.savedState.scoreA || 0)} - ${(nextMatch.savedState.scoreB || 0)} ]`;
                         } else {
                             tbScore.style.display = 'none';
                         }
@@ -3098,21 +3319,58 @@
                     document.getElementById('tb-score').style.display = 'none';
                 }
 
+                // SCHEDULE PANEL UPDATE (Control)
+                if (state.showSchedule && state.tournament.active) {
+                    const list = document.getElementById('schedule-list');
+                    if (list) {
+                        list.innerHTML = "";
+                        state.tournament.matches.forEach((m, idx) => {
+                            const item = document.createElement('div');
+                            item.className = 'schedule-item';
+                            if (idx === state.tournament.currentIndex) item.classList.add('active');
+                            if (m.savedState && m.savedState.finished) item.classList.add('finished');
+
+                            item.innerHTML = `
+                                <div class="si-time">${m.time || '--:--'} - ${m.phase || 'GIRONI'}</div>
+                                <div class="si-teams">${m.teamA} vs ${m.teamB}</div>
+                                <div class="si-info">${m.field || 'Campo 1'}</div>
+                            `;
+                            list.appendChild(item);
+                        });
+
+                        // Update Delay Status
+                        const delayEl = document.getElementById('schedule-delay-status');
+                        if (delayEl) {
+                            const d = state.tournament.delay;
+                            if (d > 0) {
+                                delayEl.innerText = `Ritardo: +${d} min`;
+                                delayEl.style.color = '#ef4444';
+                            } else if (d < 0) {
+                                delayEl.innerText = `Anticipo: ${d} min`;
+                                delayEl.style.color = '#10b981';
+                            } else {
+                                delayEl.innerText = "In orario";
+                                delayEl.style.color = '#94a3b8';
+                            }
+                        }
+                    }
+                }
+
                 broadcastState();
             }
             function log(msg) {
-                const d = document.createElement('div'); d.className = 'log-entry'; d.innerHTML = `<span class="log-time">${new Date().toLocaleTimeString()}</span><span class="log-msg">${msg}</span>`;
+                const d = document.createElement('div'); d.className = 'log-entry'; d.innerHTML = `<span class="log-time">${new Date().toLocaleTimeString()}</span> <span class="log-msg">${msg}</span>`;
                 document.getElementById('event-log').prepend(d);
             }
             function formatTimeSeconds(s) {
                 const sec = Math.ceil(s); // Ceil for display (9.1s -> 10s)
-                return `${Math.floor(sec / 60).toString().padStart(2, '0')}:${(sec % 60).toString().padStart(2, '0')}`;
+                return `${Math.floor(sec / 60).toString().padStart(2, '0')}:${(sec % 60).toString().padStart(2, '0')} `;
             }
             function formatTimeMs(s) {
                 const min = Math.floor(s / 60);
                 const sec = Math.floor(s % 60);
                 const ms = Math.floor((Math.abs(s) * 100) % 100);
-                return `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+                return `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')} `;
             }
 
             function copyToClipboard(el) {
@@ -3135,7 +3393,7 @@
                 const entries = Array.from(document.querySelectorAll('.log-entry')).map(e => {
                     const time = e.querySelector('.log-time').innerText;
                     const msg = e.querySelector('.log-msg').innerText;
-                    return `[${time}] ${msg}`;
+                    return `[${time}] ${msg} `;
                 }).reverse().join('\n'); // Newest at bottom in file
 
                 const blob = new Blob([entries], { type: 'text/plain' });
@@ -3187,7 +3445,9 @@
                     alert("Nessuna azione da annullare.");
                     return;
                 }
-                if (!confirm("Annullare l'ultima azione?")) return;
+                if (state.settings.confirmUndo) {
+                    if (!confirm("Annullare l'ultima azione?")) return;
+                }
 
                 const snapshot = historyStack.pop();
                 // Restore state
@@ -3225,7 +3485,7 @@
                 if (!file) return;
                 const url = URL.createObjectURL(file);
                 customAudio[type] = new Audio(url);
-                log(`Audio personalizzato caricato: ${type}`);
+                log(`Audio personalizzato caricato: ${type} `);
             }
 
             document.getElementById('audio-file-horn').addEventListener('change', (e) => handleAudioUpload('horn', e.target.files[0]));
@@ -3332,7 +3592,7 @@
 
                     // Persist
                     localStorage.setItem('pm_hotkeys', JSON.stringify(state.settings.hotkeys));
-                    log(`Hotkey impostata: ${side.toUpperCase()} ${action.toUpperCase()} = ${e.code}`);
+                    log(`Hotkey impostata: ${side.toUpperCase()} ${action.toUpperCase()} = ${e.code} `);
                 });
                 input.addEventListener('click', (e) => {
                     input.value = "Premi tasto...";
@@ -3388,7 +3648,10 @@
 
             document.getElementById('btn-start-inter').addEventListener('click', startInter); document.getElementById('btn-start-point').addEventListener('click', startPoint);
             document.getElementById('btn-pause').addEventListener('click', pause);
-            document.getElementById('btn-overtime').addEventListener('click', startOvertime);
+            document.getElementById('btn-overtime').addEventListener('click', () => startOvertime());
+            document.getElementById('btn-no-point').addEventListener('click', handleNoPoint);
+            document.getElementById('btn-undo').addEventListener('click', undoLastAction);
+            document.getElementById('btn-manual-swap').addEventListener('click', manualSwapSides);
             document.getElementById('btn-action-left').addEventListener('click', () => handleTeamAction('left', 'action')); document.getElementById('btn-action-right').addEventListener('click', () => handleTeamAction('right', 'action'));
             document.getElementById('btn-point-left').addEventListener('click', () => handleTeamAction('left', 'point')); document.getElementById('btn-point-right').addEventListener('click', () => handleTeamAction('right', 'point'));
             const tm = document.getElementById('timer-edit-modal');
@@ -3406,15 +3669,16 @@
             // Settings listeners
             document.getElementById('btn-settings').addEventListener('click', () => {
                 document.getElementById('settings-modal').style.display = 'flex';
-                document.getElementById('game-duration-setting').value = Math.floor(CONFIG.gameTime / 60);
-                document.getElementById('golden-duration-setting').value = Math.floor(CONFIG.goldenTime / 60);
-                document.getElementById('break-duration').value = state.settings.breakDuration;
-                document.getElementById('interval-duration').value = state.settings.intervalDuration || 120; // Unified
+                document.getElementById('game-duration-setting').value = parseInt(state.settings.gameDuration) || Math.floor(CONFIG.gameTime / 60) || 10;
+                document.getElementById('golden-duration-setting').value = parseInt(state.settings.goldenDuration) || Math.floor(CONFIG.goldenTime / 60) || 3;
+                document.getElementById('mercy-diff-input').value = parseInt(state.settings.mercyDiff) || CONFIG.mercyDiff || 4;
+                document.getElementById('break-duration').value = parseInt(state.settings.breakDuration) || 0;
+                document.getElementById('interval-duration').value = parseInt(state.settings.intervalDuration) || 120; // Unified
                 document.getElementById('log-password-input').value = state.settings.logPassword || "";
                 document.getElementById('opt-confirm-towel').checked = state.settings.confirmTowel;
-                document.getElementById('opt-confirm-towel').checked = state.settings.confirmTowel;
                 document.getElementById('opt-confirm-skip').checked = state.settings.confirmSkipSlot !== false; // Default true
-                document.getElementById('mercy-diff-input').value = CONFIG.mercyDiff;
+                document.getElementById('opt-confirm-no-point').checked = state.settings.confirmNoPoint !== false;
+                document.getElementById('opt-confirm-undo').checked = state.settings.confirmUndo !== false; // NEW
                 document.getElementById('match-id-input').value = state.settings.matchId || "";
 
                 // Populate Styling Inputs
@@ -3431,11 +3695,14 @@
                 try {
                     state.settings.confirmTowel = document.getElementById('opt-confirm-towel').checked;
                     state.settings.confirmSkipSlot = document.getElementById('opt-confirm-skip').checked;
+                    state.settings.confirmNoPoint = document.getElementById('opt-confirm-no-point').checked;
+                    state.settings.confirmUndo = document.getElementById('opt-confirm-undo').checked;
                     state.settings.logPassword = document.getElementById('log-password-input').value;
                     state.settings.mercyDiff = parseInt(document.getElementById('mercy-diff-input').value) || 2;
                     CONFIG.mercyDiff = state.settings.mercyDiff;
                     state.settings.breakDuration = parseInt(document.getElementById('break-duration').value) || 0;
                     state.settings.intervalDuration = parseInt(document.getElementById('interval-duration').value) || 120; // Unified
+                    CONFIG.interTime = state.settings.intervalDuration;
 
                     // Save Styling
                     const fontVal = document.getElementById('style-font-family').value;
@@ -3451,10 +3718,13 @@
                         dot: document.getElementById('style-dot').value || '.'
                     };
                     // Update Golden Time
-                    const newGoldenMins = parseInt(document.getElementById('golden-duration-setting').value) || 2;
+                    const newGoldenMins = parseInt(document.getElementById('golden-duration-setting').value) || 3;
+                    state.settings.goldenDuration = newGoldenMins;
                     CONFIG.goldenTime = newGoldenMins * 60;
 
-                    const newGameTime = (parseInt(document.getElementById('game-duration-setting').value) || 10) * 60;
+                    const newGameMins = parseInt(document.getElementById('game-duration-setting').value) || 10;
+                    state.settings.gameDuration = newGameMins;
+                    const newGameTime = newGameMins * 60;
 
                     // If we are IDLE and timer was at previous max, update it
                     if (state.mode === 'IDLE' && state.timer === CONFIG.gameTime) {
@@ -3555,8 +3825,8 @@
                     const row = document.createElement('tr');
 
                     const time = m.time || "00:00";
-                    const names = `${m.teamA} vs ${m.teamB}`;
-                    const score = `${m.savedState.scoreA} - ${m.savedState.scoreB}`;
+                    const names = `${m.teamA} vs ${m.teamB} `;
+                    const score = `${m.savedState.scoreA} - ${m.savedState.scoreB} `;
                     const pens = `A:${m.savedState.penaltiesA} / B:${m.savedState.penaltiesB}`;
 
                     row.innerHTML = `
@@ -3720,13 +3990,26 @@
                             // GameNo end ~356. Inizio start 773. Space ~400. Center ~560.
                             doc.text(t.field || "", px(560), px(c.y), { align: 'center' });
 
+                            // Helper to format time if it's an ISO string or other long format
+                            const formatToHHMM = (tStr) => {
+                                if (!tStr) return "--:--";
+                                if (tStr.includes('T') && tStr.includes(':')) {
+                                    // Likely ISO 2026-02-11T23:46...
+                                    try {
+                                        const d = new Date(tStr);
+                                        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                    } catch (e) { return tStr.slice(0, 5); }
+                                }
+                                return tStr;
+                            };
+
                             // Start
                             c = getCenter(coords.start.x, coords.start.y, coords.start.w, coords.start.h);
-                            doc.text(m.realStartTime || "--:--", px(c.x), px(c.y), { align: 'center' });
+                            doc.text(formatToHHMM(m.realStartTime), px(c.x), px(c.y), { align: 'center' });
 
                             // End
                             c = getCenter(coords.end.x, coords.end.y, coords.end.w, coords.end.h);
-                            doc.text(m.realEndTime || "--:--", px(c.x), px(c.y), { align: 'center' });
+                            doc.text(formatToHHMM(m.realEndTime), px(c.x), px(c.y), { align: 'center' });
 
                             // Teams
                             doc.setFontSize(14);
@@ -3844,20 +4127,6 @@
                     alert("Errore inizializzazione PDF: " + err.message);
                 }
             };
-
-            function recordRealEndTime() {
-                const idx = state.tournament.currentIndex;
-                if (idx !== -1 && state.tournament.matches[idx]) {
-                    state.tournament.matches[idx].realEndTime = new Date().toISOString();
-                }
-            }
-
-            function recordRealStartTime() {
-                const idx = state.tournament.currentIndex;
-                if (idx !== -1 && state.tournament.matches[idx]) {
-                    state.tournament.matches[idx].realStartTime = new Date().toISOString();
-                }
-            }
 
             function getTransitionInfo() {
                 const currIdx = state.tournament.currentIndex;
@@ -4173,10 +4442,11 @@
                 const uniqueTeams = new Set();
                 uniqueTeams.add("TBD");
 
-                // Harvest history
+                // Harvest history - Filter out placeholder phase names
+                const phaseRegex = /QUARTI|SEMIFINALI|FINALE|FINALI/i;
                 state.tournament.matches.forEach(m => {
-                    if (m.teamA) uniqueTeams.add(m.teamA);
-                    if (m.teamB) uniqueTeams.add(m.teamB);
+                    if (m.teamA && !phaseRegex.test(m.teamA)) uniqueTeams.add(m.teamA);
+                    if (m.teamB && !phaseRegex.test(m.teamB)) uniqueTeams.add(m.teamB);
                 });
 
                 uniqueTeams.forEach(tName => {
