@@ -605,7 +605,11 @@
             left: 0;
             width: 1920px;
             height: 1080px;
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            background: rgba(15, 23, 42, 0.85);
+            /* Semi-transparent dark blue */
+            backdrop-filter: blur(25px);
+            /* Strong glass blur */
+            -webkit-backdrop-filter: blur(25px);
             z-index: 3000;
             display: none;
             flex-direction: column;
@@ -614,7 +618,7 @@
             color: white;
             animation: fadeIn 0.5s ease-out;
             overflow-y: auto;
-            /* Enable vertical scrolling */
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .stats-title {
@@ -638,21 +642,32 @@
 
         .stats-table th {
             text-align: left;
-            padding: 15px;
+            padding: 20px;
             color: #94a3b8;
-            font-size: 30px;
+            font-size: 28px;
             text-transform: uppercase;
+            letter-spacing: 3px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
         }
 
         .stats-table tr {
-            background: rgba(255, 255, 255, 0.05);
-            transition: transform 0.2s;
+            background: rgba(255, 255, 255, 0.03);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .stats-table tr:nth-child(even) {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .stats-table tr:hover {
+            background: rgba(34, 211, 238, 0.15);
+            transform: translateX(15px);
+            box-shadow: -10px 0 0 var(--accent-color);
         }
 
         .stats-table td {
-            padding: 20px 15px;
-            border-top: 2px solid rgba(255, 255, 255, 0.1);
-            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+            padding: 25px 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
         }
 
         .stats-table td:first-child {
@@ -672,20 +687,51 @@
             border-bottom-right-radius: 15px;
         }
 
-        .stats-rank {
-            color: var(--accent-color);
-            font-weight: bold;
-            margin-right: 15px;
+        .stats-rank-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 60px;
+            height: 60px;
+            background: var(--accent-color);
+            color: #0f172a;
+            border-radius: 50%;
+            margin-right: 25px;
+            font-size: 32px;
+            font-weight: 900;
+            box-shadow: 0 0 20px rgba(34, 211, 238, 0.5);
         }
 
         .stats-val-green {
-            color: #22c55e;
+            color: #4ade80;
             font-weight: bold;
+            text-shadow: 0 0 10px rgba(74, 222, 128, 0.4);
         }
 
         .stats-val-red {
-            color: #ef4444;
+            color: #f87171;
             font-weight: bold;
+            text-shadow: 0 0 10px rgba(248, 113, 113, 0.4);
+        }
+
+        .stats-legend-bar {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-size: 20px;
+            color: #94a3b8;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stats-legend-bar b {
+            color: var(--accent-color);
+            margin-right: 5px;
         }
 
         /* NEW ELEMENTS */
@@ -752,6 +798,117 @@
             color: #fbbf24;
             font-weight: bold;
         }
+
+        /* SPOTLIGHT & LAYOUT ELEMENTS */
+        #btn-open-layout {
+            position: absolute;
+            bottom: 30px;
+            right: 130px;
+            width: 80px;
+            height: 80px;
+            background: rgba(16, 185, 129, 0.8);
+            border: none;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 2500;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            transition: all 0.2s;
+            font-size: 35px;
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #btn-open-layout:hover {
+            background: rgba(16, 185, 129, 1);
+            transform: scale(1.1);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+
+        #layout-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1920px;
+            height: 1080px;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(25px);
+            z-index: 3100;
+            display: none;
+            flex-direction: column;
+            padding: 50px;
+            box-sizing: border-box;
+            color: white;
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        #fastest-round-spotlight {
+            background: rgba(255, 215, 0, 0.08);
+            /* Sophisticated gold tint */
+            border: 3px solid rgba(255, 215, 0, 0.5);
+            padding: 30px 60px;
+            border-radius: 30px;
+            margin-top: 25px;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 60px rgba(255, 215, 0, 0.2), inset 0 0 20px rgba(255, 215, 0, 0.1);
+            animation: goldPulsePremium 3s infinite;
+            z-index: 10;
+        }
+
+        @keyframes goldPulsePremium {
+            0% {
+                border-color: rgba(255, 215, 0, 0.4);
+                box-shadow: 0 0 30px rgba(255, 215, 0, 0.1);
+                transform: scale(1.0);
+            }
+
+            50% {
+                border-color: rgba(255, 215, 0, 1);
+                box-shadow: 0 0 80px rgba(255, 215, 0, 0.5);
+                transform: scale(1.05);
+            }
+
+            100% {
+                border-color: rgba(255, 215, 0, 0.4);
+                box-shadow: 0 0 30px rgba(255, 215, 0, 0.1);
+                transform: scale(1.0);
+            }
+        }
+
+        .spotlight-label {
+            font-size: 24px;
+            color: #ffd700;
+            font-weight: 900;
+            letter-spacing: 4px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+        }
+
+        .spotlight-team {
+            font-size: 42px;
+            font-weight: 900;
+            color: white;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 10px;
+            font-family: 'Oswald', sans-serif;
+            transform: scale(1.2, 1);
+        }
+
+        .spotlight-time {
+            font-size: 72px;
+            font-weight: 900;
+            color: #ffd700;
+            font-family: 'Orbitron', sans-serif;
+            text-shadow: 0 0 25px rgba(255, 215, 0, 0.8);
+            margin-top: 5px;
+        }
     </style>
 </head>
 
@@ -778,66 +935,7 @@
                 <span id="tb-score" class="tb-live-score" style="display:none;">0 - 0</span>
             </div>
 
-            <!-- NEXT MATCH OVERLAY -->
-            <div id="next-match-layer">
-                <div class="nm-header">NEXT MATCH</div>
-                <div class="nm-teams">
-                    <div class="nm-team" id="nm-team-a">TEAM A</div>
-                    <div class="nm-vs">VS</div>
-                    <div class="nm-team" id="nm-team-b">TEAM B</div>
-                </div>
-                <div class="nm-timer" id="nm-timer">--:--</div>
-            </div>
-
-            <!-- STATS OVERLAY -->
-            <button id="btn-open-stats" title="Visualizza Classifica">📊</button>
-
-            <div id="stats-overlay">
-                <button id="close-stats-btn">Chiudi X</button>
-                <div class="stats-title">CLASSIFICA TORNEO</div>
-                <table class="stats-table">
-                    <thead>
-                        <tr>
-                            <th>Team</th>
-                            <th style="text-align: center">P</th>
-                            <th style="text-align: center">W</th>
-                            <th style="text-align: center">L</th>
-                            <th style="text-align: center">RW</th>
-                            <th style="text-align: center">RL</th>
-                            <th style="text-align: center">RD</th>
-                            <th style="text-align: center">PEN</th>
-                        </tr>
-                    </thead>
-                    <tbody id="board-standings-body"></tbody>
-                </table>
-
-                <div id="stats-extras"
-                    style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 30px; margin-top: 30px;">
-                    <!-- Legenda -->
-                    <!-- Match History -->
-                    <div id="stats-history">
-                        <div
-                            style="font-weight: bold; color: white; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 10px; text-transform: uppercase;">
-                            📜 Ultimi Match
-                        </div>
-                        <ul id="history-list" style="list-style: none; padding: 0; margin: 0; font-size: 24px;"></ul>
-                    </div>
-
-                    <!-- Fastest Rounds -->
-                    <div id="stats-records"
-                        style="background: rgba(255,255,255,0.05); padding: 25px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.1);">
-                        <div
-                            style="font-weight: bold; color: white; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 10px; text-transform: uppercase;">
-                            ⚡ Round Più Veloci</div>
-                        <ul id="board-fastest-list" style="list-style: none; padding: 0; margin: 0; font-size: 26px;">
-                        </ul>
-                    </div>
-                </div>
-            </div>
-
-            <!-- PERSISTENT FOOTER -->
-            <div id="next-match-footer">NEXT: <span id="footer-match-info">-- vs --</span></div>
-
+            <!-- MAIN GRID CONTENT -->
             <div class="team-panel" id="panel-left">
                 <div class="team-name" id="name-left">TEAM A</div>
                 <div class="team-score" id="score-left">0</div>
@@ -864,8 +962,18 @@
                     </div>
                 </div>
 
+                <div id="match-phase"
+                    style="font-size: 35px; color: var(--accent-color); font-weight: bold; text-transform: uppercase; margin-bottom: 5px; letter-spacing: 4px; background: rgba(0,0,0,0.3); padding: 5px 20px; border-radius: 10px;">
+                    GIRONI</div>
                 <div id="game-state-ind" class="state-indicator visible state-idle">PRONTO</div>
                 <div class="timer-display" id="timer">10:00</div>
+
+                <div id="fastest-round-spotlight">
+                    <div class="spotlight-label">⚡ RECORD DEL GIORNO ⚡</div>
+                    <div class="spotlight-team" id="spotlight-team-name">--</div>
+                    <div class="spotlight-time" id="spotlight-time-val">00:00</div>
+                </div>
+
                 <div class="status-bar" id="status-bar"></div>
             </div>
 
@@ -875,6 +983,86 @@
                 <div class="penalty-label" id="pen-label-right"></div>
             </div>
         </div>
+
+        <!-- Overlays & Widgets (Inside Scaler, Outside Grid) -->
+        <div id="next-match-layer">
+            <div class="nm-header">NEXT MATCH</div>
+            <div class="nm-teams">
+                <div class="nm-team" id="nm-team-a">TEAM A</div>
+                <div class="nm-vs">VS</div>
+                <div class="nm-team" id="nm-team-b">TEAM B</div>
+            </div>
+            <div class="nm-timer" id="nm-timer">--:--</div>
+        </div>
+
+        <button id="btn-open-stats" title="Visualizza Classifica">📊</button>
+        <button id="btn-open-layout" title="Visualizza Layout Campo">📐</button>
+
+
+        <div id="layout-overlay">
+            <button id="close-layout-btn" class="close-btn"
+                style="position: absolute; top: 40px; right: 40px; background: var(--danger-color); color: white; border: none; padding: 15px 40px; font-size: 30px; font-weight: bold; border-radius: 10px; cursor: pointer; z-index: 3200;">Chiudi
+                X</button>
+            <div class="stats-title">LAYOUT CAMPO</div>
+            <iframe id="layout-iframe" src="" frameborder="0"
+                style="width: 100%; height: calc(100% - 200px); border-radius: 20px; background: white; margin-top: 20px;"></iframe>
+        </div>
+
+        <div id="stats-overlay">
+            <button id="close-stats-btn">Chiudi X</button>
+            <div class="stats-title">CLASSIFICA TORNEO</div>
+
+            <div class="stats-legend-bar">
+                <span><b>P:</b> Giocate</span>
+                <span><b>W:</b> Vinte</span>
+                <span><b>L:</b> Perse</span>
+                <span><b>RW:</b> Punti Fatti</span>
+                <span><b>RL:</b> Punti Subiti</span>
+                <span><b>RD:</b> Diff. Punti</span>
+                <span><b>PEN:</b> Penalità</span>
+            </div>
+
+            <table class="stats-table">
+                <thead>
+                    <tr>
+                        <th>Team</th>
+                        <th style="text-align: center">P</th>
+                        <th style="text-align: center">W</th>
+                        <th style="text-align: center">L</th>
+                        <th style="text-align: center">RW</th>
+                        <th style="text-align: center">RL</th>
+                        <th style="text-align: center">RD</th>
+                        <th style="text-align: center">PEN</th>
+                    </tr>
+                </thead>
+                <tbody id="board-standings-body"></tbody>
+            </table>
+
+            <div id="stats-extras"
+                style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 30px; margin-top: 30px;">
+                <!-- Match History -->
+                <div id="stats-history">
+                    <div
+                        style="font-weight: bold; color: white; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 10px; text-transform: uppercase;">
+                        📜 Ultimi Match
+                    </div>
+                    <ul id="history-list" style="list-style: none; padding: 0; margin: 0; font-size: 24px;"></ul>
+                </div>
+
+                <!-- Fastest Rounds -->
+                <div id="stats-records"
+                    style="background: rgba(255, 255, 255, 0.05); padding: 30px; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                    <div
+                        style="font-weight: 900; color: var(--accent-color); border-bottom: 2px solid var(--accent-color); padding-bottom: 15px; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 2px; font-size: 30px;">
+                        ⚡ Round Più Veloci</div>
+                    <ul id="board-fastest-list" style="list-style: none; padding: 0; margin: 0; font-size: 28px;">
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- PERSISTENT FOOTER -->
+        <div id="next-match-footer">NEXT: <span id="footer-match-info">-- vs --</span></div>
     </div>
 
     <script>
@@ -967,15 +1155,22 @@
         // STATS OVERLAY LOGIC
         let lastStandingsData = null;
 
-        function toggleStatsOverlay(show) {
-            const statsOverlay = document.getElementById('stats-overlay');
-            if (show) {
-                statsOverlay.style.display = 'flex';
-                renderStandingsTable();
-            } else {
-                statsOverlay.style.display = 'none';
-            }
-        }
+        document.getElementById('btn-open-stats').addEventListener('click', () => {
+            document.getElementById('stats-overlay').style.display = 'flex';
+            renderStandingsTable();
+        });
+
+        document.getElementById('close-stats-btn').addEventListener('click', () => {
+            document.getElementById('stats-overlay').style.display = 'none';
+        });
+
+        document.getElementById('btn-open-layout').addEventListener('click', () => {
+            document.getElementById('layout-overlay').style.display = 'flex';
+        });
+
+        document.getElementById('close-layout-btn').addEventListener('click', () => {
+            document.getElementById('layout-overlay').style.display = 'none';
+        });
 
         function renderStandingsTable() {
             if (!lastStandingsData) return;
@@ -985,13 +1180,13 @@
                 const tr = document.createElement('tr');
                 const diff = s.rw - s.rl;
                 tr.innerHTML = `
-                    <td><span class="stats-rank">${idx + 1}.</span> ${s.name}</td>
+                    <td><span class="stats-rank-badge">${idx + 1}</span> ${s.name}</td>
                     <td style="text-align: center">${s.played}</td>
                     <td style="text-align: center" class="stats-val-green">${s.wins}</td>
                     <td style="text-align: center" class="stats-val-red">${s.losses}</td>
                     <td style="text-align: center">${s.rw}</td>
                     <td style="text-align: center">${s.rl}</td>
-                    <td style="text-align: center" class="${diff >= 0 ? 'stats-val-green' : 'stats-val-red'}">${diff > 0 ? '+' : ''}${diff}</td>
+                    <td style="text-align: center" class="${diff > 0 ? 'stats-val-green' : (diff < 0 ? 'stats-val-red' : 'stats-val-neutral')}">${diff > 0 ? '+' + diff : diff}</td>
                     <td style="text-align: center; color: #94a3b8; font-weight: bold;">${s.pen}</td>
                 `;
                 tbody.appendChild(tr);
@@ -1012,9 +1207,6 @@
             }
         }
 
-        document.getElementById('btn-open-stats').addEventListener('click', () => toggleStatsOverlay(true));
-        document.getElementById('close-stats-btn').addEventListener('click', () => toggleStatsOverlay(false));
-
         function renderBoardState(d) {
             // Update standings cache
             if (d.standingsData) {
@@ -1023,6 +1215,24 @@
                     renderStandingsTable();
                 }
             }
+
+            // Fastest Round Spotlight
+            if (d.fastestRound) {
+                document.getElementById('fastest-round-spotlight').style.display = 'flex';
+                document.getElementById('spotlight-team-name').innerText = d.fastestRound.team;
+                document.getElementById('spotlight-time-val').innerText = formatTimeSeconds(d.fastestRound.duration);
+            } else {
+                document.getElementById('fastest-round-spotlight').style.display = 'none';
+            }
+
+            // IPBA Layout URL Sync
+            if (d.layoutUrl) {
+                const iframe = document.getElementById('layout-iframe');
+                if (iframe.src !== d.layoutUrl) {
+                    iframe.src = d.layoutUrl;
+                }
+            }
+
             // Timer
             const tDiv = document.getElementById('timer');
             tDiv.innerText = d.timer;
@@ -1119,7 +1329,9 @@
 
             // Status Bar
             const sBar = document.getElementById('status-bar');
-            if (d.mode === 'PAUSED') {
+            const hasSpotlight = d.fastestRound;
+
+            if (d.mode === 'PAUSED' && !hasSpotlight) {
                 sBar.style.display = 'block';
                 sBar.innerText = "PAUSA";
                 sBar.style.color = "yellow";
@@ -1129,6 +1341,13 @@
                 sBar.style.color = "white";
             } else {
                 sBar.style.display = 'none';
+            }
+
+            // Phase Display
+            const phaseEl = document.getElementById('match-phase');
+            if (phaseEl) {
+                phaseEl.innerText = d.phase || "";
+                phaseEl.style.display = d.phase ? 'block' : 'none';
             }
 
             // State Indicator
@@ -1184,14 +1403,14 @@
                         const tr = document.createElement('tr');
                         const diff = s.rw - s.rl;
                         tr.innerHTML = `
-                            <td><span class="stats-rank">${idx + 1}.</span> ${s.name}</td>
+                            <td><span class="stats-rank-badge">${idx + 1}</span> ${s.name}</td>
                             <td style="text-align: center">${s.played}</td>
-                            <td style="text-align: center; color: #22c55e; font-weight: bold;">${s.wins}</td>
-                            <td style="text-align: center; color: #ef4444; font-weight: bold;">${s.losses}</td>
-                            <td style="text-align: center; color: #10b981;">${s.rw}</td>
-                            <td style="text-align: center; color: #ef4444;">${s.rl}</td>
-                            <td style="text-align: center; font-weight: bold; color: ${diff > 0 ? '#22c55e' : (diff < 0 ? '#ef4444' : '#fbbf24')}">${diff > 0 ? '+' + diff : diff}</td>
-                            <td style="text-align: center; color: #f59e0b;">${s.pen}</td>
+                            <td style="text-align: center" class="stats-val-green">${s.wins}</td>
+                            <td style="text-align: center" class="stats-val-red">${s.losses}</td>
+                            <td style="text-align: center">${s.rw}</td>
+                            <td style="text-align: center">${s.rl}</td>
+                            <td style="text-align: center" class="${diff > 0 ? 'stats-val-green' : (diff < 0 ? 'stats-val-red' : 'stats-val-neutral')}">${diff > 0 ? '+' + diff : diff}</td>
+                            <td style="text-align: center; color: #94a3b8; font-weight: bold;">${s.pen}</td>
                         `;
                         tbody.appendChild(tr);
                     });
@@ -1210,7 +1429,7 @@
                     const createSection = (title, icon, data, formatter) => {
                         const wrapper = document.createElement('div');
                         wrapper.innerHTML = `
-                            <div style="font-weight: bold; color: white; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 10px; text-transform: uppercase; font-size: 0.9em; letter-spacing: 1px;">
+                            <div style="font-weight: 900; color: var(--accent-color); border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 12px; margin-bottom: 15px; text-transform: uppercase; font-size: 0.8em; letter-spacing: 2px;">
                                 ${icon} ${title}
                             </div>
                             <ul style="list-style: none; padding: 0; margin: 0; font-size: 24px;"></ul>
@@ -1220,14 +1439,14 @@
                         if (data && data.length > 0) {
                             data.forEach(r => {
                                 const li = document.createElement('li');
-                                li.style.marginBottom = '10px';
+                                li.style.marginBottom = '12px';
                                 li.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
-                                li.style.paddingBottom = '5px';
+                                li.style.paddingBottom = '8px';
                                 li.style.display = 'flex';
                                 li.style.justifyContent = 'space-between';
                                 li.innerHTML = `
-                                    <span><strong style="color: var(--accent-color)">${r.team}</strong> <span style="font-size: 0.8em; color: #94a3b8; margin-left: 10px;">${r.match || ''}</span></span>
-                                    <span style="font-weight: bold; color: #fbbf24;">${formatter(r.duration || r.avg || r.count)}</span>
+                                    <span><strong style="color: #e2e8f0">${r.team}</strong> <span style="font-size: 0.8em; color: #94a3b8; margin-left: 10px;">${r.match || ''}</span></span>
+                                    <span style="font-weight: 900; color: #fbbf24; text-shadow: 0 0 10px rgba(251, 191, 36, 0.3);">${formatter(r.duration || r.avg || r.count)}</span>
                                 `;
                                 list.appendChild(li);
                             });

@@ -169,7 +169,7 @@
         }
 
         .team-name {
-            font-size: 50px;
+            font-family: 'Oswald', sans-serif;
             font-weight: bold;
             text-align: center;
             margin-bottom: 10px;
@@ -630,6 +630,68 @@
             background: var(--accent-color);
             color: #0f172a;
         }
+
+        /* Wizard Styles */
+        .wizard-step {
+            /* display: none; Managed inline/JS */
+            flex-direction: column;
+            gap: 15px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        #wiz-team-grid button {
+            padding: 10px;
+            background: #334155;
+            border: 1px solid #475569;
+            color: #e2e8f0;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #wiz-team-grid button:hover {
+            background: var(--accent-color);
+            color: #0f172a;
+        }
+
+        #wiz-team-grid button:active {
+            transform: scale(0.95);
+        }
+
+        .wiz-slot-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #334155;
+        }
+
+        .wiz-slot-time {
+            font-family: monospace;
+            color: var(--accent-color);
+            min-width: 60px;
+        }
+
+        .wiz-slot-match {
+            flex: 1;
+            font-weight: bold;
+        }
+
+        .wiz-group-header {
+            background: var(--accent-color);
+            color: #0f172a;
+            padding: 5px 10px;
+            font-weight: bold;
+            border-radius: 4px;
+            margin-bottom: 5px;
+        }
     </style>
 </head>
 
@@ -942,6 +1004,11 @@
                         <label>Campo</label>
                         <input type="text" id="tourney-field" class="form-control" placeholder="Es. 1">
                     </div>
+                    <div class="form-group">
+                        <label>Link Layout IPBA (Campo)</label>
+                        <input type="text" id="tourney-layout-url" class="form-control"
+                            placeholder="Incolla qui il link IPBA...">
+                    </div>
                 </div>
 
                 <div class="form-group"
@@ -1064,6 +1131,122 @@
             </div>
         </div>
 
+        <!-- End Phase Modal -->
+        <div id="end-phase-modal" class="overlay">
+            <div class="modal-content" style="text-align: center; align-items: center;">
+                <h2 id="end-phase-title" style="color: var(--accent-color);">FINE FASE TORNEO</h2>
+                <p id="end-phase-msg">Tutte le partite sono state completate. Come procedere?</p>
+                <div style="display: flex; gap: 20px; flex-direction: column; width: 100%;">
+                    <button id="btn-end-phase-wizard" class="btn btn-warning" onclick="startWizard()"
+                        style="padding: 20px; font-size: 1.2rem;">🚀
+                        CONFIGURA NUOVA FASE (Wizard)</button>
+                    <button id="btn-end-phase-continue" class="btn"
+                        style="border-color: var(--success-color); color: var(--success-color); display: none;">
+                        PROSEGUI CON PALINSESTO ATTUALE
+                    </button>
+                    <button class="btn" onclick="document.getElementById('end-phase-modal').style.display='none'"
+                        style="border-color: #64748b; color: #94a3b8;">TERMINA IL TORNEO</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Wizard Modal -->
+        <div id="wizard-modal" class="overlay">
+            <div class="modal-content" style="max-width: 900px; width: 95vw; max-height: 95vh; padding: 0;">
+                <div style="padding: 20px; background: #1e293b; border-bottom: 1px solid #334155;">
+                    <h2 style="margin: 0;">Configurazione Nuova Fase</h2>
+                </div>
+
+                <div style="padding: 20px; overflow-y: auto; flex: 1; display: flex; flex-direction: column;">
+
+                    <!-- Step 1: Config Phase -->
+                    <div id="wizard-step-1" class="wizard-step">
+                        <h3>Step 1: Scegli Fase</h3>
+                        <div class="form-group">
+                            <label>Seleziona Fase:</label>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                                <button class="btn"
+                                    style="background: #334155; border: 1px solid #475569; padding: 15px; font-weight: bold;"
+                                    onclick="setWizardPhase('OTTAVI')">OTTAVI</button>
+                                <button class="btn"
+                                    style="background: #334155; border: 1px solid #475569; padding: 15px; font-weight: bold;"
+                                    onclick="setWizardPhase('QUARTI')">QUARTI</button>
+                                <button class="btn"
+                                    style="background: #334155; border: 1px solid #475569; padding: 15px; font-weight: bold;"
+                                    onclick="setWizardPhase('SEMIFINALI')">SEMIFINALI</button>
+                                <button class="btn"
+                                    style="background: #334155; border: 1px solid #475569; padding: 15px; font-weight: bold;"
+                                    onclick="setWizardPhase('FINALE')">FINALE</button>
+                            </div>
+                            <label>Oppure scrivi manualmente:</label>
+                            <input type="text" id="wiz-phase-name" class="form-control" placeholder="Es. Girone 2...">
+                        </div>
+                        <div style="margin-top: 20px; font-size: 0.9rem; color: #94a3b8;">
+                            <p>Nel prossimo step potrai comporre liberamente i match (singoli o doppi).</p>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Slot Config -->
+                    <div id="wizard-step-2" class="wizard-step" style="display: none;">
+                        <h3 style="display: flex; justify-content: space-between; align-items: center;">
+                            Step 2: Composizione Match
+                            <div style="display: flex; gap: 10px;">
+                                <button class="btn btn-warning" onclick="addWizardSlot('DOUBLE')">+ Blocco
+                                    Doppio</button>
+                                <button class="btn" style="background: #0ea5e9; color: white;"
+                                    onclick="addWizardSlot('SINGLE')">+ Slot Singolo</button>
+                            </div>
+                        </h3>
+
+                        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px; height: 50vh;">
+                            <!-- Left: Slots Container -->
+                            <div style="display: flex; flex-direction: column; gap: 10px; overflow-y: auto;"
+                                id="wiz-slots-container">
+                                <!-- Slots added here -->
+                            </div>
+
+                            <!-- Right: Team Grid -->
+                            <div
+                                style="display: flex; flex-direction: column; gap: 10px; border-left: 1px solid #334155; padding-left: 10px;">
+                                <div style="font-weight: bold; color: #94a3b8;">SQUADRE DISPONIBILI</div>
+                                <div id="wiz-team-grid"
+                                    style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 5px; overflow-y: auto;">
+                                    <!-- Teams -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Finalize -->
+                    <div id="wizard-step-3" class="wizard-step" style="display: none;">
+                        <h3>Step 3: Riepilogo & Opzioni</h3>
+
+                        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                            <button id="wiz-btn-settings" class="btn" style="flex: 1; padding: 15px;"
+                                onclick="openSettingsForWizard()">
+                                ⚙️ MODIFICA REGOLE FASE (Durata, Mercy, ecc.)
+                            </button>
+                        </div>
+
+                        <label>Anteprima Match Generati:</label>
+                        <textarea id="wiz-match-preview" class="form-control" rows="10"
+                            style="font-family: monospace; background: #0f172a;"></textarea>
+                    </div>
+
+                </div>
+
+                <div
+                    style="padding: 20px; background: #1e293b; border-top: 1px solid #334155; display: flex; justify-content: space-between;">
+                    <button id="btn-wiz-cancel" class="btn" onclick="closeWizard()">Annulla</button>
+                    <div style="display: flex; gap: 10px;">
+                        <button id="btn-wiz-back" class="btn" style="display: none;"
+                            onclick="wizardBack()">Indietro</button>
+                        <button id="btn-wiz-next" class="btn btn-warning" onclick="wizardNext()">Avanti</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- UI -->
         <header>
             <div style="display: flex; align-items: center; gap: 20px;">
@@ -1078,14 +1261,21 @@
                 </div>
             </div>
 
-            <div id="match-status" class="status-display">PRONTO</div>
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                <div id="match-status" class="status-display">PRONTO</div>
+                <div id="match-phase"
+                    style="font-size: 1.25rem; color: var(--accent-color); font-weight: bold; margin-top: 5px; text-transform: uppercase; letter-spacing: 2px;">
+                    GIRONI</div>
+            </div>
 
             <div style="display: flex; gap: 10px;">
                 <button id="btn-open-board" class="btn" onclick="window.open('board.html', '_blank')">📺 Apri
                     Board</button>
                 <button id="btn-tournament" class="btn">🏆 Torneo</button>
                 <button id="btn-history" class="btn">📜 Storico</button>
-                <button id="btn-toggle-next" class="btn" onclick="toggleNextMatchOverlay()">👁️ Next: OFF</button>
+                <button id="btn-reopen-phase" class="btn"
+                    style="display: none; background: #c2410c; color: white; border-color: #ea580c; animation: pulse 2s infinite;"
+                    onclick="reopenPhaseModal()">🏁 OPZIONI FINE</button>
                 <button id="btn-settings" class="btn">⚙️ Setup</button>
             </div>
         </header>
@@ -1224,8 +1414,12 @@
                     name: '',
                     date: '',
                     location: '',
-                    field: ''
+                    field: '',
+                    layoutUrl: ''
                 },
+                showNextMatchOverlay: false,
+                showLayoutOverlay: false,
+                currentMatchEvents: [],
                 matchLog: [], intervalInstance: null, flags: { warn60: false, warn30: false, warn10: false }
             };
 
@@ -1339,8 +1533,9 @@
 
                                 let scoreMatch = found[found.length - 1]; // Default to last found
 
-                                // Validation: Ignore "Break" lines
+                                // Validation: Ignore "Break" lines or lines containing a date (like footers)
                                 if (line.toLowerCase().includes('pausa') || line.toLowerCase().includes('break')) return;
+                                if (/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}/.test(line)) return;
 
                                 const splitIndex = scoreMatch.index;
                                 const matchStr = scoreMatch[0];
@@ -1350,15 +1545,23 @@
 
                                 // Clean Team Names
                                 let time = rawA.match(/^\s*(\d{1,2}:\d{2})/);
-                                let matchTime = time ? time[1] : (matches.length > 0 ? matches[matches.length - 1].time : "00:00"); // Fallback to prev or default
+                                let matchTime = time ? time[1] : (matches.length > 0 ? matches[matches.length - 1].time : "00:00");
 
-                                rawA = rawA.replace(/^\s*\d{1,2}:\d{2}\s*-?/, '') // Remove Time at start
-                                    .replace(/^\s*Girone\s+\w+\s*-?/, '') // Remove "Girone X"
+                                // Phase Detection
+                                let currentPhase = "GIRONI"; // Default
+                                const phaseKeywords = ["Girone", "Ottavi", "Quarti", "Semifinali", "Finale", "Pool"];
+                                for (const kw of phaseKeywords) {
+                                    if (line.toLowerCase().includes(kw.toLowerCase())) {
+                                        currentPhase = kw.toUpperCase();
+                                        break;
+                                    }
+                                }
+
+                                rawA = rawA.replace(/^\s*\d{1,2}:\d{2}\s*-?/, '') // Remove Time
+                                    .replace(/^\s*Girone\s+\w+\s*-?/, '')
                                     .replace(/Girone\s+\w+/gi, '')
                                     .replace(/mercy\s+\d+/gi, '')
-                                    .replace(/Quarti di finale\s*\w*/gi, '')
-                                    .replace(/Semifinali\s*\w*/gi, '')
-                                    .replace(/Finali\s*.*?Posto/gi, '')
+                                    // Don't remove phase keywords from the WHOLE line yet, just clean names
                                     .replace(/^[-\s]+/, '')
                                     .trim();
 
@@ -1366,7 +1569,13 @@
 
                                 // Final Check
                                 if (rawA.length > 1 && rawB.length > 1 && !/^\d{1,2}:\d{2}$/.test(rawA)) {
-                                    matches.push({ teamA: rawA, teamB: rawB, time: matchTime, pit: (colIdx === 0 ? 'A' : 'B') });
+                                    matches.push({
+                                        teamA: rawA,
+                                        teamB: rawB,
+                                        time: matchTime,
+                                        pit: (colIdx === 0 ? 'A' : 'B'),
+                                        phase: currentPhase
+                                    });
                                 }
                             }
                         });
@@ -1522,6 +1731,7 @@
                 return total;
             }
 
+
             function getNextMatch() {
                 if (!state.tournament.active || state.tournament.currentIndex === -1) return null;
                 const currIdx = state.tournament.currentIndex;
@@ -1570,19 +1780,24 @@
                     breakLabelText = `${nextMatchInfo.teamA} vs ${nextMatchInfo.teamB}`;
                 }
 
+                const statsData = calculateTournamentStats();
                 const packet = {
                     timer: formatTimeSeconds(state.timer),
                     mode: state.mode,
+                    phase: (state.tournament.active && state.tournament.currentIndex !== -1 && state.tournament.matches[state.tournament.currentIndex]) ? (state.tournament.matches[state.tournament.currentIndex].phase || "GIRONI") : "",
                     mercy: document.getElementById('mercy-msg') ? document.getElementById('mercy-msg').style.display === 'block' : false,
                     teamLeft: teamLeftData,
                     teamRight: teamRightData,
                     breakLabel: breakLabelText,
-                    isBreak: state.mode === 'BREAK_MATCH' || state.mode === 'GOLDEN_BREAK', // Ensure GOLDEN_BREAK also triggers isBreak on board
+                    isBreak: state.mode === 'BREAK_MATCH' || state.mode === 'GOLDEN_BREAK',
                     statusText: document.getElementById('game-state-ind') ? document.getElementById('game-state-ind').innerText : state.mode,
                     statusClass: document.getElementById('game-state-ind') ? document.getElementById('game-state-ind').className : '',
                     nextMatch: nextMatchInfo,
+                    layoutUrl: state.tournament.layoutUrl,
+                    showNextMatchOverlay: state.showNextMatchOverlay,
+                    fastestRound: statsData.records[0] || null,
                     teamStyle: TEAM_STYLE,
-                    standingsData: calculateTournamentStats()
+                    standingsData: statsData
                 };
 
                 try {
@@ -1601,6 +1816,7 @@
                     alert("SYNC ERROR (General): " + e.message);
                 }
             }
+
 
             // UTILS
             const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -2201,21 +2417,26 @@
                     log("MATCH TERMINATO -> PASSAGGIO AL MATCH INTERLACCIATO (PEER)");
                     loadMatch(nextSlotIdx, true);
                 } else {
-                    // No Active Peer -> Slot Complete -> Break -> Next Slot
-                    log("SLOT COMPLETATO -> INTERVALLO MATCH -> PROSSIMO SLOT");
-
-                    let targetNextIdx = currIdx + 1;
-                    while (targetNextIdx < matches.length && matches[targetNextIdx].time === currentM.time) {
-                        targetNextIdx++;
-                    }
-
-                    if (targetNextIdx < matches.length) {
+                    const trans = getTransitionInfo();
+                    if (trans) {
+                        if (trans.type === 'PHASE_CHANGE') {
+                            log(`RILEVATA TRANSIZIONE: -> ${trans.phase}`);
+                            render();
+                            showEndPhaseModal(trans.nextIdx);
+                        } else {
+                            log("TUTTI I MATCH COMPLETATI!");
+                            render();
+                            showEndPhaseModal();
+                        }
+                    } else {
+                        // Standard Next Match (same phase)
                         log("MATCH TERMINATO -> CARICAMENTO PROSSIMO SLOT");
+                        let targetNextIdx = currIdx + 1;
+                        while (targetNextIdx < matches.length && matches[targetNextIdx].time === currentM.time) {
+                            targetNextIdx++;
+                        }
                         loadMatch(targetNextIdx);
                         startInter();
-                    } else {
-                        log("TUTTI I MATCH COMPLETATI!");
-                        render();
                     }
                 }
                 render();
@@ -2312,14 +2533,31 @@
                 render();
             }
             function parseTournament(text) {
+                let currentPhase = "GIRONI";
                 return text.split('\n').filter(l => l.includes(',')).map(l => {
+                    // Check if line specifies a phase (e.g. "Phase: HH:MM - Team A, Team B")
+                    if (l.includes(':') && l.split(':')[0].trim().length > 5 && !l.split(':')[0].includes('-')) {
+                        // Potentially a phase header like "QUARTI: ..."
+                        // But that's complex to parse without breaking 14:10.
+                    }
+
+                    // Simple heuristic: if line contains Quarti/Ottavi etc.
+                    const phaseKeywords = ["Girone", "Ottavi", "Quarti", "Semifinali", "Finale", "Pool"];
+                    for (const kw of phaseKeywords) {
+                        if (l.toLowerCase().includes(kw.toLowerCase())) {
+                            currentPhase = kw.toUpperCase();
+                            break;
+                        }
+                    }
+
                     const parts = l.split('-');
                     const time = parts.length > 1 && parts[0].includes(':') ? parts[0].trim() : "00:00";
-                    const teams = (parts.length > 1 ? parts.slice(1).join('-') : l).split(','); // Handle "14:10 - A, B"
+                    const teams = (parts.length > 1 ? parts.slice(1).join('-') : l).split(',');
                     return {
                         time: time,
                         teamA: teams[0].trim(),
-                        teamB: teams[1].trim()
+                        teamB: teams[1].trim(),
+                        phase: currentPhase
                     };
                 });
             }
@@ -2375,7 +2613,8 @@
                     timer: state.timer,
                     timerMode: state.timerMode,
                     gameTimeRemaining: state.gameTimeRemaining,
-                    basesSwapped: state.basesSwapped
+                    basesSwapped: state.basesSwapped,
+                    currentMatchEvents: state.currentMatchEvents
                 }));
                 log("TORNEO SALVATO IN LOCAL STORAGE");
             }
@@ -2388,6 +2627,7 @@
                         state.tournament = data.tournament;
                         if (data.teams) state.teams = data.teams;
                         if (data.matchLog) state.matchLog = data.matchLog;
+                        if (data.currentMatchEvents) state.currentMatchEvents = data.currentMatchEvents;
 
                         // Cache restored values to prevent mangling during loadMatch
                         const restoredMode = data.mode;
@@ -2727,14 +2967,22 @@
 
                 // Update Header Status as well
                 statusHeader.innerText = statusText;
+
+                // Update Phase Display
+                const phaseEl = document.getElementById('match-phase');
+                if (phaseEl) {
+                    const currM = (state.tournament.active && state.tournament.currentIndex !== -1) ? state.tournament.matches[state.tournament.currentIndex] : null;
+                    phaseEl.innerText = currM ? (currM.phase || "GIRONI") : "";
+                }
+
                 updateTimerDisplay();
 
                 const lT = state.basesSwapped ? state.teams.B : state.teams.A;
                 const rT = state.basesSwapped ? state.teams.A : state.teams.B;
 
                 // Truncate and Styling (Local Preview)
-                const limit = TEAM_STYLE.limit || 11;
-                const dot = TEAM_STYLE.dot || '.';
+                const limit = 11;
+                const dot = '.';
                 const lName = lT.name.length > limit ? lT.name.substring(0, limit) + dot : lT.name;
                 const rName = rT.name.length > limit ? rT.name.substring(0, limit) + dot : rT.name;
 
@@ -2744,15 +2992,12 @@
                 nameL.innerText = lName;
                 nameR.innerText = rName;
 
-                // Apply Font Styles (Capped for Control UI to prevent overflow)
-                const controlFontSize = Math.min(TEAM_STYLE.fontSize, 50);
+                // Set fixed character size for local preview
                 [nameL, nameR].forEach(n => {
-                    n.style.fontFamily = TEAM_STYLE.fontFamily || "'Oswald', sans-serif";
-                    n.style.fontWeight = TEAM_STYLE.bold ? 'bold' : 'normal';
-                    n.style.fontSize = controlFontSize + 'px';
-                    // Subtle scale for preview if requested, but capped to avoid layout break
-                    const sX = Math.min(TEAM_STYLE.scaleX, 1.2);
-                    n.style.transform = `scale(${sX}, 1.0)`;
+                    n.style.fontFamily = "'Oswald', sans-serif";
+                    n.style.fontWeight = '700';
+                    n.style.fontSize = '50px'; // Reduced from 70px to fit better in panel
+                    n.style.transform = 'scale(1.2, 1.0)';
                 });
 
                 document.getElementById('score-left').innerText = lT.score;
@@ -2780,6 +3025,13 @@
                 // Visual feedback for used state
                 if (lT.techUsed) { document.getElementById('btn-tech-left').innerText = "USED"; } else { document.getElementById('btn-tech-left').innerText = "TECH"; }
                 if (rT.techUsed) { document.getElementById('btn-tech-right').innerText = "USED"; } else { document.getElementById('btn-tech-right').innerText = "TECH"; }
+
+                // Safety Reopen Button Visibility
+                const reopenBtn = document.getElementById('btn-reopen-phase');
+                const transInfo = getTransitionInfo();
+                if (reopenBtn) {
+                    reopenBtn.style.display = transInfo ? 'block' : 'none';
+                }
 
                 // Btn Logic check...
                 // Btn Logic check...
@@ -3227,6 +3479,7 @@
 
                     broadcastState(); // Sync changes immediately
                     document.getElementById('settings-modal').style.display = 'none';
+                    if (typeof onSettingsClosed === 'function') onSettingsClosed();
                 } catch (err) {
                     console.error(err);
                     alert("Errore salvataggio impostazioni: " + err.message);
@@ -3273,6 +3526,7 @@
                 document.getElementById('tourney-date').value = state.tournament.date || "";
                 document.getElementById('tourney-location').value = state.tournament.location || "";
                 document.getElementById('tourney-field').value = state.tournament.field || "";
+                document.getElementById('tourney-layout-url').value = state.tournament.layoutUrl || "";
                 document.getElementById('tournament-modal').style.display = 'flex';
             });
             document.getElementById('close-tournament-btn').addEventListener('click', () => {
@@ -3283,6 +3537,7 @@
                 state.tournament.date = document.getElementById('tourney-date').value;
                 state.tournament.location = document.getElementById('tourney-location').value;
                 state.tournament.field = document.getElementById('tourney-field').value;
+                state.tournament.layoutUrl = document.getElementById('tourney-layout-url').value;
                 log("DATI TORNEO SALVATI");
                 saveTournamentState();
                 document.getElementById('tournament-modal').style.display = 'none';
@@ -3582,7 +3837,6 @@
 
                     img.onerror = function () {
                         alert("Errore caricamento 'referto_template.png'. Assicurati che il file sia presente e rinominato correttamente.");
-                        log("ERRORE: Template PDF non trovato o non caricabile.");
                     };
 
                 } catch (err) {
@@ -3591,21 +3845,523 @@
                 }
             };
 
-            // Next Match Toggle Logic
+            function recordRealEndTime() {
+                const idx = state.tournament.currentIndex;
+                if (idx !== -1 && state.tournament.matches[idx]) {
+                    state.tournament.matches[idx].realEndTime = new Date().toISOString();
+                }
+            }
+
+            function recordRealStartTime() {
+                const idx = state.tournament.currentIndex;
+                if (idx !== -1 && state.tournament.matches[idx]) {
+                    state.tournament.matches[idx].realStartTime = new Date().toISOString();
+                }
+            }
+
+            function getTransitionInfo() {
+                const currIdx = state.tournament.currentIndex;
+                const matches = state.tournament.matches;
+                if (!state.tournament.active || currIdx === -1 || !matches[currIdx]) return null;
+
+                const currentM = matches[currIdx];
+                let targetNextIdx = currIdx + 1;
+
+                // Skip Peer Matches (matches with same time)
+                while (targetNextIdx < matches.length && matches[targetNextIdx].time === currentM.time) {
+                    targetNextIdx++;
+                }
+
+                if (targetNextIdx < matches.length) {
+                    const nextM = matches[targetNextIdx];
+                    const nextPhase = nextM.phase || "GIRONI";
+                    const currPhase = currentM.phase || "GIRONI";
+
+                    const isKnockout = ["OTTAVI", "QUARTI", "SEMIFINALI", "FINALE"].includes(nextPhase.toUpperCase());
+                    const wasGirone = currPhase.toUpperCase().includes("GIRONE") || currPhase.toUpperCase() === "GIRONI" || currPhase.toUpperCase().includes("POOL");
+
+                    if (wasGirone && isKnockout) {
+                        return { type: 'PHASE_CHANGE', nextIdx: targetNextIdx, phase: nextPhase };
+                    }
+                    return null;
+                } else {
+                    return { type: 'TOURNAMENT_END' };
+                }
+            }
+
+            function reopenPhaseModal() {
+                const trans = getTransitionInfo();
+                if (trans) {
+                    showEndPhaseModal(trans.nextIdx);
+                } else {
+                    alert("Opzioni di fine fase non disponibili per il match corrente.");
+                }
+            }
+
+            // END PHASE LOGIC
+            function showEndPhaseModal(nextIdx) {
+                const modal = document.getElementById('end-phase-modal');
+                const title = document.getElementById('end-phase-title');
+                const msg = document.getElementById('end-phase-msg');
+                const btnContinue = document.getElementById('btn-end-phase-continue');
+                const btnWizard = document.getElementById('btn-end-phase-wizard');
+
+                if (nextIdx !== undefined) {
+                    const nextPhase = state.tournament.matches[nextIdx].phase;
+                    title.innerText = "RILEVATA NUOVA FASE";
+                    msg.innerText = `Il torneo sta passando alla fase: ${nextPhase}.\nPreferisci usare il Wizard o proseguire col palinsesto esistente?`;
+                    btnContinue.style.display = 'block';
+                    btnContinue.onclick = () => {
+                        modal.style.display = 'none';
+                        loadMatch(nextIdx);
+                        startInter();
+                    };
+                    btnWizard.innerText = "🚀 CONFIGURA NUOVA FASE (Wizard)";
+                    btnWizard.onclick = () => startWizard(nextPhase);
+                } else {
+                    title.innerText = "FINE TORNEO";
+                    msg.innerText = "Tutte le partite del palinsesto sono state completate.";
+                    btnContinue.style.display = 'none';
+                    btnWizard.innerText = "🚀 AGGIUNGI ALTRE FASI (Wizard)";
+                    btnWizard.onclick = () => startWizard();
+                }
+
+                modal.style.display = 'flex';
+            }
+
+            // WIZARD LOGIC
+            function startWizard(initialPhase = '') {
+                // Reset Wizard State
+                state.wizard = {
+                    active: true,
+                    step: 1,
+                    data: {
+                        phaseName: initialPhase,
+                        // pitMode removed, strictly per-slot
+                        slots: []
+                    },
+                    activeSlot: null,
+                    returnFromSettings: false
+                };
+
+                document.getElementById('end-phase-modal').style.display = 'none';
+                document.getElementById('wizard-modal').style.display = 'flex';
+
+                // Clear inputs
+                document.getElementById('wiz-phase-name').value = initialPhase;
+
+                showWizardStep(1);
+            }
+
+            function setWizardPhase(name) {
+                document.getElementById('wiz-phase-name').value = name;
+            }
+
+            function closeWizard() {
+                if (!confirm("Sei sicuro di voler annullare la configurazione?")) return;
+                state.wizard.active = false;
+                document.getElementById('wizard-modal').style.display = 'none';
+            }
+
+            function showWizardStep(step) {
+                // Hide all steps
+                ['wizard-step-1', 'wizard-step-2', 'wizard-step-3', 'wizard-step-4'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.style.display = 'none';
+                });
+
+                // Buttons
+                const btnBack = document.getElementById('btn-wiz-back');
+                const btnNext = document.getElementById('btn-wiz-next');
+
+                btnBack.style.display = step > 1 ? 'inline-block' : 'none';
+                btnNext.innerText = step === 3 ? "Genera e Carica" : "Avanti";
+
+                // Show current
+                document.getElementById(`wizard-step-${step}`).style.display = 'flex';
+
+                // Hooks
+                if (step === 2) {
+                    renderWizardSlots();
+                    renderTeamGrid();
+                } else if (step === 3) {
+                    generateMatchPreview();
+                }
+
+                state.wizard.step = step;
+            }
+
+            function wizardNext() {
+                if (state.wizard.step === 1) {
+                    // Validation
+                    const pName = document.getElementById('wiz-phase-name').value.trim();
+                    if (!pName) return alert("Seleziona o inserisci il nome della fase.");
+
+                    state.wizard.data.phaseName = pName;
+                    // No mode validation needed
+
+                    showWizardStep(2);
+                }
+                else if (state.wizard.step === 2) {
+                    // Validate at least 1 slot
+                    if (state.wizard.data.slots.length === 0) {
+                        return alert("Aggiungi almeno uno slot per procedere.");
+                    }
+                    // Validate filled slots? Optional, maybe user wants TBD
+                    // Check if any slot is completely empty?
+
+                    showWizardStep(3);
+                }
+                else if (state.wizard.step === 3) {
+                    applyWizardMatches();
+                }
+            }
+
+            function wizardBack() {
+                if (state.wizard.step > 1) showWizardStep(state.wizard.step - 1);
+            }
+
+            // --- STEP 2: SLOTS & TEAMS ---
+
+            function addWizardSlot(explicitType) {
+                // Default to DOUBLE if no arg passed (legacy safety), but UI passes args now.
+                // Let's default to SINGLE if undefined, or DOUBLE? User seems to prefer flexible.
+                // Logic: type MUST be 'SINGLE' or 'DOUBLE'.
+                const type = explicitType || 'DOUBLE';
+                const isDouble = type === 'DOUBLE';
+                const teamCount = isDouble ? 4 : 2;
+
+                state.wizard.data.slots.push({
+                    id: Date.now() + Math.random(),
+                    type: type,
+                    teams: new Array(teamCount).fill(null)
+                });
+
+                renderWizardSlots();
+
+                // Auto-activate first empty input of new slot
+                const newIdx = state.wizard.data.slots.length - 1;
+                activateWizardInput(newIdx, 0);
+            }
+
+            function removeWizardSlot(idx) {
+                state.wizard.data.slots.splice(idx, 1);
+                renderWizardSlots();
+            }
+
+            function activateWizardInput(slotIdx, teamIdx) {
+                state.wizard.activeSlot = { slotIdx, teamIdx };
+                renderWizardSlots();
+            }
+
+            function renderWizardSlots() {
+                const container = document.getElementById('wiz-slots-container');
+                container.innerHTML = '';
+
+                state.wizard.data.slots.forEach((slot, sIdx) => {
+                    const slotType = slot.type || 'SINGLE'; // Fallback
+                    const isDouble = slotType === 'DOUBLE';
+
+                    const card = document.createElement('div');
+                    card.style.background = '#0f172a';
+                    card.style.border = '1px solid #334155';
+                    card.style.padding = '10px';
+                    card.style.borderRadius = '8px';
+                    card.style.position = 'relative';
+
+                    // Remove Btn
+                    const btnRem = document.createElement('button');
+                    btnRem.innerText = 'X';
+                    btnRem.className = 'btn btn-danger';
+                    btnRem.style.position = 'absolute';
+                    btnRem.style.top = '5px';
+                    btnRem.style.right = '5px';
+                    btnRem.style.padding = '2px 8px';
+                    btnRem.style.fontSize = '0.7rem';
+                    btnRem.onclick = () => removeWizardSlot(sIdx);
+                    card.appendChild(btnRem);
+
+                    const title = document.createElement('div');
+                    title.innerText = isDouble ? `Blocco ${sIdx + 1} (Doppia)` : `Blocco ${sIdx + 1} (Singola)`;
+                    title.style.fontWeight = 'bold';
+                    title.style.color = '#94a3b8';
+                    title.style.marginBottom = '5px';
+                    card.appendChild(title);
+
+                    // Inputs Container
+                    const inputsDiv = document.createElement('div');
+                    inputsDiv.style.display = 'grid';
+                    inputsDiv.style.gap = '10px';
+
+                    if (isDouble) {
+                        inputsDiv.style.gridTemplateColumns = '1fr';
+                        // Row A
+                        inputsDiv.appendChild(createMatchRow(sIdx, 0, 1, 'Pit A', slot.teams));
+                        // Row B
+                        inputsDiv.appendChild(createMatchRow(sIdx, 2, 3, 'Pit B', slot.teams));
+                    } else {
+                        // 1 Row: Pit A
+                        inputsDiv.appendChild(createMatchRow(sIdx, 0, 1, 'Pit A', slot.teams));
+                    }
+
+                    card.appendChild(inputsDiv);
+                    container.appendChild(card);
+                });
+            }
+
+            function createMatchRow(sIdx, tIdx1, tIdx2, label, teams) {
+                const row = document.createElement('div');
+                row.style.display = 'flex';
+                row.style.alignItems = 'center';
+                row.style.gap = '5px';
+
+                const lbl = document.createElement('span');
+                lbl.innerText = label + ':';
+                lbl.style.fontSize = '0.8rem';
+                lbl.style.width = '40px';
+                lbl.style.color = '#64748b';
+                row.appendChild(lbl);
+
+                const btn1 = createTeamInputBtn(sIdx, tIdx1, teams[tIdx1]);
+                row.appendChild(btn1);
+
+                const vs = document.createElement('span');
+                vs.innerText = 'vs';
+                vs.style.color = '#64748b';
+                row.appendChild(vs);
+
+                const btn2 = createTeamInputBtn(sIdx, tIdx2, teams[tIdx2]);
+                row.appendChild(btn2);
+
+                return row;
+            }
+
+            function createTeamInputBtn(sIdx, tIdx, teamName) {
+                const isSelected = state.wizard.activeSlot && state.wizard.activeSlot.slotIdx === sIdx && state.wizard.activeSlot.teamIdx === tIdx;
+
+                const btn = document.createElement('button');
+                btn.className = 'btn';
+                btn.innerText = teamName || 'Seleziona...';
+                btn.style.flex = '1';
+                btn.style.textAlign = 'left';
+                btn.style.whiteSpace = 'nowrap';
+                btn.style.overflow = 'hidden';
+                btn.style.textOverflow = 'ellipsis';
+                btn.style.padding = '8px';
+                btn.style.fontSize = '0.9rem';
+
+                if (isSelected) {
+                    btn.style.borderColor = '#fbbf24';
+                    btn.style.color = '#fbbf24';
+                    btn.style.background = 'rgba(251, 191, 36, 0.1)';
+                } else if (teamName) {
+                    btn.style.borderColor = '#334155';
+                    btn.style.color = '#e2e8f0';
+                } else {
+                    btn.style.borderStyle = 'dashed';
+                    btn.style.color = '#64748b';
+                }
+
+                btn.onclick = () => activateWizardInput(sIdx, tIdx);
+                return btn;
+            }
+
+            function renderTeamGrid() {
+                const grid = document.getElementById('wiz-team-grid');
+                grid.innerHTML = '';
+
+                const uniqueTeams = new Set();
+                uniqueTeams.add("TBD");
+
+                // Harvest history
+                state.tournament.matches.forEach(m => {
+                    if (m.teamA) uniqueTeams.add(m.teamA);
+                    if (m.teamB) uniqueTeams.add(m.teamB);
+                });
+
+                uniqueTeams.forEach(tName => {
+                    const btn = document.createElement('button');
+                    btn.innerText = tName;
+                    btn.className = 'btn';
+                    btn.style.padding = '5px';
+                    btn.style.fontSize = '0.8rem';
+                    btn.style.background = '#334155';
+                    btn.style.border = '1px solid #475569';
+
+                    btn.onclick = () => fillActiveSlot(tName);
+                    grid.appendChild(btn);
+                });
+            }
+
+            function fillActiveSlot(teamName) {
+                if (!state.wizard.activeSlot) return;
+
+                const { slotIdx, teamIdx } = state.wizard.activeSlot;
+
+                // Set Team
+                state.wizard.data.slots[slotIdx].teams[teamIdx] = teamName;
+
+                // Auto-advance
+                // Find next null
+                let nextSlotIdx = slotIdx;
+                let nextTeamIdx = teamIdx + 1;
+
+                const currentSlotTeams = state.wizard.data.slots[slotIdx].teams;
+                if (nextTeamIdx >= currentSlotTeams.length) {
+                    nextSlotIdx++;
+                    nextTeamIdx = 0;
+                }
+
+                if (nextSlotIdx < state.wizard.data.slots.length) {
+                    activateWizardInput(nextSlotIdx, nextTeamIdx);
+                } else {
+                    // No more slots, keep current selection but update view
+                    renderWizardSlots();
+                }
+            }
+
+            // --- STEP 3: PREVIEW & SETTINGS ---
+
+            function openSettingsForWizard() {
+                state.wizard.returnFromSettings = true;
+                const modal = document.getElementById('wizard-modal');
+                modal.style.display = 'none';
+
+                const settingsModal = document.getElementById('settings-modal');
+                settingsModal.style.display = 'flex';
+            }
+
+            // Called by onSettingsClosed (existing hook)
+            function onSettingsClosed() {
+                // NOTE: This needs to be hooked into the Close button of the Settings Modal
+                // We'll add this hook globally at initialization
+                if (state.wizard && state.wizard.active && state.wizard.returnFromSettings) {
+                    state.wizard.returnFromSettings = false;
+                    document.getElementById('wizard-modal').style.display = 'flex';
+                    // Stay on Step 3
+                }
+            }
+
+            function generateMatchPreview() {
+                const ta = document.getElementById('wiz-match-preview');
+                const phase = state.wizard.data.phaseName || "Fase";
+
+                let text = `Fase: ${phase}\n`;
+                text += `--------------------------------\n`;
+
+                const gameDur = (parseInt(document.getElementById('game-duration-setting').value) || 10) * 60;
+                const interDur = parseInt(document.getElementById('interval-duration').value) || 120;
+                const totalSec = gameDur + interDur;
+
+                // Calculate Start Time: Find last match time + totalSec
+                // Or if empty tournament, 09:00?
+                // For simplicity, let's look at last tournament match
+                let lastTimeSec = 0;
+                if (state.tournament.matches.length > 0) {
+                    const lastM = state.tournament.matches[state.tournament.matches.length - 1];
+                    lastTimeSec = timeToSeconds(lastM.time);
+                    if (isNaN(lastTimeSec)) lastTimeSec = 0;
+                    // Add interval to start "next" block
+                    lastTimeSec += totalSec;
+                }
+
+                state.wizard.data.slots.forEach((slot, idx) => {
+                    const timeStr = formatTimeHHMM(lastTimeSec);
+                    const slotType = slot.type || 'SINGLE';
+                    const isDouble = slotType === 'DOUBLE';
+
+                    // Match A
+                    const tA = slot.teams[0] || "TBD";
+                    const tB = slot.teams[1] || "TBD";
+                    text += `${timeStr} - ${tA}, ${tB} ||| Pit A\n`;
+
+                    if (isDouble) {
+                        const tC = slot.teams[2] || "TBD";
+                        const tD = slot.teams[3] || "TBD";
+                        // Same Time for Pit B
+                        text += `${timeStr} - ${tC}, ${tD} ||| Pit B\n`;
+                    }
+
+                    lastTimeSec += totalSec;
+                });
+
+                ta.value = text;
+            }
+
+            function applyWizardMatches() {
+                // Reuse existing parser logic? Or just call it.
+                // The applyWizardMatches in previous code parsed the TEXTAREA.
+                // This allows user to manually edit times/teams in the text area before confirming.
+                // So we will keep that logic!
+
+                const raw = document.getElementById('wiz-match-preview').value;
+                const lines = raw.split('\n');
+                const newMatches = [];
+
+                lines.forEach(l => {
+                    if (!l.includes('-') || !l.includes(',')) return;
+
+                    try {
+                        const parts = l.split('|||');
+                        const main = parts[0];
+                        const pitPart = parts[1] || 'Pit A';
+
+                        const timeParts = main.split('-');
+                        const time = timeParts[0].trim();
+
+                        const teamsPart = timeParts.slice(1).join('-');
+                        const teams = teamsPart.split(',');
+                        if (teams.length < 2) return;
+
+                        const tA = teams[0].trim();
+                        const tB = teams[1].trim();
+                        const pit = pitPart.toLowerCase().includes('pit b') ? 'B' : 'A';
+
+                        newMatches.push({
+                            teamA: tA,
+                            teamB: tB,
+                            time: time,
+                            pit: pit,
+                            phase: state.wizard.data.phaseName // Save Phase Name too?
+                        });
+
+                    } catch (e) { console.error("Parse error line: " + l); }
+                });
+
+                if (newMatches.length === 0) return alert("Nessun match valido trovato!");
+
+                state.tournament.matches.push(...newMatches);
+                saveTournamentState();
+
+                alert(`Aggiunti ${newMatches.length} match!`);
+
+                document.getElementById('wizard-modal').style.display = 'none';
+                state.wizard.active = false;
+
+                render();
+                broadcastState();
+            }
+
+            // Utils
+            function timeToSeconds(hhmm) {
+                if (!hhmm) return 0;
+                const p = hhmm.split(':');
+                return parseInt(p[0]) * 3600 + parseInt(p[1]) * 60;
+            }
+            function formatTimeHHMM(totalSec) {
+                // Normalize 24h
+                totalSec = totalSec % (24 * 3600);
+                const h = Math.floor(totalSec / 3600);
+                const m = Math.floor((totalSec % 3600) / 60);
+                return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+            }
+
             function toggleNextMatchOverlay() {
                 state.showNextMatchOverlay = !state.showNextMatchOverlay;
-                const btn = document.getElementById('btn-toggle-next');
-                if (state.showNextMatchOverlay) {
-                    btn.innerText = "👁️ Next: ON";
-                    btn.style.background = "#22c55e"; // Green
-                    btn.style.color = "white";
-                } else {
-                    btn.innerText = "👁️ Next: OFF";
-                    btn.style.background = ""; // Default
-                    btn.style.color = "";
-                }
-                broadcastState(); // Immediate update
+                broadcastState();
             }
+
+
         </script>
     </div> <!-- End Scaler -->
     <script>
