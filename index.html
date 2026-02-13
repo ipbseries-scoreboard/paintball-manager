@@ -2708,6 +2708,7 @@
                 // Track for broadcast
                 state.teams[teamId].lastPenalty = {
                     type: lvl === 1 ? 'MINOR' : 'MAJOR',
+                    level: lvl,
                     timestamp: Date.now()
                 };
 

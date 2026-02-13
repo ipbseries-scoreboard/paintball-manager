@@ -45,10 +45,10 @@
             align-items: center;
             padding: 20px;
             gap: 20px;
-            /* Scale 10% down */
-            width: 111.11%;
-            height: 111.11%;
-            transform: scale(0.9);
+            /* Scale 15% down */
+            width: 117.65%;
+            height: 117.65%;
+            transform: scale(0.85);
             transform-origin: top left;
         }
 
@@ -82,9 +82,9 @@
             flex-direction: column;
             padding: 8px;
             gap: 8px;
-            width: 111.11%;
-            height: 111.11%;
-            transform: scale(0.9);
+            width: 117.65%;
+            height: 117.65%;
+            transform: scale(0.85);
             transform-origin: top left;
             box-sizing: border-box;
         }
@@ -145,7 +145,6 @@
         }
 
         /* Smartphone layout is default (v2) */
-        #app.layout-phone {}
 
         /* CONNECTION STATUS BAR */
         #connection-status {
@@ -333,10 +332,10 @@
             align-items: center;
             padding: 20px;
             gap: 20px;
-            /* Scale 10% down */
-            width: 111.11%;
-            height: 111.11%;
-            transform: scale(0.9);
+            /* Scale 15% down */
+            width: 117.65%;
+            height: 117.65%;
+            transform: scale(0.85);
             transform-origin: top left;
         }
 
@@ -461,12 +460,12 @@
         }
 
         .flash-yellow {
-            animation: flash-yellow 0.5s ease 3;
+            animation: flash-yellow 1s ease 5;
             border-radius: 8px;
         }
 
         .flash-red {
-            animation: flash-red 0.5s ease 3;
+            animation: flash-red 1s ease 5;
             border-radius: 8px;
         }
     </style>
@@ -565,6 +564,8 @@
         let lastTimerSecond = -1;
         let lastPensLeft = 0;
         let lastPensRight = 0;
+        let lastPenaltyTimeLeft = 0;
+        let lastPenaltyTimeRight = 0;
         let vibrationEnabled = true; // Global flag
 
         function triggerVibration(pattern) {
@@ -682,6 +683,23 @@
                     vibrationEnabled = data.hapticReferee;
                 }
 
+                if (data.teamLeft && data.teamLeft.lastPenalty) {
+                    const lp = data.teamLeft.lastPenalty;
+                    if (lp.timestamp > lastPenaltyTimeLeft) {
+                        const color = (lp.level == 1) ? 'yellow' : 'red';
+                        triggerFlash('left', color);
+                        lastPenaltyTimeLeft = lp.timestamp;
+                    }
+                }
+                if (data.teamRight && data.teamRight.lastPenalty) {
+                    const lp = data.teamRight.lastPenalty;
+                    if (lp.timestamp > lastPenaltyTimeRight) {
+                        const color = (lp.level == 1) ? 'yellow' : 'red';
+                        triggerFlash('right', color);
+                        lastPenaltyTimeRight = lp.timestamp;
+                    }
+                }
+
                 document.getElementById('connection-status').classList.add('online');
 
                 // Timer format MM:SS (strip milliseconds)
@@ -740,9 +758,6 @@
 
                     // Remote penalty flash
                     const newPens = data.teamLeft.totalPenalties || 0;
-                    if (newPens > lastPensLeft) {
-                        triggerFlash('left', 'yellow'); // Default to yellow for remote as we don't know level
-                    }
                     lastPensLeft = newPens;
                 }
                 if (data.teamRight) {
@@ -752,9 +767,6 @@
 
                     // Remote penalty flash
                     const newPens = data.teamRight.totalPenalties || 0;
-                    if (newPens > lastPensRight) {
-                        triggerFlash('right', 'yellow');
-                    }
                     lastPensRight = newPens;
                 }
             } catch (err) {
@@ -820,7 +832,7 @@
                 el.classList.remove('flash-yellow', 'flash-red');
                 void el.offsetWidth; // Trigger reflow
                 el.classList.add(flashClass);
-                setTimeout(() => el.classList.remove(flashClass), 1550);
+                setTimeout(() => el.classList.remove(flashClass), 5050);
             }
         }
 
