@@ -2643,8 +2643,12 @@
                     render();
                 } else if (decision === 'REJECT') {
                     log(`PUNTO NON APPROVATO (${team.name}). Nessun punteggio assegnato.`);
-                    // Timer remains paused as per user request
-                    render();
+                    // Resume logic restored as per user request
+                    if (state.gameTimeRemaining > 0) {
+                        state.timer = state.gameTimeRemaining;
+                        startTimerLoop();
+                        render();
+                    }
                 } else if (decision === 'NO_POINT') {
                     log(`DECISIONE NO POINT (${team.name}). Salto slot senza cambio campo.`);
                     handleNoPoint();
