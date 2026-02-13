@@ -45,6 +45,11 @@
             align-items: center;
             padding: 20px;
             gap: 20px;
+            /* Scale 10% down */
+            width: 111.11%;
+            height: 111.11%;
+            transform: scale(0.9);
+            transform-origin: top left;
         }
 
         #connect-ui input {
@@ -74,11 +79,13 @@
         /* MAIN APP UI */
         #app {
             display: none;
-            flex-grow: 1;
             flex-direction: column;
             padding: 8px;
             gap: 8px;
-            height: 100vh;
+            width: 111.11%;
+            height: 111.11%;
+            transform: scale(0.9);
+            transform-origin: top left;
             box-sizing: border-box;
         }
 
@@ -326,6 +333,11 @@
             align-items: center;
             padding: 20px;
             gap: 20px;
+            /* Scale 10% down */
+            width: 111.11%;
+            height: 111.11%;
+            transform: scale(0.9);
+            transform-origin: top left;
         }
 
         .modal-title {
@@ -421,6 +433,42 @@
         #connect-ui .layout-btn span {
             font-size: 30px;
         }
+
+        @keyframes flash-yellow {
+
+            0%,
+            100% {
+                background: transparent;
+            }
+
+            50% {
+                background: #f59e0b;
+                color: black;
+            }
+        }
+
+        @keyframes flash-red {
+
+            0%,
+            100% {
+                background: transparent;
+            }
+
+            50% {
+                background: #ef4444;
+                color: white;
+            }
+        }
+
+        .flash-yellow {
+            animation: flash-yellow 0.5s ease 3;
+            border-radius: 8px;
+        }
+
+        .flash-red {
+            animation: flash-red 0.5s ease 3;
+            border-radius: 8px;
+        }
     </style>
 </head>
 
@@ -514,6 +562,21 @@
         let currentMode = 'IDLE';
         let pendingSide = null;
         let chosenLayout = 'phone';
+        let lastTimerSecond = -1;
+        let lastPensLeft = 0;
+        let lastPensRight = 0;
+        let vibrationEnabled = true; // Global flag
+
+        function triggerVibration(pattern) {
+            if (!vibrationEnabled) return;
+            if ("vibrate" in navigator) {
+                switch (pattern) {
+                    case 'point': navigator.vibrate(100); break;
+                    case 'warning': navigator.vibrate(500); break;
+                    case 'end': navigator.vibrate([200, 100, 200, 100, 500]); break;
+                }
+            }
+        }
 
         function setLayout(type) {
             chosenLayout = type;
@@ -613,11 +676,26 @@
         function updateUI(data) {
             try {
                 if (!data) return;
+
+                // Sync remote settings
+                if (data.hapticReferee !== undefined) {
+                    vibrationEnabled = data.hapticReferee;
+                }
+
                 document.getElementById('connection-status').classList.add('online');
 
                 // Timer format MM:SS (strip milliseconds)
                 const fullTime = data.timer || "00:00.00";
-                document.getElementById('timer').innerText = fullTime.split('.')[0];
+                const mmss = fullTime.split('.')[0];
+                document.getElementById('timer').innerText = mmss;
+
+                // Haptic Feedback for Timer
+                const totalSeconds = parseTimerToSeconds(mmss);
+                if (totalSeconds !== lastTimerSecond) {
+                    if (totalSeconds === 10 && data.mode !== 'IDLE') triggerVibration('warning');
+                    if (totalSeconds === 0 && lastTimerSecond === 1 && data.mode !== 'IDLE') triggerVibration('end');
+                    lastTimerSecond = totalSeconds;
+                }
 
                 // Update Phase Label
                 const phaseEl = document.getElementById('timer-phase');
@@ -659,11 +737,25 @@
                     document.getElementById('name-left').innerText = data.teamLeft.name;
                     document.getElementById('score-left').innerText = data.teamLeft.score;
                     document.getElementById('tech-ind-left').style.display = data.teamLeft.techUsed ? 'block' : 'none';
+
+                    // Remote penalty flash
+                    const newPens = data.teamLeft.totalPenalties || 0;
+                    if (newPens > lastPensLeft) {
+                        triggerFlash('left', 'yellow'); // Default to yellow for remote as we don't know level
+                    }
+                    lastPensLeft = newPens;
                 }
                 if (data.teamRight) {
                     document.getElementById('name-right').innerText = data.teamRight.name;
                     document.getElementById('score-right').innerText = data.teamRight.score;
                     document.getElementById('tech-ind-right').style.display = data.teamRight.techUsed ? 'block' : 'none';
+
+                    // Remote penalty flash
+                    const newPens = data.teamRight.totalPenalties || 0;
+                    if (newPens > lastPensRight) {
+                        triggerFlash('right', 'yellow');
+                    }
+                    lastPensRight = newPens;
                 }
             } catch (err) {
                 console.error("UI Update Error:", err);
@@ -683,7 +775,14 @@
 
         function submitPoint(decision) {
             sendCommand('CONFIRM_POINT', pendingSide, null, decision);
+            if (decision === 'APPROVED') triggerVibration('point');
             closeModal();
+        }
+
+        function parseTimerToSeconds(mmss) {
+            if (!mmss) return -1;
+            const pts = mmss.split(':');
+            return (parseInt(pts[0]) * 60) + parseInt(pts[1]);
         }
 
         function handleSpecial(side) {
@@ -700,10 +799,29 @@
                 document.getElementById('connection-status').classList.remove('online');
                 return;
             }
+
+            // Visual feedback for penalty (Local feedback)
+            if (type === 'PENALTY' && side && level) {
+                const color = (level == 1) ? 'yellow' : 'red';
+                triggerFlash(side, color);
+            }
+
             // Rapid visual feedback
             const payload = { type, side, level, decision };
             console.log("SENDING COMMAND:", payload);
             conn.send(payload);
+        }
+
+        function triggerFlash(side, color) {
+            const targetId = `name-${side}`;
+            const el = document.getElementById(targetId);
+            if (el) {
+                const flashClass = `flash-${color}`;
+                el.classList.remove('flash-yellow', 'flash-red');
+                void el.offsetWidth; // Trigger reflow
+                el.classList.add(flashClass);
+                setTimeout(() => el.classList.remove(flashClass), 1550);
+            }
         }
 
         function handlePauseToggle() {
