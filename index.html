@@ -2070,6 +2070,9 @@
                     case 'PAUSE':
                         pause();
                         break;
+                    case 'STOP_TIMER':
+                        if (state.mode !== 'PAUSED' && state.mode !== 'TECH_PAUSED') pause();
+                        break;
                     case 'UNDO':
                         undoLastAction();
                         break;
@@ -2564,12 +2567,14 @@
                     if (action === 'point') {
                         // New Verification Flow
                         pendingPointSide = side;
-                        stopTimerLoop();
-                        state.gameTimeRemaining = state.timer; // Freeze timer
 
-                        // Logic: If Time <= 0 or Mercy is already active, we shouldn't prompt verification?
-                        // User said: "automatico quando premo punto confermato ... E il tempo è finito".
-                        // So we must verify first.
+                        // Auto-pause if running
+                        if (state.mode === 'POINT' || state.mode === 'INTERVAL' || state.mode === 'OVERTIME') {
+                            pause();
+                        } else {
+                            stopTimerLoop();
+                            state.gameTimeRemaining = state.timer;
+                        }
 
                         document.getElementById('verify-title').innerText = `VERIFICA PUNTO: ${team.name}`;
                         document.getElementById('point-verify-modal').style.display = 'flex';
@@ -2638,12 +2643,8 @@
                     render();
                 } else if (decision === 'REJECT') {
                     log(`PUNTO NON APPROVATO (${team.name}). Nessun punteggio assegnato.`);
-                    // Resume Logic Correctly Placed Here
-                    if (state.gameTimeRemaining > 0) {
-                        state.timer = state.gameTimeRemaining;
-                        startTimerLoop();
-                        render();
-                    }
+                    // Timer remains paused as per user request
+                    render();
                 } else if (decision === 'NO_POINT') {
                     log(`DECISIONE NO POINT (${team.name}). Salto slot senza cambio campo.`);
                     handleNoPoint();

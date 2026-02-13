@@ -777,6 +777,10 @@
         function openPointModal(side) {
             pendingSide = side;
             const name = side === 'left' ? document.getElementById('name-left').innerText : document.getElementById('name-right').innerText;
+
+            // Notify host to pause
+            sendCommand('STOP_TIMER');
+
             document.getElementById('modal-team-name').innerText = `PUNTO PER: ${name}`;
             document.getElementById('point-modal').style.display = 'flex';
         }
