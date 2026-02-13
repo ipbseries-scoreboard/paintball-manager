@@ -2643,12 +2643,14 @@
                     render();
                 } else if (decision === 'REJECT') {
                     log(`PUNTO NON APPROVATO (${team.name}). Nessun punteggio assegnato.`);
-                    // Resume logic restored as per user request
-                    if (state.gameTimeRemaining > 0) {
+                    // Resume logic restored as per user request:
+                    // Must restore mode from prevMode so tick() doesn't exit early.
+                    if (state.gameTimeRemaining > 0 && (state.prevMode === 'POINT' || state.prevMode === 'INTERVAL' || state.prevMode === 'OVERTIME')) {
+                        state.mode = state.prevMode;
                         state.timer = state.gameTimeRemaining;
                         startTimerLoop();
-                        render();
                     }
+                    render();
                 } else if (decision === 'NO_POINT') {
                     log(`DECISIONE NO POINT (${team.name}). Salto slot senza cambio campo.`);
                     handleNoPoint();
