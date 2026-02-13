@@ -158,17 +158,34 @@
         }
 
         /* TIMER AREA */
+        #timer-container {
+            display: flex;
+            background: #111;
+            border-radius: 15px;
+            border: 5px solid #333;
+            padding: 10px;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+        }
+
         #timer {
             font-size: 110px;
             font-weight: 900;
-            text-align: center;
-            background: #111;
-            border-radius: 15px;
-            padding: 10px;
-            border: 5px solid #333;
             font-family: 'Oswald', sans-serif;
             line-height: 1;
             color: var(--warning);
+        }
+
+        #timer-phase {
+            font-size: 30px;
+            font-weight: 900;
+            color: var(--btn-accent);
+            text-transform: uppercase;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            border-left: 2px solid #333;
+            padding-left: 10px;
         }
 
         /* TEAMS VERTICAL STACK */
@@ -186,7 +203,7 @@
         .team-header {
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: flex-start;
             margin-bottom: 5px;
         }
 
@@ -194,10 +211,9 @@
             font-size: 40px;
             font-weight: 900;
             text-transform: uppercase;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 65%;
+            white-space: normal;
+            line-height: 1.1;
+            flex: 1;
             color: #fff;
         }
 
@@ -258,6 +274,19 @@
             color: #fbbf24;
             font-weight: 900;
             font-size: 20px;
+        }
+
+        .tech-indicator {
+            grid-column: span 3;
+            background: rgba(14, 165, 233, 0.2);
+            border: 1px solid #0ea5e9;
+            color: #0ea5e9;
+            text-align: center;
+            padding: 5px;
+            font-weight: 900;
+            font-size: 14px;
+            border-radius: 8px;
+            display: none;
         }
 
         /* BOTTOM CONTROLS */
@@ -330,6 +359,11 @@
         .btn-reject {
             background: #475569;
             color: white;
+        }
+
+        .btn-nopoint {
+            background: #f59e0b;
+            color: black;
         }
 
         .btn-cancel {
@@ -415,7 +449,10 @@
     </div>
 
     <div id="app">
-        <div id="timer">00:00.00</div>
+        <div id="timer-container">
+            <div id="timer">00:00</div>
+            <div id="timer-phase">GARA</div>
+        </div>
 
         <!-- TEAM LEFT -->
         <div id="section-left" class="team-section" style="border-color: var(--btn-left);">
@@ -431,6 +468,7 @@
                 <button class="btn-pen" onclick="sendCommand('PENALTY', 'left', 1)">1x1</button>
                 <button class="btn-pen" onclick="sendCommand('PENALTY', 'left', 2)">2x1</button>
                 <button class="btn-pen" onclick="sendCommand('PENALTY', 'left', 3)">3x1</button>
+                <div id="tech-ind-left" class="tech-indicator">PAUSA TECNICA USATA</div>
             </div>
         </div>
 
@@ -448,11 +486,14 @@
                 <button class="btn-pen" onclick="sendCommand('PENALTY', 'right', 1)">1x1</button>
                 <button class="btn-pen" onclick="sendCommand('PENALTY', 'right', 2)">2x1</button>
                 <button class="btn-pen" onclick="sendCommand('PENALTY', 'right', 3)">3x1</button>
+                <div id="tech-ind-right" class="tech-indicator">PAUSA TECNICA USATA</div>
             </div>
         </div>
 
         <div class="bottom-bar">
             <button id="pause-btn" class="btn-main" onclick="handlePauseToggle()">START</button>
+            <button class="btn-undo" style="background: var(--warning); color: black; font-size: 1.2rem;"
+                onclick="sendCommand('NO_POINT')" title="NO POINT / SALTA SLOT">🚫</button>
             <button class="btn-undo" onclick="sendCommand('UNDO')">↩️</button>
         </div>
     </div>
@@ -462,7 +503,8 @@
         <div id="modal-team-name" class="modal-title">VERIFICA PUNTO</div>
         <button class="modal-btn btn-confirm" onclick="submitPoint('APPROVED')">CONFIRMED POINT</button>
         <button class="modal-btn btn-reverse" onclick="submitPoint('REVERSE')">REVERSE POINT</button>
-        <button class="modal-btn btn-reject" onclick="submitPoint('REJECT')">NOT APPROVED</button>
+        <button class="modal-btn btn-reject" onclick="submitPoint('REJECT')">POINT NOT APPROVED</button>
+        <button class="modal-btn btn-nopoint" onclick="submitPoint('NO_POINT')">NO POINT</button>
         <button class="modal-btn btn-cancel" onclick="closeModal()">CANCEL / CLOSE</button>
     </div>
 
@@ -572,25 +614,31 @@
             try {
                 if (!data) return;
                 document.getElementById('connection-status').classList.add('online');
-                document.getElementById('timer').innerText = data.timer;
-                currentMode = data.mode;
 
-                const btn = document.getElementById('pause-btn');
-                if (data.mode === 'PAUSED' || data.mode === 'IDLE' || data.mode === 'BREAK_MATCH') {
-                    btn.className = 'btn-main bg-active';
-                    btn.innerText = "START";
+                // Timer format MM:SS (strip milliseconds)
+                const fullTime = data.timer || "00:00.00";
+                document.getElementById('timer').innerText = fullTime.split('.')[0];
+
+                // Update Phase Label
+                const phaseEl = document.getElementById('timer-phase');
+                if (data.mode === 'INTERVAL' || data.mode === 'BREAK_MATCH' || data.mode === 'GOLDEN_BREAK') {
+                    phaseEl.innerText = "Pausa";
+                    phaseEl.style.color = "var(--warning)";
                 } else {
-                    btn.className = 'btn-main bg-pause';
-                    btn.innerText = "PAUSA";
+                    phaseEl.innerText = "Gara";
+                    phaseEl.style.color = "var(--btn-accent)";
                 }
+
+                currentMode = data.mode;
 
                 // Update Special Buttons (Towel vs Tech)
                 const isPlay = (data.mode === 'POINT' || data.mode === 'OVERTIME');
                 const specL = document.getElementById('spec-left');
                 const specR = document.getElementById('spec-right');
 
-                // Disable Penalty Buttons when not playing
-                document.querySelectorAll('.btn-pen').forEach(b => {
+                // Disable Score & Penalty Buttons when not playing
+                const gameButtons = document.querySelectorAll('.btn-pen, .btn-point');
+                gameButtons.forEach(b => {
                     b.disabled = !isPlay;
                     b.style.opacity = isPlay ? '1' : '0.5';
                 });
@@ -610,10 +658,12 @@
                 if (data.teamLeft) {
                     document.getElementById('name-left').innerText = data.teamLeft.name;
                     document.getElementById('score-left').innerText = data.teamLeft.score;
+                    document.getElementById('tech-ind-left').style.display = data.teamLeft.techUsed ? 'block' : 'none';
                 }
                 if (data.teamRight) {
                     document.getElementById('name-right').innerText = data.teamRight.name;
                     document.getElementById('score-right').innerText = data.teamRight.score;
+                    document.getElementById('tech-ind-right').style.display = data.teamRight.techUsed ? 'block' : 'none';
                 }
             } catch (err) {
                 console.error("UI Update Error:", err);

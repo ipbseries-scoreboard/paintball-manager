@@ -1499,7 +1499,7 @@
 
                 if (!targetId || targetId === "undefined" || !targetId.startsWith("IPBA-")) {
                     // Generate a unique ID but we'll show only numbers to user
-                    const randomVal = Math.floor(100000 + Math.random() * 899999).toString();
+                    const randomVal = Math.floor(1000 + Math.random() * 9000).toString();
                     targetId = "IPBA-" + randomVal;
                     state.settings.matchId = targetId;
                     localStorage.setItem('pm_settings', JSON.stringify(state.settings));

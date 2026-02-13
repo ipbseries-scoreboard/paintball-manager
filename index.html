@@ -872,6 +872,9 @@
                         POINT</button>
                     <button id="btn-verify-reject" class="btn"
                         style="background-color: #64748b; color: white; padding: 20px;">POINT NOT APPROVED</button>
+                    <button id="btn-verify-nopoint" class="btn"
+                        style="background-color: #f59e0b; color: black; padding: 20px;"
+                        onclick="confirmPoint('NO_POINT')">NO POINT</button>
                 </div>
             </div>
         </div>
@@ -1820,7 +1823,7 @@
 
                 if (!targetId || targetId === "undefined" || !targetId.startsWith("IPBA-")) {
                     // Generate a unique ID but we'll show only numbers to user
-                    const randomVal = Math.floor(100000 + Math.random() * 899999).toString();
+                    const randomVal = Math.floor(1000 + Math.random() * 9000).toString();
                     targetId = "IPBA-" + randomVal;
                     state.settings.matchId = targetId;
                     localStorage.setItem('pm_settings', JSON.stringify(state.settings));
@@ -2066,6 +2069,9 @@
                         break;
                     case 'UNDO':
                         undoLastAction();
+                        break;
+                    case 'NO_POINT':
+                        handleNoPoint();
                         break;
                     case 'TECH':
                         // If peer sends TECH, trigger the tech pause for the side
@@ -2635,14 +2641,18 @@
                         startTimerLoop();
                         render();
                     }
+                } else if (decision === 'NO_POINT') {
+                    log(`DECISIONE NO POINT (${team.name}). Salto slot senza cambio campo.`);
+                    handleNoPoint();
                 }
 
                 // Resume flow / Next Point (Interleaved Logic)
-                if (state.mode === 'IDLE') {
+                // If it was NO_POINT, rotation was already handled inside handleNoPoint()
+                if (state.mode === 'IDLE' && decision !== 'NO_POINT') {
                     if (decision === 'REJECT') {
                         // Should not happen here anymore as mode wasn't set to IDLE
                     } else {
-                        // Approved or Reversed -> Rotate Interleaved Match
+                        // Approved or Reversed -> Rotate Interleaved Match (Swap side by default)
                         log("CONFERMA PUNTO -> ROTATING MATCH SLOT");
                         rotateMatch();
                     }
@@ -2755,19 +2765,19 @@
                 return false;
             }
 
-            function matchOver(force = false) {
+            function matchOver(force = false, swapSide = true) {
                 // Re-entry Guard (bypassed if force is true)
                 if (state.mode === 'MATCH_OVER' && !force) return;
 
                 state.mode = 'MATCH_OVER';
                 state.showNextMatchOverlay = true; // Auto-show next match UI
                 stopTimerLoop();
-                log(force ? "SKIP SLOT ATTIVATO" : "PARTITA TERMINATA");
+                log(force ? (swapSide ? "SKIP SLOT ATTIVATO" : "NO POINT: SALTO SLOT") : "PARTITA TERMINATA");
                 recordRealEndTime();
 
                 // 1. Mark Current Match as Finished and Save
                 const currIdx = state.tournament.currentIndex;
-                saveMatchState(currIdx, true); // Finished = true
+                saveMatchState(currIdx, true, swapSide); // Finished = true
 
                 // 2. Find Next Step
                 // Check Peer Interleaved Match (Active?)
@@ -2908,15 +2918,12 @@
             }
 
             function handleNoPoint() {
-                if (state.settings.confirmNoPoint) {
-                    if (!confirm("Avviare NO POINT? Non verranno assegnati punti e le squadre NON cambieranno campo.")) return;
-                }
-                log("NO POINT: Nessun buzzer toccato. Salto slot senza cambio campo.");
+                // Remote command or local button: proceed with standard rotation WITHOUT swapping sides
+                log("NO POINT: Nessun buzzer toccato. Rotazione slot senza cambio campo.");
                 if (state.tournament.active) {
-                    rotateMatch(false); // false = NO swap side (internally calls saveMatchState)
+                    rotateMatch(false); // false = NO swap side
                 } else {
-                    // Manual mode: just start a new interval without swapping
-                    state.basesSwapped = state.basesSwapped; // redundant but clear
+                    // Manual mode: just start a new interval
                     startInter();
                 }
             }
