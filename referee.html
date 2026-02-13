@@ -347,12 +347,14 @@
 
         .modal-btn {
             width: 100%;
-            padding: 30px;
+            padding: 20px;
             border-radius: 20px;
             border: none;
             font-size: 28px;
             font-weight: 900;
             text-transform: uppercase;
+            white-space: normal;
+            line-height: 1.2;
         }
 
         .btn-confirm {
@@ -776,8 +778,8 @@
             pendingSide = side;
             const name = side === 'left' ? document.getElementById('name-left').innerText : document.getElementById('name-right').innerText;
 
-            // Notify host to pause
-            sendCommand('STOP_TIMER');
+            // Notify host to open point verification (handles pausing)
+            sendCommand('POINT', side);
 
             document.getElementById('modal-team-name').innerText = `PUNTO PER: ${name}`;
             document.getElementById('point-modal').style.display = 'flex';
