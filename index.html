@@ -998,11 +998,15 @@
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                                 <div><small>Pausa (sec)</small><input type="number" id="break-duration"
                                         class="form-control" value="0"></div>
-                                <div><small>Intervallo (sec)</small><input type="number" id="interval-duration"
-                                        class="form-control" value="120"></div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+                                    <div><small>Int. Punto (s)</small><input type="number" id="point-interval-duration"
+                                            class="form-control" value="30"></div>
+                                    <div><small>Int. Slot (s)</small><input type="number" id="slot-interval-duration"
+                                            class="form-control" value="120"></div>
+                                </div>
                                 <div><small>Game (min)</small><input type="number" id="game-duration-setting"
                                         class="form-control" value="10"></div>
-                                <div><small>Golden Point</small><input type="number" id="golden-duration-setting"
+                                <div><small>Golden Point (min)</small><input type="number" id="golden-duration-setting"
                                         class="form-control" value="3"></div>
                             </div>
                         </div>
@@ -1121,10 +1125,14 @@
                 </div>
 
                 <div
-                    style="display: flex; justify-content: flex-end; gap: 10px; padding-top: 15px; border-top: 1px solid #334155; margin-top: auto;">
-                    <button class="btn" style="border-color: #64748b; color: #94a3b8;"
-                        onclick="document.getElementById('settings-modal').style.display='none'">Annulla</button>
-                    <button id="close-settings-btn" class="btn">Chiudi & Salva</button>
+                    style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-top: 15px; border-top: 1px solid #334155; margin-top: auto;">
+                    <button class="btn btn-danger" id="btn-reset-tournament"
+                        style="background: #991b1b; border-color: #7f1d1d; color: white;">🗑️ RESET DATI TORNEO</button>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn" style="border-color: #64748b; color: #94a3b8;"
+                            onclick="document.getElementById('settings-modal').style.display='none'">Annulla</button>
+                        <button id="close-settings-btn" class="btn">Chiudi & Salva</button>
+                    </div>
                 </div>
                 <!-- Large Spacer -->
                 <div style="height: 100px;"></div>
@@ -1183,9 +1191,12 @@
                             placeholder="TEAM A,TEAM B&#10;TEAM C,TEAM D">TEAM A,TEAM B&#10;TEAM C,TEAM D</textarea>
                     </div>
 
-                    <div style="display: flex; justify-content: center; margin-top: 10px;">
+                    <div style="display: flex; gap: 10px; margin-top: 10px;">
                         <button id="load-tournament-btn" class="btn btn-warning"
-                            style="width:100%; font-size: 1.1rem; padding: 12px;">🚀 CARICA TORNEO & AZZERA</button>
+                            style="flex: 2; font-size: 1.1rem; padding: 12px;">🚀 CARICA TORNEO & AZZERA</button>
+                        <button class="btn btn-danger" onclick="document.getElementById('tournament-input').value=''"
+                            style="flex: 1; background: #991b1b; border-color: #7f1d1d; color: white;">🗑️ Pulisci
+                            Lista</button>
                     </div>
                 </div>
 
@@ -1561,7 +1572,8 @@
             const savedSettings = JSON.parse(localStorage.getItem('pm_settings') || "{}");
             const CONFIG = {
                 gameTime: (parseInt(savedSettings.gameDuration) || 10) * 60,
-                interTime: (parseInt(savedSettings.intervalDuration) || 120),
+                pointInterTime: (parseInt(savedSettings.pointIntervalDuration) || 30),
+                slotInterTime: (parseInt(savedSettings.slotIntervalDuration) || 120),
                 mercyDiff: parseInt(savedSettings.mercyDiff) || 4,
                 goldenTime: (parseInt(savedSettings.goldenDuration) || 3) * 60
             };
@@ -1579,7 +1591,8 @@
                     confirmNoPoint: savedSettings.confirmNoPoint !== false,
                     confirmUndo: savedSettings.confirmUndo !== false, // NEW
                     breakDuration: parseInt(savedSettings.breakDuration) || 0,
-                    intervalDuration: parseInt(savedSettings.intervalDuration) || 120,
+                    pointIntervalDuration: parseInt(savedSettings.pointIntervalDuration) || 30,
+                    slotIntervalDuration: parseInt(savedSettings.slotIntervalDuration) || 120,
                     goldenDuration: parseInt(savedSettings.goldenDuration) || 3,
                     voiceURI: savedSettings.voiceURI || null,
                     mercyDiff: parseInt(savedSettings.mercyDiff) || 4,
@@ -1602,7 +1615,7 @@
                 showSchedule: false, // NEW
                 currentMatchEvents: [],
                 outdoorMode: false, // NEW
-                matchLog: [], intervalInstance: null, flags: { warn60: false, warn30: false, warn10: false }
+                matchLog: [], intervalInstance: null, flags: { warn60: false, warn30: false, warn20: false, warn10: false }
             };
 
 
@@ -2062,7 +2075,7 @@
                         addPenalty(cmd.side, cmd.level || 1);
                         break;
                     case 'START_INTER':
-                        startInter();
+                        startInter(cmd.intervalType || 'point');
                         break;
                     case 'START_POINT':
                         startPoint();
@@ -2081,8 +2094,18 @@
                         break;
                     case 'TECH':
                         // If peer sends TECH, trigger the tech pause for the side
-                        let teamId = !state.basesSwapped ? (cmd.side === 'left' ? 'A' : 'B') : (cmd.side === 'left' ? 'B' : 'A');
-                        handleTechPause(teamId);
+                        let tId = !state.basesSwapped ? (cmd.side === 'left' ? 'A' : 'B') : (cmd.side === 'left' ? 'B' : 'A');
+                        handleTechPause(tId);
+                        break;
+                    case 'UPDATE_SETTINGS':
+                        if (cmd.settings) {
+                            Object.assign(state.settings, cmd.settings);
+                            CONFIG.pointInterTime = state.settings.pointIntervalDuration || CONFIG.pointInterTime;
+                            CONFIG.slotInterTime = state.settings.slotIntervalDuration || CONFIG.slotInterTime;
+                            log(`[REMOTO] Impostazioni aggiornate da Arbitro`);
+                            localStorage.setItem('pm_settings', JSON.stringify(state.settings));
+                            broadcastState();
+                        }
                         break;
                 }
             }
@@ -2309,6 +2332,7 @@
                     // Sound Triggers (Edge Detection)
                     if (prev > 60 && state.timer <= 60 && !state.flags.warn60) { state.flags.warn60 = true; playBeep('warn'); speak("Sessanta secondi", "Sixty seconds"); }
                     if (prev > 30 && state.timer <= 30 && !state.flags.warn30) { state.flags.warn30 = true; playBeep('warn'); speak("Trenta secondi", "Thirty seconds"); }
+                    if (prev > 20 && state.timer <= 20 && !state.flags.warn20) { state.flags.warn20 = true; playBeep('warn'); speak("Venti secondi", "Twenty seconds"); }
                     if (prev > 10 && state.timer <= 10 && !state.flags.warn10) { state.flags.warn10 = true; speak("Dieci secondi", "Ten seconds"); }
 
                     // Beep every second (approx) when < 10. Check integer boundary crossing.
@@ -2420,6 +2444,12 @@
                     log("Pausa tecnica possibile solo durante l'intervallo!");
                     return;
                 }
+                // Valid only if > 10s remaining
+                if (state.timer <= 10) {
+                    log(`REMOTO: TENTATIVO PAUSA TECNICA RIFIUTATO (${formatTimeMs(state.timer)} < 10s)`);
+                    return;
+                }
+
                 const team = state.teams[teamId];
                 if (team.techUsed) {
                     log(`${team.name} ha già usato la pausa tecnica!`);
@@ -2433,13 +2463,14 @@
                 log(`PAUSA TECNICA RICHIESTA: ${team.name} (+60s)`);
                 render();
             }
-            function startInter() {
+            function startInter(type = 'point') {
+                if (typeof type !== 'string') type = 'point'; // Safety check for event objects
                 state.mode = 'INTERVAL';
                 state.timerMode = 'INTERVAL';
-                state.timer = CONFIG.interTime;
-                state.flags = { warn60: false };
+                state.timer = (type === 'slot') ? CONFIG.slotInterTime : CONFIG.pointInterTime;
+                state.flags = { warn60: false, warn30: false, warn20: false, warn10: false };
                 speak("Intervallo", "Interval");
-                log(`START INTERVALLO (TechStatus: A=${state.teams.A.techUsed}, B=${state.teams.B.techUsed})`);
+                log(`START INTERVALLO ${type.toUpperCase()}`);
                 render();
                 saveTournamentState();
                 startTimerLoop();
@@ -2454,7 +2485,7 @@
                 state.mode = 'POINT';
                 state.timerMode = 'GAME';
                 state.timer = state.gameTimeRemaining;
-                state.flags = { warn60: false };
+                state.flags = { warn60: false, warn30: false, warn20: false, warn10: false };
                 playHorn(1.0);
                 log("START POINT (Gioco attivo)");
                 state.currentMatchEvents.push({ type: 'START', time: state.timer });
@@ -2834,7 +2865,7 @@
                         if (targetNextIdx < matches.length) {
                             log("MATCH TERMINATO -> CARICAMENTO PROSSIMO SLOT");
                             loadMatch(targetNextIdx);
-                            startInter();
+                            startInter('slot');
                         } else {
                             log("FINE TORNEO (Nessun altro match)");
                             render();
@@ -2848,8 +2879,8 @@
             function startMatchBreak() {
                 state.mode = 'BREAK_MATCH';
                 state.timerMode = 'BREAK';
-                state.timer = state.settings.intervalDuration; // Unified Interval
-                state.flags = { warn60: false, warn30: false, warn10: false }; // RESET FLAGS for warning
+                state.timer = CONFIG.slotInterTime; // Unified Interval
+                state.flags = { warn60: false, warn30: false, warn20: false, warn10: false }; // RESET FLAGS for warning
                 startTimerLoop();
                 render();
             }
@@ -2858,8 +2889,8 @@
                 state.basesSwapped = false; // Official Rule: Return to original sides
                 state.mode = 'GOLDEN_BREAK';
                 state.timerMode = 'BREAK';
-                state.timer = state.settings.intervalDuration;
-                state.flags = { warn60: false, warn30: false, warn10: false };
+                state.timer = CONFIG.slotInterTime;
+                state.flags = { warn60: false, warn30: false, warn20: false, warn10: false };
                 log(`INIZIO PAUSA GOLDEN POINT (${state.timer}s)`);
                 startTimerLoop();
                 render();
@@ -2935,7 +2966,7 @@
                     rotateMatch(false); // false = NO swap side
                 } else {
                     // Manual mode: just start a new interval
-                    startInter();
+                    startInter('point');
                 }
             }
 
@@ -3343,7 +3374,7 @@
                         // Peer is done. We become Single Slot.
                         log("PEER MATCH TERMINATO -> STANDARD ROTATION (Single Mode)");
                         if (swapSide) state.basesSwapped = !state.basesSwapped;
-                        startInter();
+                        startInter('point');
                     } else {
                         log(`ROTAZIONE SLOT: Match ${currIdx + 1} -> Match ${nextSlotIdx + 1}`);
                         loadMatch(nextSlotIdx, true);
@@ -3356,7 +3387,7 @@
                     } else {
                         log("ROTAZIONE NO-POINT -> MANTENIMENTO LATI");
                     }
-                    startInter();
+                    startInter('point');
                 }
             }
 
@@ -3406,7 +3437,7 @@
                         if (isGoldenPending) {
                             // Already handled in the goldenPending block above
                         } else if (autoStart) {
-                            startInter();
+                            startInter('point');
                         } else {
                             render();
                         }
@@ -3959,7 +3990,8 @@
                 document.getElementById('golden-duration-setting').value = parseInt(state.settings.goldenDuration) || Math.floor(CONFIG.goldenTime / 60) || 3;
                 document.getElementById('mercy-diff-input').value = parseInt(state.settings.mercyDiff) || CONFIG.mercyDiff || 4;
                 document.getElementById('break-duration').value = parseInt(state.settings.breakDuration) || 0;
-                document.getElementById('interval-duration').value = parseInt(state.settings.intervalDuration) || 120; // Unified
+                document.getElementById('point-interval-duration').value = parseInt(state.settings.pointIntervalDuration) || 30;
+                document.getElementById('slot-interval-duration').value = parseInt(state.settings.slotIntervalDuration) || 120;
                 document.getElementById('log-password-input').value = state.settings.logPassword || "";
                 document.getElementById('opt-confirm-towel').checked = state.settings.confirmTowel;
                 document.getElementById('opt-confirm-skip').checked = state.settings.confirmSkipSlot !== false; // Default true
@@ -3991,8 +4023,6 @@
                     state.settings.mercyDiff = parseInt(document.getElementById('mercy-diff-input').value) || 2;
                     CONFIG.mercyDiff = state.settings.mercyDiff;
                     state.settings.breakDuration = parseInt(document.getElementById('break-duration').value) || 0;
-                    state.settings.intervalDuration = parseInt(document.getElementById('interval-duration').value) || 120; // Unified
-                    CONFIG.interTime = state.settings.intervalDuration;
 
                     // Save Styling
                     const fontVal = document.getElementById('style-font-family').value;
@@ -4024,6 +4054,12 @@
                     }
                     CONFIG.gameTime = newGameTime;
 
+                    // Update Intervals
+                    state.settings.pointIntervalDuration = parseInt(document.getElementById('point-interval-duration').value) || 30;
+                    state.settings.slotIntervalDuration = parseInt(document.getElementById('slot-interval-duration').value) || 120;
+                    CONFIG.pointInterTime = state.settings.pointIntervalDuration;
+                    CONFIG.slotInterTime = state.settings.slotIntervalDuration;
+
                     log(`Impostazioni salvate.`);
                     localStorage.setItem('pm_settings', JSON.stringify(state.settings));
                     localStorage.setItem('pm_team_style', JSON.stringify(TEAM_STYLE));
@@ -4044,6 +4080,43 @@
                     console.error(err);
                     alert("Errore salvataggio impostazioni: " + err.message);
                 }
+            });
+
+            document.getElementById('btn-reset-tournament').addEventListener('click', () => {
+                if (!confirm("ATTENZIONE: Stai per cancellare COMPLETAMENTE il torneo (match, history, punteggi).\n\nSei sicuro di voler procedere?")) return;
+
+                state.tournament.matches = [];
+                state.tournament.active = false;
+                state.tournament.currentIndex = -1;
+                state.matchLog = [];
+                state.currentMatchEvents = [];
+
+                // Clear UI elements that might hold old text
+                const tourneyInput = document.getElementById('tournament-input');
+                if (tourneyInput) tourneyInput.value = "";
+
+                // Reset Teams to default
+                state.teams.A = { name: "TEAM A", score: 0, penalties: 0, timeouts: 1, techUsed: false, color: "#3b82f6" };
+                state.teams.B = { name: "TEAM B", score: 0, penalties: 0, timeouts: 1, techUsed: false, color: "#ef4444" };
+
+                state.mode = 'IDLE';
+                state.timer = CONFIG.gameTime;
+                state.timerMode = 'GAME';
+                state.gameTimeRemaining = CONFIG.gameTime;
+                state.basesSwapped = false;
+
+                stopTimerLoop();
+
+                // Remove from local storage to ensure clean state
+                localStorage.removeItem('pm_tournament_state');
+                saveTournamentState(); // Save the fresh empty state
+
+                render();
+                if (typeof renderStats === 'function') renderStats(); // Force clear standings UI
+                broadcastState();
+
+                alert("Dati Torneo resettati COMPLETAMENTE.\nSe hai altre schede aperte (Referee, Control), chiudile e riaprile per evitare sovrascritture.");
+                document.getElementById('settings-modal').style.display = 'none';
             });
             document.getElementById('load-tournament-btn').addEventListener('click', () => {
                 if (!confirm("ATTENZIONE:\nQuesta azione cancellerà tutti i punteggi e riavvierà il torneo dalla prima partita.\n\nSei sicuro di voler procedere?")) return;
@@ -4818,7 +4891,7 @@
                 text += `--------------------------------\n`;
 
                 const gameDur = (parseInt(document.getElementById('game-duration-setting').value) || 10) * 60;
-                const interDur = parseInt(document.getElementById('interval-duration').value) || 120;
+                const interDur = parseInt(document.getElementById('slot-interval-duration').value) || 120;
                 const totalSec = gameDur + interDur;
 
                 // Calculate Start Time: Find last match time + totalSec

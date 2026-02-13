@@ -1,0 +1,1714 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPBA Stream Manager</title>
+    <!-- PeerJS CDN -->
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <!-- Google Fonts -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Bebas+Neue&family=Orbitron:wght@600&family=Black+Ops+One&family=Roboto:wght@400;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: rgba(30, 41, 59, 0.9);
+            --text-color: #e2e8f0;
+            --accent-color: #22d3ee;
+            --danger-color: #ef4444;
+            --font-family: 'Oswald', sans-serif;
+            --font-narrow: 'Bebas Neue', sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            color: white;
+            background-color: #000000;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* SCALER CONTAINER */
+        #scaler {
+            width: 1920px;
+            height: 1080px;
+            position: absolute;
+            transform-origin: center center;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #connect-ui {
+            background: #1e293b;
+            padding: 40px;
+            border-radius: 12px;
+            border: 2px solid var(--accent-color);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            z-index: 1000;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        /* TOP BAR NEXT MATCH - REDUCED HEIGHT */
+        #top-bar {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            /* Reduced from 100% */
+            height: 48px;
+            /* Slightly taller for better floating look */
+            background: rgba(15, 23, 42, 0.95);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            color: #cbd5e1;
+            font-size: 22px;
+            font-weight: 700;
+            z-index: 3000;
+            border: 2px solid var(--accent-color);
+            border-top: none;
+            /* Looks like it hangs from the top */
+            border-bottom-left-radius: 15px;
+            border-bottom-right-radius: 15px;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        #top-bar:hover {
+            background: rgba(34, 211, 238, 0.2);
+        }
+
+        .team-logo-display {
+            width: 450px;
+            height: 450px;
+            margin-top: auto;
+            margin-bottom: 0;
+            object-fit: contain;
+            /* Background removed for transparency */
+            border-radius: 15px;
+            padding: 10px;
+            display: none;
+            /* Shown only if logo exists */
+        }
+
+        #top-overlay-controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            z-index: 2500;
+        }
+
+        .btn-round-overlay {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+            transition: all 0.2s;
+            font-size: 30px;
+            color: white;
+            border: none;
+        }
+
+        .btn-round-overlay:hover {
+            transform: scale(1.1);
+        }
+
+
+        .tb-live-score {
+            margin-left: 20px;
+            color: #fbbf24;
+            font-weight: 700;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0 10px;
+            border-radius: 4px;
+        }
+
+        #scoreboard {
+            display: none;
+            width: 100%;
+            height: 100%;
+            display: grid;
+            grid-template-columns: 610px 620px 610px;
+            gap: 20px;
+            align-items: start;
+            /* Changed from center to align panels to top */
+            padding: 0 20px 20px 20px;
+            /* Removed top padding */
+            box-sizing: border-box;
+            justify-content: center;
+        }
+
+        .team-panel {
+            background: var(--panel-bg);
+            border-radius: 30px;
+            padding: 15px 30px 30px 30px;
+            /* Reduced top padding */
+            border-top: 15px solid white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            box-shadow: 0 15px 25px rgba(0, 0, 0, 0.5);
+            height: 1040px;
+            /* Even longer as requested */
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        .team-name {
+            font-family: var(--font-narrow);
+            font-size: 80px;
+            font-weight: 400;
+            text-align: center;
+            margin-bottom: 20px;
+            /* Reduced from 30px */
+            white-space: nowrap;
+            overflow: hidden;
+            width: 100%;
+            max-width: 610px;
+            padding: 0;
+            text-transform: uppercase;
+            text-shadow: 4px 4px 8px rgba(0, 0, 0, 0.5);
+            flex-shrink: 0;
+            transform: scale(1.0, 2.1);
+            transform-origin: center;
+            cursor: pointer;
+            /* Clickable */
+            transition: color 0.2s;
+        }
+
+        .team-name:hover {
+            color: var(--accent-color);
+        }
+
+        .team-score {
+            font-size: 350px;
+            font-weight: 900;
+            text-align: center;
+            line-height: 0.8;
+            padding: 0;
+            padding-top: 120px;
+            /* Shifted down significantly */
+            /* Reduced from 80px */
+            width: 100%;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            flex-grow: 1;
+        }
+
+        .center-column {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding-top: 60px;
+            /* Space for the floating NEXT bar */
+            height: 100%;
+            gap: 5px;
+        }
+
+        .timer-display {
+            font-size: 110px;
+            /* Reduced from 140px */
+            font-weight: bold;
+            font-variant-numeric: tabular-nums;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px 20px;
+            /* Reduced from 30px 20px */
+            border-radius: 40px;
+            border: 6px solid white;
+            text-shadow: 6px 6px 12px rgba(0, 0, 0, 0.6);
+            line-height: 1.0;
+            margin: 0;
+            width: 100%;
+            text-align: center;
+            box-sizing: border-box;
+        }
+
+        /* Penalty and other styles from board.html... kept minimal for brevity, focusing on new features */
+        .penalty-container {
+            display: flex;
+            width: 100%;
+            justify-content: space-between;
+            gap: 20px;
+        }
+
+        .penalty-box {
+            background: var(--panel-bg);
+            border-radius: 15px;
+            border-top: 8px solid white;
+            padding: 15px;
+            width: 48%;
+            height: 180px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .pen-total {
+            font-size: 28px;
+            color: #94a3b8;
+            font-weight: bold;
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            text-align: center;
+        }
+
+        .state-indicator {
+            font-size: 70px;
+            font-weight: 800;
+            padding: 15px 0;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 6px;
+            background: rgba(0, 0, 0, 0.5);
+            width: 100%;
+            text-align: center;
+            opacity: 0;
+        }
+
+        .state-indicator.visible {
+            opacity: 1;
+        }
+
+        .state-active {
+            color: #22c55e;
+            border: 6px solid #22c55e;
+        }
+
+        .state-paused {
+            color: #f59e0b;
+            border: 6px solid #f59e0b;
+            animation: pulse-border 1.5s infinite;
+        }
+
+        .state-interval {
+            color: #3b82f6;
+            border: 6px solid #3b82f6;
+        }
+
+        .state-idle {
+            color: #64748b;
+            border: 6px solid #475569;
+        }
+
+        @keyframes pulse-border {
+            0% {
+                border-color: #f59e0b;
+            }
+
+            50% {
+                border-color: rgba(245, 158, 11, 0.5);
+            }
+
+            100% {
+                border-color: #f59e0b;
+            }
+        }
+
+        /* STREAMING UI BUTTONS (Bottom Left) */
+        .stream-controls {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+            justify-content: center;
+        }
+
+        .btn-stream {
+            background: #334155;
+            color: white;
+            border: 2px solid #475569;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: 'Oswald', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-stream:hover {
+            background: var(--accent-color);
+            color: #0f172a;
+            border-color: var(--accent-color);
+        }
+
+        /* CLAN SETUP MODAL */
+        #clan-setup-modal,
+        #style-setup-modal {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.95);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 3000;
+            backdrop-filter: blur(10px);
+        }
+
+        .modal-content {
+            background: #1e293b;
+            padding: 40px;
+            border-radius: 20px;
+            width: 800px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            border: 2px solid var(--accent-color);
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
+        }
+
+        .clan-list {
+            flex: 1;
+            overflow-y: auto;
+            margin: 20px 0;
+            border: 1px solid #334155;
+            background: #0f172a;
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        .clan-item {
+            display: grid;
+            grid-template-columns: 4fr 1fr 1fr auto;
+            gap: 10px;
+            padding: 10px;
+            border-bottom: 1px solid #334155;
+            align-items: center;
+        }
+
+        .clan-item input {
+            background: #1e293b;
+            border: 1px solid #475569;
+            color: white;
+            padding: 5px;
+            border-radius: 4px;
+            width: 100%;
+        }
+
+        /* CLAN LIST OVERLAY (FULL SCREEN) */
+        #clan-full-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.98);
+            display: none;
+            flex-direction: column;
+            padding: 50px;
+            box-sizing: border-box;
+            z-index: 4000;
+            overflow-y: auto;
+        }
+
+        .clan-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 30px;
+            margin-top: 40px;
+        }
+
+        .clan-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .clan-card:hover {
+            background: rgba(34, 211, 238, 0.1);
+            border-color: var(--accent-color);
+            transform: translateY(-5px);
+        }
+
+        .clan-logo {
+            width: 150px;
+            height: 150px;
+            object-fit: contain;
+            margin-bottom: 15px;
+            /* background removed for transparency */
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .clan-card-name {
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            text-transform: uppercase;
+            color: #e2e8f0;
+        }
+
+        input {
+            padding: 10px;
+            font-size: 1.2rem;
+            border-radius: 4px;
+            border: 1px solid #64748b;
+            background: #0f172a;
+            color: white;
+            text-align: center;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 1.2rem;
+            background: var(--accent-color);
+            color: #0f172a;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        .stream-controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        #extra-overlay-controls {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 15px;
+            width: 100%;
+            max-width: 600px;
+        }
+
+        .btn-extra {
+            background: rgba(30, 41, 59, 0.8);
+            border: 2px solid var(--accent-color);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-family: var(--font-narrow);
+            font-size: 20px;
+            flex: 1;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .btn-extra:hover {
+            background: var(--accent-color);
+            color: #0f172a;
+        }
+
+        .btn-stream {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #cbd5e1;
+            padding: 8px 15px;
+            font-size: 16px;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .btn-stream:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+            color: white;
+            border-color: var(--accent-color);
+        }
+
+        /* --- STATS / BRACKET / SCHEDULE STYLES --- */
+        #stats-overlay,
+        #schedule-overlay,
+        #layout-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1920px;
+            height: 1080px;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(25px);
+            z-index: 3000;
+            display: none;
+            flex-direction: column;
+            padding: 50px;
+            box-sizing: border-box;
+            color: white;
+            animation: fadeIn 0.5s ease-out;
+            overflow-y: auto;
+        }
+
+        #bracket-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 1700px;
+            height: 950px;
+            background: rgba(15, 23, 42, 0.98);
+            border: 4px solid var(--accent-color);
+            border-radius: 40px;
+            z-index: 3000;
+            display: none;
+            flex-direction: column;
+            padding: 50px;
+            box-shadow: 0 0 100px rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(20px);
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        .stats-title,
+        .schedule-title {
+            font-size: 80px;
+            font-weight: 900;
+            color: var(--accent-color);
+            text-align: center;
+            margin-bottom: 40px;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            border-bottom: 5px solid var(--accent-color);
+            padding-bottom: 20px;
+        }
+
+        .stats-table,
+        .schedule-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 10px;
+            font-size: 35px;
+            /* reduced slightly */
+        }
+
+        .stats-table th,
+        .schedule-table th {
+            text-align: left;
+            padding: 20px;
+            color: #94a3b8;
+            font-size: 24px;
+            text-transform: uppercase;
+        }
+
+        .stats-table tr,
+        .schedule-row {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .stats-table td,
+        .schedule-row td {
+            padding: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .schedule-row.active {
+            background: rgba(34, 211, 238, 0.2);
+            box-shadow: inset 5px 0 0 var(--accent-color);
+        }
+
+        .schedule-row.finished {
+            opacity: 0.4;
+            filter: grayscale(1);
+        }
+
+        .stats-val-green {
+            color: #4ade80;
+            font-weight: bold;
+        }
+
+        .stats-val-red {
+            color: #f87171;
+            font-weight: bold;
+        }
+
+        .stats-rank-badge {
+            display: inline-flex;
+            width: 50px;
+            height: 50px;
+            background: var(--accent-color);
+            color: #0f172a;
+            border-radius: 50%;
+            margin-right: 20px;
+            font-size: 28px;
+            font-weight: 900;
+            align-items: center;
+            justify-content: center;
+        }
+
+
+        .penalty-label {
+            position: absolute;
+            top: 170px;
+            /* Moved slightly higher as requested */
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 60px;
+            font-weight: 800;
+            padding: 15px 40px;
+            border-radius: 15px;
+            text-transform: uppercase;
+            display: none;
+            z-index: 20;
+            background: rgba(0, 0, 0, 0.95);
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.9);
+            text-align: center;
+            line-height: 1.1;
+            white-space: nowrap;
+        }
+
+        .pen-minor {
+            color: #facc15;
+            border: 6px solid #facc15;
+        }
+
+        .pen-major {
+            color: #ef4444;
+            border: 6px solid #ef4444;
+        }
+
+        .flash-minor {
+            animation: flash-yellow 0.5s infinite alternate;
+        }
+
+        .flash-major {
+            animation: flash-red 0.5s infinite alternate;
+        }
+
+        @keyframes flash-yellow {
+            from {
+                text-shadow: none;
+            }
+
+            to {
+                text-shadow: 0 0 20px #facc15;
+                color: #facc15;
+            }
+        }
+
+        /* TECH PAUSE INDICATOR - Ported from board.html */
+        .tech-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 60px;
+            height: 60px;
+            border: 3px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+
+        #pen-box-right .tech-indicator {
+            left: 10px;
+            right: auto;
+        }
+
+        .tech-indicator .tech-label {
+            position: absolute;
+            bottom: -25px;
+            font-size: 16px;
+            font-weight: 800;
+            color: rgba(255, 255, 255, 0.4);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .tech-indicator.active {
+            border-color: #22c55e;
+            background: rgba(34, 197, 94, 0.2);
+            box-shadow: 0 0 15px rgba(34, 197, 94, 0.4);
+        }
+
+        .tech-indicator.active .tech-label {
+            color: #22c55e;
+        }
+
+        .tech-indicator .checkmark {
+            font-size: 40px;
+            color: #22c55e;
+            display: none;
+        }
+
+
+        .close-overlay-btn {
+            position: absolute;
+            top: 40px;
+            right: 40px;
+            background: var(--danger-color);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 30px;
+            font-weight: bold;
+            border-radius: 10px;
+            cursor: pointer;
+            z-index: 3200;
+        }
+
+        /* FORM STYLES FOR SETUP */
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .setting-row label {
+            font-size: 1.2rem;
+            color: #cbd5e1;
+        }
+
+        .setting-row input[type="range"] {
+            width: 200px;
+        }
+
+        .setting-row select {
+            padding: 5px 10px;
+            background: #0f172a;
+            border: 1px solid #64748b;
+            color: white;
+            border-radius: 5px;
+            font-size: 1rem;
+        }
+
+        .val-display {
+            width: 60px;
+            text-align: right;
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body class="bg-black">
+    <div id="connect-ui">
+        <h2 style="color: var(--accent-color); margin: 0; text-align: center;">STREAMING CONSOLE</h2>
+        <p style="text-align: center; color: #94a3b8;">Inserisci il Match ID dalla finestra di Regia</p>
+        <input type="text" id="match-id" placeholder="es. 1234" />
+        <button id="connect-btn">CONNETTI</button>
+    </div>
+
+    <!-- Scaler Wrapper -->
+    <div id="scaler">
+        <div id="scoreboard" style="display: none;">
+            <!-- TOP BAR -->
+            <div id="top-bar" onclick="toggleSchedule()" title="Clicca per visualizzare il palinsesto">
+                NEXT: <span id="tb-teams" style="color: white; margin-left: 10px; font-weight: bold;">-- vs --</span>
+                <span id="tb-score" class="tb-live-score" style="display:none;">0 - 0</span>
+            </div>
+
+            <!-- MAIN GRID CONTENT -->
+            <div class="team-panel" id="panel-left">
+                <div class="team-name" id="name-left" onclick="handleTeamClick('left')">TEAM A</div>
+                <div class="team-score" id="score-left">0</div>
+                <div class="penalty-label" id="pen-label-left"></div>
+                <img id="logo-left" class="team-logo-display" src="" alt="">
+            </div>
+
+            <div class="center-column">
+
+                <div class="penalty-container">
+                    <div class="penalty-box" id="pen-box-left">
+                        <div class="tech-indicator" id="tech-ind-left">
+                            <span class="checkmark">✔</span>
+                            <span class="tech-label">TECH</span>
+                        </div>
+                        <div class="pen-total" id="pen-total-left">TOT: 0</div>
+                        <div class="pen-active" id="pen-active-left"
+                            style="display:none; color: #f59e0b; font-size: 36px; font-weight: bold;">PEN: 0</div>
+                    </div>
+                    <div class="penalty-box" id="pen-box-right">
+                        <div class="tech-indicator" id="tech-ind-right">
+                            <span class="checkmark">✔</span>
+                            <span class="tech-label">TECH</span>
+                        </div>
+                        <div class="pen-total" id="pen-total-right">TOT: 0</div>
+                        <div class="pen-active" id="pen-active-right"
+                            style="display:none; color: #f59e0b; font-size: 36px; font-weight: bold;">PEN: 0</div>
+                    </div>
+                </div>
+
+                <div id="match-phase"
+                    style="font-size: 35px; color: var(--accent-color); font-weight: bold; text-transform: uppercase; margin-bottom: 5px; letter-spacing: 4px; background: rgba(0,0,0,0.3); padding: 5px 20px; border-radius: 10px;">
+                    GIRONI</div>
+                <div id="game-state-ind" class="state-indicator visible state-idle">PRONTO</div>
+                <div class="timer-display" id="timer">10:00</div>
+                <div id="fastest-round-spotlight"
+                    style="display:none; flex-direction:column; align-items:center; margin-top:5px; background:rgba(255,215,0,0.1); border:2px solid rgba(255,215,0,0.5); padding:10px 40px; border-radius:20px;">
+                    <div style="color:#ffd700; font-weight:900; letter-spacing:2px; font-size:20px;">⚡ RECORD ⚡</div>
+                    <div id="spotlight-team-name" style="color:white; font-size:30px; font-weight:bold; margin:5px 0;">
+                        --</div>
+                    <div id="spotlight-time-val"
+                        style="color:#ffd700; font-size:50px; font-family:'Orbitron',sans-serif; font-weight:900;">00:00
+                    </div>
+                </div>
+                <div class="stream-controls" style="margin-top: 5px;">
+                    <button class="btn-stream" onclick="openSetupModal()">⚙️ SETUP</button>
+                    <button class="btn-stream" onclick="openClanOverlay()">👥 CLANS</button>
+                    <button class="btn-stream" onclick="openStyleModal()">🎨 STYLE</button>
+                </div>
+                <div id="extra-overlay-controls">
+                    <button class="btn-extra" onclick="toggleStats()">📊 SCREEN</button>
+                    <button class="btn-extra" onclick="toggleBracket()">🏆 BRACKET</button>
+                    <button class="btn-extra" onclick="toggleSchedule()">🗓️ LIST</button>
+                    <button class="btn-extra" onclick="toggleLayout()">📐 LAYOUT</button>
+                </div>
+            </div>
+
+            <div class="team-panel" id="panel-right">
+                <div class="team-name" id="name-right" onclick="handleTeamClick('right')">TEAM B</div>
+                <div class="team-score" id="score-right">0</div>
+                <div class="penalty-label" id="pen-label-right"></div>
+                <img id="logo-right" class="team-logo-display" src="" alt="">
+            </div>
+
+            <!-- STREAMING CONTROLS Moved inside -->
+
+
+            <!-- CLAN SETUP MODAL -->
+            <div id="clan-setup-modal">
+                <div class="modal-content">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <h2 style="color:var(--accent-color); margin:0;">GESTIONE ROSE & LOGHI</h2>
+                        <button onclick="closeSetupModal()"
+                            style="background:#ef4444; color:white; padding:5px 15px; font-size:1rem;">CHIUDI</button>
+                    </div>
+                    <p style="color:#94a3b8; font-size:0.9rem;">Inserisci i nomi ESATTI delle squadre per collegare
+                        loghi e
+                        link.</p>
+
+                    <div class="clan-list" id="clan-setup-list">
+                        <!-- Dynamic Rows -->
+                    </div>
+
+                    <button onclick="addClanRow()"
+                        style="width:100%; border:2px dashed #475569; background:transparent; color:#94a3b8; padding: 10px;">+
+                        AGGIUNGI SQUADRA</button>
+
+                    <button onclick="syncTeamsFromHost()"
+                        style="width:100%; margin-top:10px; border:2px solid var(--accent-color); background:rgba(34, 211, 238, 0.1); color:var(--accent-color); padding: 10px;">
+                        🔄 SINCRONIZZA SQUADRE DA TORNEO
+                    </button>
+
+                    <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:center;">
+                        <button onclick="clearAllClans()"
+                            style="background:#991b1b; color:white; font-size:1rem; padding:8px 15px; border-radius: 4px;">🗑️
+                            SVUOTA TUTTO</button>
+                        <button onclick="saveClans()"
+                            style="padding:15px 40px; background: var(--accent-color); color: #0f172a; border-radius: 4px; font-weight: bold;">SALVA
+                            MODIFICHE</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STYLE SETUP MODAL -->
+            <div id="style-setup-modal">
+                <div class="modal-content" style="width: 600px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <h2 style="color:var(--accent-color); margin:0;">STILE NOMI SQUADRE</h2>
+                        <button onclick="closeStyleModal()"
+                            style="background:#ef4444; color:white; padding:5px 15px; font-size:1rem;">CHIUDI</button>
+                    </div>
+
+                    <div style="margin-top: 20px; color: white;">
+                        <div class="setting-row">
+                            <label>Font Family</label>
+                            <select id="st-font" onchange="updateStylePreview()">
+                                <option value="'Oswald', sans-serif">Oswald</option>
+                                <option value="'Bebas Neue', sans-serif">Bebas Neue</option>
+                                <option value="'Orbitron', sans-serif">Orbitron</option>
+                                <option value="'Black Ops One', cursive">Black Ops One</option>
+                                <option value="'Roboto', sans-serif">Roboto</option>
+                            </select>
+                        </div>
+                        <div class="setting-row">
+                            <label>Font Size</label>
+                            <input type="range" id="st-size" min="40" max="150" value="80"
+                                oninput="updateStylePreview()">
+                            <span id="val-size" class="val-display">80px</span>
+                        </div>
+                        <div class="setting-row">
+                            <label>Bold Text</label>
+                            <input type="checkbox" id="st-bold" onchange="updateStylePreview()">
+                            <span class="val-display"></span>
+                        </div>
+                        <div class="setting-row">
+                            <label>Scale X (Width)</label>
+                            <input type="range" id="st-scalex" min="0.5" max="2.0" step="0.1" value="1.0"
+                                oninput="updateStylePreview()">
+                            <span id="val-scalex" class="val-display">1.0</span>
+                        </div>
+                        <div class="setting-row">
+                            <label>Scale Y (Height)</label>
+                            <input type="range" id="st-scaley" min="0.5" max="3.0" step="0.1" value="2.1"
+                                oninput="updateStylePreview()">
+                            <span id="val-scaley" class="val-display">2.1</span>
+                        </div>
+                        <div class="setting-row">
+                            <label>Truncation Limit (Chars)</label>
+                            <input type="range" id="st-limit" min="5" max="30" step="1" value="11"
+                                oninput="updateStylePreview()">
+                            <span id="val-limit" class="val-display">11</span>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:30px; text-align:right;">
+                        <button onclick="resetStyles()" style="background:#64748b; margin-right:10px;">RESET</button>
+                        <button onclick="saveStyles()" style="padding:15px 40px;">APPLICA</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CLAN FULL OVERLAY -->
+            <div id="clan-full-overlay">
+                <button onclick="closeClanOverlay()"
+                    style="position:absolute; top:30px; right:30px; background:#ef4444; padding:15px 30px; font-size:1.5rem; z-index:4001;">X</button>
+                <h1
+                    style="color:var(--accent-color); font-size:60px; text-align:center; font-family:'Oswald',sans-serif;">
+                    TEAMS
+                    LIST</h1>
+                <div class="clan-grid" id="clan-grid-display">
+                    <!-- Dynamic Grid -->
+                </div>
+            </div>
+
+            <!-- STATS OVERLAY -->
+            <div id="stats-overlay">
+                <button class="close-overlay-btn" id="close-stats-btn">CHIUDI X</button>
+                <div class="stats-title">CLASSIFICA TORNEO</div>
+                <table class="stats-table">
+                    <thead>
+                        <tr>
+                            <th>Team</th>
+                            <th style="text-align:center">P</th>
+                            <th style="text-align:center">W</th>
+                            <th style="text-align:center">L</th>
+                            <th style="text-align:center">RW</th>
+                            <th style="text-align:center">RL</th>
+                            <th style="text-align:center">RD</th>
+                            <th style="text-align:center">PEN</th>
+                        </tr>
+                    </thead>
+                    <tbody id="board-standings-body"></tbody>
+                </table>
+                <div id="stats-records" style="margin-top:40px;"></div>
+            </div>
+
+            <!-- BRACKET OVERLAY -->
+            <div id="bracket-overlay">
+                <button class="close-overlay-btn" id="close-bracket-btn" onclick="toggleBracket()">CHIUDI X</button>
+                <div class="stats-title">TABELLONE FINALE</div>
+                <div id="bracket-container"
+                    style="flex:1; display:flex; justify-content:space-around; align-items:center; padding:20px; overflow-x:auto;">
+                </div>
+            </div>
+
+            <!-- SCHEDULE OVERLAY -->
+            <div id="schedule-overlay">
+                <button class="close-overlay-btn" id="close-schedule-btn" onclick="toggleSchedule()">CHIUDI X</button>
+                <div class="schedule-title">PROGRAMMA TORNEO</div>
+                <div id="schedule-delay-board"
+                    style="text-align:center; font-size:40px; margin-top:-20px; margin-bottom:20px;">
+                </div>
+                <div class="schedule-scroll-area" style="flex:1; overflow-y:auto;">
+                    <table class="schedule-table">
+                        <thead>
+                            <tr>
+                                <th>ORA</th>
+                                <th>MATCH</th>
+                                <th>FASE</th>
+                                <th>CAMPO</th>
+                            </tr>
+                        </thead>
+                        <tbody id="schedule-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- LAYOUT OVERLAY -->
+            <div id="layout-overlay">
+                <button class="close-overlay-btn" id="close-layout-btn">CHIUDI X</button>
+                <div class="stats-title">LAYOUT CAMPO</div>
+                <iframe id="layout-iframe" src="" frameborder="0"
+                    style="width:100%; height:calc(100% - 200px); border-radius:20px; background:white; margin-top:20px;"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- PEERJS & BOARD LOGIC ---
+        const btn = document.getElementById('connect-btn');
+        const input = document.getElementById('match-id');
+        const ui = document.getElementById('connect-ui');
+        const board = document.getElementById('scoreboard');
+        const scaler = document.getElementById('scaler');
+
+        let currentData = null;
+        let clanConfig = []; // [{ name, logoUrl, rosterUrl }]
+        let styleConfig = { fontSize: 80, fontFamily: "'Oswald', sans-serif", bold: false, scaleX: 1.0, scaleY: 2.1, limit: 11 };
+
+        // Initial Load
+        window.addEventListener('scroll', noScroll);
+        function noScroll() { window.scrollTo(0, 0); }
+
+        function scaleBoard() {
+            const targetWidth = 1920;
+            const targetHeight = 1080;
+            const scale = Math.min(window.innerWidth / targetWidth, window.innerHeight / targetHeight);
+            scaler.style.transform = `scale(${scale})`;
+        }
+        window.addEventListener('resize', scaleBoard);
+        scaleBoard();
+
+        // Load Stored ID
+        const lastId = localStorage.getItem('last_match_id');
+        if (lastId) input.value = lastId;
+
+        // Load Stored Clans
+        const storedClans = localStorage.getItem('pm_stream_clans');
+        if (storedClans) {
+            try { clanConfig = JSON.parse(storedClans); } catch (e) { clanConfig = []; }
+        }
+
+        // Load Stored Style
+        let hasLocalStyle = false;
+        const storedStyle = localStorage.getItem('pm_stream_style');
+        if (storedStyle) {
+            try {
+                styleConfig = JSON.parse(storedStyle);
+                hasLocalStyle = true;
+            } catch (e) { }
+        }
+        applyStyleConfig();
+
+        btn.addEventListener('click', () => startClient(input.value.trim()));
+
+        function startClient(hostId) {
+            if (!hostId) return alert("Inserisci ID");
+            if (!hostId.startsWith("IPBA-")) hostId = "IPBA-" + hostId;
+
+            const peer = new Peer();
+            peer.on('open', (id) => {
+                const conn = peer.connect(hostId);
+                conn.on('open', () => {
+                    localStorage.setItem('last_match_id', hostId.replace('IPBA-', ''));
+                    ui.style.display = 'none';
+                    board.style.display = 'grid';
+                    scaleBoard();
+                });
+                conn.on('data', (d) => {
+                    if (!hasLocalStyle && d.teamStyle) {
+                        try {
+                            // Sync defaults only once or if not locally overridden
+                            // Map fields if needed, but they match mostly
+                            // Override only if we haven't set local style yet
+                            styleConfig = {
+                                fontSize: d.teamStyle.fontSize || 80,
+                                fontFamily: d.teamStyle.fontFamily || "'Oswald', sans-serif",
+                                bold: !!d.teamStyle.bold,
+                                scaleX: d.teamStyle.scaleX || 1.0,
+                                scaleY: d.teamStyle.scaleY || 2.1,
+                                limit: d.teamStyle.limit || 11
+                            };
+                            applyStyleConfig();
+                            // We don't save to localStorage automatically to allow "reset" to host by clearing storage
+                        } catch (e) { console.error("Style Sync Error", e); }
+                    }
+
+                    currentData = d;
+                    updateBoard(d);
+                });
+            });
+        }
+
+        function updateBoard(d) {
+            // Update Basic Fields
+            document.getElementById('timer').innerText = d.timer;
+            // Status Bar removed as per layout change
+
+            // Phase
+            document.getElementById('match-phase').innerText = d.phase || "";
+
+            // Indicator
+            const ind = document.getElementById('game-state-ind');
+            if (d.statusText) {
+                ind.innerText = d.statusText;
+                ind.className = d.statusClass;
+            }
+
+            // Render Teams with Local Style Config
+            document.getElementById('name-left').innerText = smartTruncate(d.teamLeft.name, styleConfig.limit);
+            document.getElementById('score-left').innerText = d.teamLeft.score;
+            document.getElementById('panel-left').style.borderTopColor = d.teamLeft.color;
+            document.getElementById('pen-box-left').style.borderTopColor = d.teamLeft.color;
+            document.getElementById('pen-total-left').innerText = "TOT: " + (d.teamLeft.totalPenalties || 0);
+
+            document.getElementById('name-right').innerText = smartTruncate(d.teamRight.name, styleConfig.limit);
+            document.getElementById('score-right').innerText = d.teamRight.score;
+            document.getElementById('panel-right').style.borderTopColor = d.teamRight.color;
+            document.getElementById('pen-box-right').style.borderTopColor = d.teamRight.color;
+            document.getElementById('pen-total-right').innerText = "TOT: " + (d.teamRight.totalPenalties || 0);
+
+            // Penalties active indicators
+            const lPenActive = document.getElementById('pen-active-left');
+            if (d.teamLeft.penalties > 0) {
+                lPenActive.style.display = 'block'; lPenActive.innerText = "PEN: " + d.teamLeft.penalties;
+            } else { lPenActive.style.display = 'none'; }
+
+            const rPenActive = document.getElementById('pen-active-right');
+            if (d.teamRight.penalties > 0) {
+                rPenActive.style.display = 'block'; rPenActive.innerText = "PEN: " + d.teamRight.penalties;
+            } else { rPenActive.style.display = 'none'; }
+
+            // Technical Pause Indicators
+            updateTechInd('tech-ind-left', d.teamLeft.techUsed);
+            updateTechInd('tech-ind-right', d.teamRight.techUsed);
+
+            // Update Penalty Visuals (Immediate)
+            updatePenaltyVisuals('left', d.teamLeft);
+            updatePenaltyVisuals('right', d.teamRight);
+
+            // Update Penalty Visuals (Immediate)
+            updatePenaltyVisuals('left', d.teamLeft);
+            updatePenaltyVisuals('right', d.teamRight);
+
+            // Next Match Bar
+            const topBar = document.getElementById('top-bar');
+            if (d.nextMatch) {
+                topBar.style.display = 'flex';
+
+                // Only update innerHTML if teams changed to avoid flickering and unnecessary DOM churn
+                const teamsHtml = `
+                    <span onclick="event.stopPropagation(); openRoster('${escapeName(d.nextMatch.teamA)}')" style="cursor:pointer; text-decoration:underline;">${d.nextMatch.teamA}</span> 
+                    vs 
+                    <span onclick="event.stopPropagation(); openRoster('${escapeName(d.nextMatch.teamB)}')" style="cursor:pointer; text-decoration:underline;">${d.nextMatch.teamB}</span>
+                `;
+                const tbTeams = document.getElementById('tb-teams');
+                if (tbTeams.innerHTML !== teamsHtml) {
+                    tbTeams.innerHTML = teamsHtml;
+                }
+
+                const tbScore = document.getElementById('tb-score');
+                if (d.nextMatch.isStarted) {
+                    tbScore.style.display = 'inline';
+                    tbScore.innerText = `[ ${d.nextMatch.scoreA} - ${d.nextMatch.scoreB} ]`;
+                } else {
+                    tbScore.style.display = 'none';
+                }
+            } else {
+                topBar.style.display = 'none';
+            }
+
+            // Update Team Logos
+            updateLogo('left', d.teamLeft.name);
+            updateLogo('right', d.teamRight.name);
+
+            // Fastest Round
+            if (d.fastestRound) {
+                document.getElementById('fastest-round-spotlight').style.display = 'flex';
+                document.getElementById('spotlight-team-name').innerText = d.fastestRound.team;
+                document.getElementById('spotlight-time-val').innerText = formatTimeSeconds(d.fastestRound.duration);
+            } else {
+                document.getElementById('fastest-round-spotlight').style.display = 'none';
+            }
+
+            // Layout URL
+            if (d.layoutUrl) {
+                const iframe = document.getElementById('layout-iframe');
+                if (iframe.src !== d.layoutUrl) iframe.src = d.layoutUrl;
+            }
+
+            // Overlays update if open
+            if (showSchedule) renderScheduleTable();
+            if (showBracket && d.standingsData && d.standingsData.bracket) renderBracket(d.standingsData.bracket);
+        }
+
+        function updateTechInd(id, used) {
+            const el = document.getElementById(id);
+            const check = el.querySelector('.checkmark');
+            if (used) {
+                el.classList.add('active');
+                check.style.display = 'block';
+            } else {
+                el.classList.remove('active');
+                check.style.display = 'none';
+            }
+        }
+
+        function updatePenaltyVisuals(side, teamData) {
+            const name = document.getElementById('name-' + side);
+            const label = document.getElementById('pen-label-' + side);
+
+            // Safety check if elements exist
+            if (!label) return;
+
+            name.classList.remove('flash-minor', 'flash-major');
+            label.style.display = 'none';
+            label.className = 'penalty-label';
+
+            if (teamData.lastPenalty && (Date.now() - teamData.lastPenalty.timestamp < 5000)) {
+                const type = (teamData.lastPenalty.type || 'MINOR').toUpperCase();
+                label.innerText = type;
+                label.style.display = 'block';
+
+                if (type === 'MAJOR') {
+                    label.classList.add('pen-major', 'flash-major');
+                    name.classList.add('flash-major');
+                } else {
+                    label.classList.add('pen-minor', 'flash-minor');
+                    name.classList.add('flash-minor');
+                }
+            }
+        }
+
+        // Helper for team logos
+        function updateLogo(side, teamName) {
+            const imgEl = document.getElementById('logo-' + side);
+            if (!imgEl) return;
+
+            if (!teamName) {
+                imgEl.style.display = 'none';
+                return;
+            }
+
+            const config = clanConfig.find(c => c.name.trim().toLowerCase() === teamName.trim().toLowerCase());
+            if (config && config.logoUrl) {
+                imgEl.src = config.logoUrl;
+                imgEl.style.display = 'block';
+            } else {
+                imgEl.style.display = 'none';
+            }
+        }
+
+
+        // --- TRUNCATION UTILS ---
+        function smartTruncate(str, limit) {
+            if (!str) return "";
+            str = str.trim().toUpperCase();
+            if (str.length <= limit) return str;
+            const words = str.split(/\s+/).filter(w => w.length > 0);
+            if (words.length >= 3) {
+                const w1 = words[0].substring(0, 4);
+                const w2 = words[1].substring(0, 1) + ".";
+                const prefix = w1 + " " + w2 + " ";
+                return (prefix + (words[words.length - 1].substring(0, limit - prefix.length))).trim();
+            } else if (words.length === 2) {
+                return (words[0].substring(0, 4) + " " + words[1]).substring(0, limit);
+            }
+            return str.substring(0, limit);
+        }
+        function escapeName(name) { return name.replace(/'/g, "\\'"); }
+        function formatTimeSeconds(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = Math.floor(seconds % 60);
+            const milliseconds = Math.floor((seconds % 1) * 100);
+            return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
+        }
+
+        // --- CLAN / ROSTER LOGIC ---
+        function handleTeamClick(side) {
+            if (!currentData) return;
+            const teamName = side === 'left' ? currentData.teamLeft.name : currentData.teamRight.name;
+            openRoster(teamName);
+        }
+
+        // Interval to update flashing penalties
+        setInterval(() => {
+            if (currentData) {
+                if (currentData.teamLeft) updatePenaltyVisuals('left', currentData.teamLeft);
+                if (currentData.teamRight) updatePenaltyVisuals('right', currentData.teamRight);
+            }
+        }, 100);
+
+        function openRoster(teamName) {
+            if (!teamName) return;
+            const config = clanConfig.find(c => c.name.trim().toLowerCase() === teamName.trim().toLowerCase());
+            if (config && config.rosterUrl) {
+                window.open(config.rosterUrl, '_blank');
+            } else {
+                alert(`Nessun link rosa configurato per: ${teamName}`);
+            }
+        }
+
+        // --- SETUP MODAL LOGIC ---
+        function openSetupModal() { document.getElementById('clan-setup-modal').style.display = 'flex'; renderSetupList(); }
+        function closeSetupModal() { document.getElementById('clan-setup-modal').style.display = 'none'; }
+        function renderSetupList() {
+            const list = document.getElementById('clan-setup-list');
+            list.innerHTML = '';
+            clanConfig.forEach((clan, idx) => {
+                const div = document.createElement('div');
+                div.className = 'clan-item';
+
+                // Logo preview or upload button
+                let logoContent = '';
+                if (clan.logoUrl && clan.logoUrl.length > 50) {
+                    logoContent = `<div style="display:flex; flex-direction:column; gap:5px;">
+                        <img src="${clan.logoUrl}" style="width:40px; height:40px; object-fit:contain; border-radius:4px;">
+                        <button onclick="updateClan(${idx}, 'logoUrl', '')" style="font-size:0.7rem; padding:2px; background:#ef4444;">X</button>
+                     </div>`;
+                } else {
+                    logoContent = `<input type="file" accept="image/*" onchange="handleLogoUpload(this, ${idx})" style="font-size:0.8rem;">`;
+                }
+
+                div.innerHTML = `
+                    <input type="text" placeholder="Nome Squadra" value="${clan.name}" onchange="updateClan(${idx}, 'name', this.value)">
+                    <div style="display:flex; justify-content:center; align-items:center;">
+                        ${logoContent}
+                    </div>
+                    <input type="text" placeholder="URL Rosa" value="${clan.rosterUrl}" onchange="updateClan(${idx}, 'rosterUrl', this.value)">
+                    <button onclick="removeClan(${idx})" style="background:#ef4444; padding:5px 10px;">🗑️</button>
+                `;
+                list.appendChild(div);
+            });
+        }
+        function addClanRow() { clanConfig.push({ name: "", logoUrl: "", rosterUrl: "" }); renderSetupList(); }
+        function clearAllClans() {
+            if (!confirm("Sei sicuro di voler cancellare TUTTE le squadre della lista streaming?")) return;
+            clanConfig = [];
+            renderSetupList();
+            localStorage.removeItem('pm_stream_clans');
+            alert("Lista svuotata!");
+        }
+        function updateClan(idx, field, val) { clanConfig[idx][field] = val; renderSetupList(); } // Re-render to show preview
+        function removeClan(idx) { clanConfig.splice(idx, 1); renderSetupList(); }
+        function saveClans() {
+            try {
+                localStorage.setItem('pm_stream_clans', JSON.stringify(clanConfig));
+                alert("Salvato!");
+                closeSetupModal();
+            } catch (e) {
+                alert("Errore salvataggio: Forse le immagini sono troppo grandi? Prova con file più piccoli o meno squadre.");
+                console.error(e);
+            }
+        }
+
+        // Handle Image Upload & Resize
+        function handleLogoUpload(input, idx) {
+            if (input.files && input.files[0]) {
+                const file = input.files[0];
+                const reader = new FileReader();
+
+                reader.onload = function (e) {
+                    const img = new Image();
+                    img.onload = function () {
+                        // Max dimensions for logo storage - Increased for better quality on large display
+                        const MAX_W = 400;
+                        const MAX_H = 400;
+
+                        let w = img.width;
+                        let h = img.height;
+
+                        // Calculate Aspect Ratio
+                        if (w > h) {
+                            if (w > MAX_W) { h *= MAX_W / w; w = MAX_W; }
+                        } else {
+                            if (h > MAX_H) { w *= MAX_H / h; h = MAX_H; }
+                        }
+
+                        const canvas = document.createElement('canvas');
+                        canvas.width = w;
+                        canvas.height = h;
+                        const ctx = canvas.getContext('2d');
+                        ctx.clearRect(0, 0, w, h); // Explicitly clear for transparency
+                        ctx.drawImage(img, 0, 0, w, h);
+
+                        // Output as PNG base64
+                        const dataUrl = canvas.toDataURL('image/png');
+                        updateClan(idx, 'logoUrl', dataUrl);
+                    }
+                    img.src = e.target.result;
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function syncTeamsFromHost() {
+            if (!currentData || !currentData.tournament || !currentData.tournament.matches) {
+                alert("Nessun dato del torneo ricevuto dall'host. Assicurati che lo streaming sia connesso e il torneo avviato.");
+                return;
+            }
+
+            const uniqueTeams = new Set();
+            currentData.tournament.matches.forEach(m => {
+                if (m.teamA && m.teamA !== "TBD") uniqueTeams.add(m.teamA);
+                if (m.teamB && m.teamB !== "TBD") uniqueTeams.add(m.teamB);
+            });
+
+            const hostTeams = Array.from(uniqueTeams).sort();
+            let addedCount = 0;
+
+            hostTeams.forEach(teamName => {
+                // Check if exists (case insensitive)
+                const exists = clanConfig.some(c => c.name.toLowerCase() === teamName.toLowerCase());
+                if (!exists) {
+                    clanConfig.push({ name: teamName, logoUrl: "", rosterUrl: "" });
+                    addedCount++;
+                }
+            });
+
+            if (addedCount > 0) {
+                renderSetupList();
+                alert(`Sincronizzazione completata! Aggiunte ${addedCount} squadre.`);
+            } else {
+                alert("Tutte le squadre del torneo sono già presenti nella lista.");
+            }
+        }
+
+        // --- STYLE SETUP MODAL LOGIC ---
+        function openStyleModal() {
+            document.getElementById('style-setup-modal').style.display = 'flex';
+            document.getElementById('st-font').value = styleConfig.fontFamily;
+            document.getElementById('st-size').value = styleConfig.fontSize;
+            document.getElementById('st-bold').checked = styleConfig.bold;
+            document.getElementById('st-scalex').value = styleConfig.scaleX;
+            document.getElementById('st-scaley').value = styleConfig.scaleY;
+            document.getElementById('st-limit').value = styleConfig.limit;
+            updateStylePreview();
+        }
+        function closeStyleModal() { document.getElementById('style-setup-modal').style.display = 'none'; }
+
+        function updateStylePreview() {
+            // Read values from inputs
+            styleConfig.fontFamily = document.getElementById('st-font').value;
+            styleConfig.fontSize = parseInt(document.getElementById('st-size').value);
+            styleConfig.bold = document.getElementById('st-bold').checked;
+            styleConfig.scaleX = parseFloat(document.getElementById('st-scalex').value);
+            styleConfig.scaleY = parseFloat(document.getElementById('st-scaley').value);
+            styleConfig.limit = parseInt(document.getElementById('st-limit').value);
+
+            // Update value displays
+            document.getElementById('val-size').innerText = styleConfig.fontSize + "px";
+            document.getElementById('val-scalex').innerText = styleConfig.scaleX;
+            document.getElementById('val-scaley').innerText = styleConfig.scaleY;
+            document.getElementById('val-limit').innerText = styleConfig.limit;
+
+            applyStyleConfig();
+
+            // Force redraw of names if data exists
+            if (currentData) {
+                document.getElementById('name-left').innerText = smartTruncate(currentData.teamLeft.name, styleConfig.limit);
+                document.getElementById('name-right').innerText = smartTruncate(currentData.teamRight.name, styleConfig.limit);
+            }
+        }
+
+        function applyStyleConfig() {
+            const names = document.querySelectorAll('.team-name');
+            names.forEach(n => {
+                n.style.fontFamily = styleConfig.fontFamily;
+                n.style.fontSize = styleConfig.fontSize + "px";
+                n.style.fontWeight = styleConfig.bold ? "bold" : "normal";
+                n.style.transform = `scale(${styleConfig.scaleX}, ${styleConfig.scaleY})`;
+            });
+        }
+
+        function saveStyles() {
+            localStorage.setItem('pm_stream_style', JSON.stringify(styleConfig));
+            alert("Stile salvato!");
+            closeStyleModal();
+        }
+
+        function resetStyles() {
+            styleConfig = { fontSize: 80, fontFamily: "'Oswald', sans-serif", bold: false, scaleX: 1.0, scaleY: 2.1, limit: 11 };
+            openStyleModal(); // Refresh inputs
+        }
+
+        // --- FULL OVERLAY LOGIC ---
+        function openClanOverlay() {
+            document.getElementById('clan-full-overlay').style.display = 'flex';
+            const grid = document.getElementById('clan-grid-display');
+            grid.innerHTML = '';
+            clanConfig.forEach(clan => {
+                if (!clan.name) return;
+                const card = document.createElement('div');
+                card.className = 'clan-card';
+                card.onclick = () => { if (clan.rosterUrl) window.open(clan.rosterUrl, '_blank'); };
+                const logo = clan.logoUrl ? `<img src="${clan.logoUrl}" class="clan-logo">` : `<div class="clan-logo" style="display:flex;justify-content:center;align-items:center;color:#64748b;font-size:50px;">?</div>`;
+                card.innerHTML = `${logo}<div class="clan-card-name">${clan.name}</div>${clan.rosterUrl ? '<div style="color:var(--accent-color); font-size:12px; margin-top:5px;">🔗 OPEN ROSTER</div>' : ''}`;
+                grid.appendChild(card);
+            });
+        }
+        function closeClanOverlay() { document.getElementById('clan-full-overlay').style.display = 'none'; }
+
+
+        // --- STATS / BRACKET / SCHEDULE / LAYOUT HANDLERS ---
+        let showSchedule = false;
+        let showBracket = false;
+
+        function toggleStats() {
+            const overlay = document.getElementById('stats-overlay');
+            const isVisible = overlay.style.display === 'flex';
+            overlay.style.display = isVisible ? 'none' : 'flex';
+            if (!isVisible && currentData && currentData.standingsData) {
+                renderStandingsTable(currentData.standingsData);
+            }
+        }
+
+        document.getElementById('close-stats-btn').addEventListener('click', () => document.getElementById('stats-overlay').style.display = 'none');
+
+        function toggleBracket() {
+            showBracket = !showBracket;
+            document.getElementById('bracket-overlay').style.display = showBracket ? 'flex' : 'none';
+            if (showBracket && currentData && currentData.standingsData) renderBracket(currentData.standingsData.bracket);
+        }
+
+        function toggleSchedule() {
+            showSchedule = !showSchedule;
+            const overlay = document.getElementById('schedule-overlay');
+            overlay.style.display = showSchedule ? 'flex' : 'none';
+            if (showSchedule) renderScheduleTable();
+        }
+
+        document.getElementById('btn-open-layout').addEventListener('click', () => document.getElementById('layout-overlay').style.display = 'flex');
+        document.getElementById('close-layout-btn').addEventListener('click', () => document.getElementById('layout-overlay').style.display = 'none');
+
+        // Render Functions 
+        function renderStandingsTable(data) {
+            if (!data || !data.standings) return;
+            const tbody = document.getElementById('board-standings-body');
+            tbody.innerHTML = '';
+            data.standings.forEach((s, idx) => {
+                const tr = document.createElement('tr');
+                const diff = (s.rw || 0) - (s.rl || 0);
+                tr.innerHTML = `
+                    <td><span class="stats-rank-badge">${idx + 1}</span> ${s.name}</td>
+                    <td style="text-align: center">${s.played}</td>
+                    <td style="text-align: center" class="stats-val-green">${s.wins}</td>
+                    <td style="text-align: center" class="stats-val-red">${s.losses}</td>
+                    <td style="text-align: center">${s.rw}</td>
+                    <td style="text-align: center">${s.rl}</td>
+                    <td style="text-align: center" class="${diff > 0 ? 'stats-val-green' : (diff < 0 ? 'stats-val-red' : 'stats-val-neutral')}">${diff > 0 ? '+' + diff : diff}</td>
+                    <td style="text-align: center; color: #94a3b8; font-weight: bold;">${s.pen}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+            // Also render records in quadrants if container exists
+            const rec = document.getElementById('stats-records');
+            if (rec) {
+                renderStatsQuadrants(rec, data);
+            }
+        }
+
+        function renderStatsQuadrants(container, data) {
+            container.innerHTML = '';
+            container.style.display = 'grid';
+            container.style.gridTemplateColumns = 'repeat(auto-fit, minmax(400px, 1fr))';
+            container.style.gap = '25px';
+            container.style.alignItems = 'start';
+
+            const createSection = (title, icon, items, formatter) => {
+                const wrapper = document.createElement('div');
+                wrapper.innerHTML = `<div style="font-weight: 900; color: var(--accent-color); border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 12px; margin-bottom: 15px; text-transform: uppercase; font-size: 0.8em; letter-spacing: 2px;">${icon} ${title}</div><ul style="list-style: none; padding: 0; margin: 0; font-size: 24px;"></ul>`;
+                const list = wrapper.querySelector('ul');
+                if (items && items.length > 0) {
+                    items.forEach(r => {
+                        const li = document.createElement('li');
+                        li.style.marginBottom = '12px'; li.style.borderBottom = '1px solid rgba(255,255,255,0.05)'; li.style.paddingBottom = '8px'; li.style.display = 'flex'; li.style.justifyContent = 'space-between';
+                        li.innerHTML = `<span><strong style="color: #e2e8f0">${r.team}</strong> <span style="font-size: 0.8em; color: #94a3b8; margin-left: 10px;">${r.match || ''}</span></span><span style="font-weight: 900; color: #fbbf24; text-shadow: 0 0 10px rgba(251, 191, 36, 0.3);">${formatter(r.duration || r.avg || r.count)}</span>`;
+                        list.appendChild(li);
+                    });
+                } else { list.innerHTML = '<li style="color: #64748b; font-style: italic;">Nessun dato</li>'; }
+                return wrapper;
+            };
+            const formatCount = (val) => val;
+            const formatTime = (val) => formatTimeSeconds(val) + 's';
+
+            container.appendChild(createSection('Round Veloci', '⚡', data.records, formatTime));
+            container.appendChild(createSection('Round Più Lenti', '🐌', data.slowestRounds, formatTime));
+            container.appendChild(createSection('Tempo Medio', '⏱️', data.averageTimes, formatTime));
+            container.appendChild(createSection('Mercy Killers', '💀', data.mercyKillers, formatCount));
+            container.appendChild(createSection('Cattivi Ragazzi', '🟨', data.badBoys, formatCount));
+        }
+
+        function renderBracket(data) {
+            const container = document.getElementById('bracket-container');
+            container.innerHTML = '';
+            if (!data || !data.rounds || data.rounds.length === 0) {
+                container.innerHTML = '<div style="font-size: 40px; color: #64748b; font-style: italic;">Nessun dato bracket disponibile.</div>'; return;
+            }
+            data.rounds.forEach(round => {
+                const roundCol = document.createElement('div');
+                roundCol.style.display = 'flex'; roundCol.style.flexDirection = 'column'; roundCol.style.justifyContent = 'space-around'; roundCol.style.height = '100%';
+                const roundTitle = document.createElement('div');
+                roundTitle.innerText = round.name; roundTitle.style.textAlign = 'center'; roundTitle.style.fontWeight = 'bold'; roundTitle.style.color = 'var(--accent-color)'; roundTitle.style.marginBottom = '20px'; roundTitle.style.fontSize = '30px'; roundTitle.style.textTransform = 'uppercase';
+                roundCol.appendChild(roundTitle);
+                round.matches.forEach(m => {
+                    const matchCard = document.createElement('div');
+                    matchCard.style.background = 'rgba(255,255,255,0.05)'; matchCard.style.padding = '20px'; matchCard.style.borderRadius = '15px'; matchCard.style.border = '1px solid rgba(255,255,255,0.1)'; matchCard.style.width = '350px'; matchCard.style.margin = '15px 0'; matchCard.style.boxShadow = '0 5px 15px rgba(0,0,0,0.3)';
+                    const renderTeamLine = (name, score, isWinner) => `<div style="display: flex; justify-content: space-between; align-items: center; margin: 5px 0; font-size: 26px; ${isWinner ? 'color: #fbbf24; font-weight: 900;' : 'color: #cbd5e1;'}"><span>${name || 'TBD'}</span><span style="background: rgba(0,0,0,0.3); padding: 5px 15px; border-radius: 8px;">${score}</span></div>`;
+                    matchCard.innerHTML = `${renderTeamLine(m.teamA, m.scoreA, m.winner === 'A')}<div style="height: 2px; background: rgba(255,255,255,0.05); margin: 10px 0;"></div>${renderTeamLine(m.teamB, m.scoreB, m.winner === 'B')}`;
+                    roundCol.appendChild(matchCard);
+                });
+                container.appendChild(roundCol);
+            });
+        }
+
+        function renderScheduleTable() {
+            if (!currentData || !currentData.tournament || !currentData.tournament.matches) return;
+            const tbody = document.getElementById('schedule-body'); tbody.innerHTML = '';
+            // Delay info
+            const delayEl = document.getElementById('schedule-delay-board');
+            const d = currentData.tournament.delay || 0;
+            if (d > 0) { delayEl.innerText = `RITARDO PROSSIMO MATCH: +${d} MIN`; delayEl.style.color = '#ef4444'; }
+            else if (d < 0) { delayEl.innerText = `ANTICIPO PROSSIMO MATCH: ${d} MIN`; delayEl.style.color = '#10b981'; }
+            else { delayEl.innerText = "IL TORNEO È IN ORARIO"; delayEl.style.color = '#94a3b8'; }
+
+            currentData.tournament.matches.forEach((m, idx) => {
+                const tr = document.createElement('tr'); tr.className = 'schedule-row';
+                if (idx === currentData.tournament.currentIndex) tr.classList.add('active');
+                if (m.savedState && m.savedState.finished) tr.classList.add('finished');
+                tr.innerHTML = `<td>${m.time || '--:--'}</td><td>${m.teamA} vs ${m.teamB}</td><td>${m.phase || 'GIRONI'}</td><td>${m.field || 'Campo 1'}</td>`;
+                tbody.appendChild(tr);
+            });
+        }
+
+    </script>
+</body>
+
+</html>

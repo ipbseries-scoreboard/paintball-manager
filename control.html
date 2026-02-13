@@ -835,11 +835,15 @@
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                                 <div><small>Pausa (sec)</small><input type="number" id="break-duration"
                                         class="form-control" value="0"></div>
-                                <div><small>Intervallo (sec)</small><input type="number" id="interval-duration"
-                                        class="form-control" value="120"></div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+                                    <div><small>Int. Punto (s)</small><input type="number" id="point-interval-duration"
+                                            class="form-control" value="30"></div>
+                                    <div><small>Int. Slot (s)</small><input type="number" id="slot-interval-duration"
+                                            class="form-control" value="120"></div>
+                                </div>
                                 <div><small>Game (min)</small><input type="number" id="game-duration-setting"
                                         class="form-control" value="10"></div>
-                                <div><small>Golden Point</small><input type="number" id="golden-duration-setting"
+                                <div><small>Golden Point (min)</small><input type="number" id="golden-duration-setting"
                                         class="form-control" value="2"></div>
                             </div>
                         </div>
@@ -1251,7 +1255,13 @@
         <script>
             // Load Saved Settings
             const savedSettings = JSON.parse(localStorage.getItem('pm_settings') || "{}");
-            const CONFIG = { gameTime: 600, interTime: 120, mercyDiff: savedSettings.mercyDiff || 4, goldenTime: 120 };
+            const CONFIG = {
+                gameTime: (parseInt(savedSettings.gameDuration) || 10) * 60,
+                pointInterTime: (parseInt(savedSettings.pointIntervalDuration) || 30),
+                slotInterTime: (parseInt(savedSettings.slotIntervalDuration) || 120),
+                mercyDiff: savedSettings.mercyDiff || 4,
+                goldenTime: (parseInt(savedSettings.goldenDuration) || 2) * 60
+            };
 
             let state = {
                 mode: 'IDLE', timer: CONFIG.gameTime, timerMode: 'GAME',
@@ -1266,6 +1276,8 @@
                     breakDuration: 0,
                     voiceURI: null,
                     mercyDiff: CONFIG.mercyDiff,
+                    pointIntervalDuration: CONFIG.pointInterTime,
+                    slotIntervalDuration: CONFIG.slotInterTime,
                     ...savedSettings
                 },
                 tournament: {
@@ -1277,7 +1289,7 @@
                     location: '',
                     field: ''
                 },
-                matchLog: [], intervalInstance: null, flags: { warn60: false, warn30: false, warn10: false }
+                matchLog: [], intervalInstance: null, flags: { warn60: false, warn30: false, warn20: false, warn10: false }
             };
 
             // GLOBAL SETTINGS (Not affected by Undo)
@@ -1962,6 +1974,7 @@
                     // Sound Triggers (Edge Detection)
                     if (prev > 60 && state.timer <= 60 && !state.flags.warn60) { state.flags.warn60 = true; playBeep('warn'); speak("Sessanta secondi", "Sixty seconds"); }
                     if (prev > 30 && state.timer <= 30 && !state.flags.warn30) { state.flags.warn30 = true; playBeep('warn'); speak("Trenta secondi", "Thirty seconds"); }
+                    if (prev > 20 && state.timer <= 20 && !state.flags.warn20) { state.flags.warn20 = true; playBeep('warn'); speak("Venti secondi", "Twenty seconds"); }
                     if (prev > 10 && state.timer <= 10 && !state.flags.warn10) { state.flags.warn10 = true; speak("Dieci secondi", "Ten seconds"); }
 
                     // Beep every second (approx) when < 10. Check integer boundary crossing.
@@ -2030,13 +2043,14 @@
                 state.intervalInstance = setInterval(tick, 50); // 20Hz update
             }
             function stopTimerLoop() { if (state.intervalInstance) clearInterval(state.intervalInstance); }
-            function startInter() {
+            function startInter(type = 'point') {
+                const dur = (type === 'slot') ? CONFIG.slotInterTime : CONFIG.pointInterTime;
                 state.mode = 'INTERVAL';
                 state.timerMode = 'INTERVAL';
-                state.timer = CONFIG.interTime;
-                state.flags = { warn60: false };
+                state.timer = dur;
+                state.flags = { warn60: false, warn30: false, warn20: false, warn10: false };
                 speak("Intervallo", "Interval");
-                log(`START INTERVALLO (TechStatus: A=${state.teams.A.techUsed}, B=${state.teams.B.techUsed})`);
+                log(`START INTERVALLO ${type.toUpperCase()} (${dur}s. TechStatus: A=${state.teams.A.techUsed}, B=${state.teams.B.techUsed})`);
                 render();
                 startTimerLoop();
             }
@@ -2044,7 +2058,7 @@
                 state.mode = 'POINT';
                 state.timerMode = 'GAME';
                 state.timer = state.gameTimeRemaining;
-                state.flags = { warn60: false };
+                state.flags = { warn60: false, warn30: false, warn20: false, warn10: false };
                 playHorn(1.0);
                 log("START POINT (Gioco attivo)");
                 recordRealStartTime();
@@ -2087,6 +2101,26 @@
                     log(`DEBUG: TechUsed impostato su TRUE per ${teamId}`);
                     render();
                 }
+            }
+
+            function startMatchBreak() {
+                state.mode = 'BREAK_MATCH';
+                state.timerMode = 'BREAK';
+                state.timer = CONFIG.slotInterTime;
+                state.flags = { warn60: false, warn30: false, warn10: false };
+                startTimerLoop();
+                render();
+            }
+
+            function startGoldenBreak() {
+                state.basesSwapped = false;
+                state.mode = 'GOLDEN_BREAK';
+                state.timerMode = 'BREAK';
+                state.timer = CONFIG.slotInterTime;
+                state.flags = { warn60: false, warn30: false, warn10: false };
+                log(`INIZIO PAUSA GOLDEN POINT (${state.timer}s)`);
+                startTimerLoop();
+                render();
             }
             function startOvertime() {
                 if (state.mode === 'POINT' || state.mode === 'TECH_PAUSED') { alert("Non puoi avviare il Golden Point durante il gioco o pausa tecnica!"); return; }
@@ -2584,7 +2618,7 @@
                         // Peer is done. We become Single Slot.
                         log("PEER MATCH TERMINATO -> STANDARD ROTATION (Single Mode)");
                         state.basesSwapped = !state.basesSwapped;
-                        startInter();
+                        startInter('slot');
                     } else {
                         log(`ROTAZIONE SLOT: Match ${currIdx + 1} -> Match ${nextSlotIdx + 1}`);
                         loadMatch(nextSlotIdx, true);
@@ -2593,7 +2627,7 @@
                     // Single Slot
                     state.basesSwapped = !state.basesSwapped;
                     log("ROTAZIONE STANDARD (Single Slot) -> SWAP SIDE");
-                    startInter();
+                    startInter('slot');
                 }
             }
 
@@ -3090,7 +3124,8 @@
                 document.getElementById('game-duration-setting').value = Math.floor(CONFIG.gameTime / 60);
                 document.getElementById('golden-duration-setting').value = Math.floor(CONFIG.goldenTime / 60);
                 document.getElementById('break-duration').value = state.settings.breakDuration;
-                document.getElementById('interval-duration').value = state.settings.intervalDuration || 120; // Unified
+                document.getElementById('point-interval-duration').value = state.settings.pointIntervalDuration || 30;
+                document.getElementById('slot-interval-duration').value = state.settings.slotIntervalDuration || 120;
                 document.getElementById('log-password-input').value = state.settings.logPassword || "";
                 document.getElementById('opt-confirm-towel').checked = state.settings.confirmTowel;
                 document.getElementById('opt-confirm-towel').checked = state.settings.confirmTowel;
@@ -3116,7 +3151,10 @@
                     state.settings.mercyDiff = parseInt(document.getElementById('mercy-diff-input').value) || 2;
                     CONFIG.mercyDiff = state.settings.mercyDiff;
                     state.settings.breakDuration = parseInt(document.getElementById('break-duration').value) || 0;
-                    state.settings.intervalDuration = parseInt(document.getElementById('interval-duration').value) || 120; // Unified
+                    state.settings.pointIntervalDuration = parseInt(document.getElementById('point-interval-duration').value) || 30;
+                    state.settings.slotIntervalDuration = parseInt(document.getElementById('slot-interval-duration').value) || 120;
+                    CONFIG.pointInterTime = state.settings.pointIntervalDuration;
+                    CONFIG.slotInterTime = state.settings.slotIntervalDuration;
 
                     // Save Styling
                     const fontVal = document.getElementById('style-font-family').value;

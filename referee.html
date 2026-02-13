@@ -543,6 +543,7 @@
             <button class="btn-undo" style="background: var(--warning); color: black; font-size: 1.2rem;"
                 onclick="sendCommand('NO_POINT')" title="NO POINT / SALTA SLOT">🚫</button>
             <button class="btn-undo" onclick="sendCommand('UNDO')">↩️</button>
+            <button class="btn-undo" style="background: #334155; color: white;" onclick="openSettings()">⚙️</button>
         </div>
     </div>
 
@@ -554,6 +555,27 @@
         <button class="modal-btn btn-reject" onclick="submitPoint('REJECT')">POINT NOT APPROVED</button>
         <button class="modal-btn btn-nopoint" onclick="submitPoint('NO_POINT')">NO POINT</button>
         <button class="modal-btn btn-cancel" onclick="closeModal()">CANCEL / CLOSE</button>
+    </div>
+
+    <!-- SETTINGS MODAL -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-title">IMPOSTAZIONI INTERVALLI</div>
+        <div style="display: flex; flex-direction: column; gap: 15px; width: 100%;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label>Int. Punto (sec)</label>
+                <input type="number" id="point-interval-duration"
+                    style="width: 80px; padding: 10px; border-radius: 8px; border: 1px solid #333; background: #111; color: white; text-align: center;">
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label>Int. Slot (sec)</label>
+                <input type="number" id="slot-interval-duration"
+                    style="width: 80px; padding: 10px; border-radius: 8px; border: 1px solid #333; background: #111; color: white; text-align: center;">
+            </div>
+            <button class="modal-btn btn-confirm" style="margin-top: 20px;" onclick="saveSettings()">SALVA E
+                SINCRONIZZA</button>
+            <button class="modal-btn btn-cancel"
+                onclick="document.getElementById('settings-modal').style.display='none'">CHIUDI</button>
+        </div>
     </div>
 
     <script>
@@ -684,6 +706,15 @@
                     vibrationEnabled = data.hapticReferee;
                 }
 
+                // Update local inputs if they are not being edited
+                if (document.getElementById('settings-modal').style.display !== 'flex') {
+                    if (data.tournament && data.tournament.settings) {
+                        const s = data.tournament.settings;
+                        if (s.pointIntervalDuration !== undefined) document.getElementById('point-interval-duration').value = s.pointIntervalDuration;
+                        if (s.slotIntervalDuration !== undefined) document.getElementById('slot-interval-duration').value = s.slotIntervalDuration;
+                    }
+                }
+
                 if (data.teamLeft && data.teamLeft.lastPenalty) {
                     const lp = data.teamLeft.lastPenalty;
                     if (lp.timestamp > lastPenaltyTimeLeft) {
@@ -810,7 +841,23 @@
             }
         }
 
-        function sendCommand(type, side, level, decision) {
+        function openSettings() {
+            document.getElementById('settings-modal').style.display = 'flex';
+        }
+
+        function saveSettings() {
+            const pointInter = parseInt(document.getElementById('point-interval-duration').value) || 30;
+            const slotInter = parseInt(document.getElementById('slot-interval-duration').value) || 120;
+
+            sendCommand('UPDATE_SETTINGS', null, null, null, {
+                pointIntervalDuration: pointInter,
+                slotIntervalDuration: slotInter
+            });
+
+            document.getElementById('settings-modal').style.display = 'none';
+        }
+
+        function sendCommand(type, side, level, decision, extraSettings) {
             if (!conn || !conn.open) {
                 console.error("COMMAND FAILED: Connection not open.");
                 document.getElementById('connection-status').classList.remove('online');
@@ -825,6 +872,8 @@
 
             // Rapid visual feedback
             const payload = { type, side, level, decision };
+            if (extraSettings) payload.settings = extraSettings;
+
             console.log("SENDING COMMAND:", payload);
             conn.send(payload);
         }
