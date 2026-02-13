@@ -292,7 +292,8 @@
             font-weight: 900;
             font-size: 14px;
             border-radius: 8px;
-            display: none;
+            visibility: hidden;
+            margin-top: 5px;
         }
 
         /* BOTTOM CONTROLS */
@@ -754,7 +755,7 @@
                 if (data.teamLeft) {
                     document.getElementById('name-left').innerText = data.teamLeft.name;
                     document.getElementById('score-left').innerText = data.teamLeft.score;
-                    document.getElementById('tech-ind-left').style.display = data.teamLeft.techUsed ? 'block' : 'none';
+                    document.getElementById('tech-ind-left').style.visibility = data.teamLeft.techUsed ? 'visible' : 'hidden';
 
                     // Remote penalty flash
                     const newPens = data.teamLeft.totalPenalties || 0;
@@ -763,7 +764,7 @@
                 if (data.teamRight) {
                     document.getElementById('name-right').innerText = data.teamRight.name;
                     document.getElementById('score-right').innerText = data.teamRight.score;
-                    document.getElementById('tech-ind-right').style.display = data.teamRight.techUsed ? 'block' : 'none';
+                    document.getElementById('tech-ind-right').style.visibility = data.teamRight.techUsed ? 'visible' : 'hidden';
 
                     // Remote penalty flash
                     const newPens = data.teamRight.totalPenalties || 0;
