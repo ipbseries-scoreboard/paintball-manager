@@ -153,12 +153,13 @@
             grid-template-columns: 350px 1fr 350px;
             gap: 20px;
             padding: 20px;
-            height: calc(100% - 80px);
+            min-height: 0;
+            /* Important for flex scrolling */
             transition: grid-template-columns 0.4s ease;
         }
 
         .main-content.show-schedule {
-            grid-template-columns: 320px 1fr 320px 300px;
+            grid-template-columns: 320px 1fr 320px 400px;
         }
 
         #schedule-panel {
@@ -262,9 +263,11 @@
             text-align: center;
             margin-bottom: 10px;
             width: 100%;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            white-space: normal;
+            /* Allow wrapping */
+            word-wrap: break-word;
+            /* Force break if very long word */
+            line-height: 1.1;
         }
 
         .team-score {
@@ -348,6 +351,8 @@
             flex-direction: column;
             align-items: center;
             gap: 10px;
+            height: 100%;
+            overflow: hidden;
         }
 
         .state-indicator {
@@ -464,16 +469,7 @@
             cursor: pointer;
         }
 
-        .controls-container {
-            display: grid;
-            grid-template-columns: 1fr 1.2fr 1fr;
-            gap: 5px;
-            width: 100%;
-            height: calc(100vh - 40px);
-            /* Fill screen minus header */
-            overflow: hidden;
-            /* Prevent body scroll */
-        }
+
 
         .game-controls {
             display: grid;
@@ -483,35 +479,23 @@
             max-width: 500px;
         }
 
-        .center-panel {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 5px;
-            height: 100%;
-            /* Fill column */
-            overflow: hidden;
-            /* Prevent spill */
-        }
+
 
         /* ... existing styles ... */
 
         .log-panel {
             width: 100%;
-            flex: 1 1 0;
-            /* Important: Start from 0 to avoid overflow */
-            /* Grow to fill space */
+            flex: 3 1 auto;
+            /* Give more weight to log but allow shrinking */
             background: var(--panel-bg);
             border-radius: 12px;
             padding: 5px;
             overflow-y: auto;
-            /* Scroll internally */
             font-family: monospace;
             font-size: 0.8rem;
             border: 1px solid #334155;
-            min-height: 0;
-            /* Allow shrinking */
-            /* Min height safety */
+            min-height: 150px;
+            /* Safety min height */
         }
 
         .log-entry {
@@ -610,6 +594,54 @@
             border-radius: 4px;
             margin-left: 10px;
             display: none;
+        }
+
+        .penalty-flash {
+            display: none;
+            padding: 8px 15px;
+            border-radius: 6px;
+            font-weight: 900;
+            font-size: 1.8rem;
+            text-align: center;
+            margin: 5px 0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .penalty-flash.minor {
+            background: #facc15;
+            color: #000000;
+            animation: pulse-yellow 0.5s infinite alternate;
+        }
+
+        .penalty-flash.major {
+            background: #ef4444;
+            color: white;
+            animation: pulse-red 0.5s infinite alternate;
+        }
+
+        @keyframes pulse-red {
+            from {
+                background-color: #ef4444;
+                box-shadow: 0 0 10px #ef4444;
+            }
+
+            to {
+                background-color: #b91c1c;
+                box-shadow: 0 0 25px #ef4444;
+            }
+        }
+
+        @keyframes pulse-yellow {
+            from {
+                background-color: #facc15;
+                box-shadow: 0 0 10px #facc15;
+            }
+
+            to {
+                background-color: #ca8a04;
+                box-shadow: 0 0 25px #facc15;
+            }
         }
 
         /* Connection Status */
@@ -785,6 +817,9 @@
 
 <body>
     <div id="scaler">
+        <div
+            style="position: absolute; top: 10px; left: 10px; color: #64748b; font-size: 0.8rem; z-index: 9999; pointer-events: none; font-family: var(--font-family);">
+            v. 1.7</div>
         <div id="top-bar">
             NEXT: <span id="tb-teams" style="color: white; margin-left: 10px;">-- vs --</span>
             <span id="tb-score" class="tb-live-score" style="display:none;">0 - 0</span>
@@ -889,6 +924,8 @@
                                 conferma No Point</div>
                             <div style="margin-bottom: 5px;"><input type="checkbox" id="opt-confirm-undo"> Richiedi
                                 conferma Annulla</div>
+                            <div style="margin-bottom: 5px; color: #fbbf24; font-weight: bold;"><input type="checkbox"
+                                    id="opt-outdoor-mode"> MODALITÀ OUTDOOR (Alta Visibilità)</div>
                         </div>
 
                         <!-- Mercy Rule -->
@@ -909,6 +946,21 @@
                                 placeholder="Es. 1234 (Vuoto = Casuale)">
                             <small style="color: #94a3b8;">Questo ID rimarrà invariato per permettere l'uso di QR Code
                                 stampati.</small>
+                            <div
+                                style="margin-top: 10px; padding: 10px; border: 1px dashed var(--accent-color); border-radius: 8px; display: flex; flex-direction: column; gap: 5px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <a href="referee.html" id="referee-link" target="_blank"
+                                        style="color: var(--accent-color); font-weight: bold; text-decoration: none; display: flex; align-items: center; gap: 8px;">
+                                        📱 APRI INTERFACCIA ARBITRO
+                                    </a>
+                                    <button class="btn-sm" onclick="showQRCode('referee')"
+                                        title="Mostra QR Code per Arbitro"
+                                        style="background: transparent; border: 1px solid var(--accent-color); color: var(--accent-color); border-radius: 4px; cursor: pointer; padding: 2px 8px; font-weight: bold;">📱
+                                        QR CODE</button>
+                                </div>
+                                <small style="display: block; color: #94a3b8;">Usa questo link da
+                                    smartphone per controllare punti e timer dal campo.</small>
+                            </div>
                         </div>
 
                         <!-- Custom Audio -->
@@ -1195,10 +1247,9 @@
             </div>
         </div>
 
-        <!-- QR Code Modal -->
         <div id="qr-modal" class="overlay" onclick="this.style.display='none'">
             <div class="modal-content" style="max-width: 400px; text-align: center;" onclick="event.stopPropagation()">
-                <h2 style="margin-top: 0;">QR Code Spettatore</h2>
+                <h2 id="qr-title" style="margin-top: 0;">QR Code Spettatore</h2>
                 <p style="color: #94a3b8; font-size: 0.9rem;">Fai scansionare questo codice agli spettatori per
                     connettersi istantaneamente.</p>
                 <div id="qrcode-container"
@@ -1348,7 +1399,7 @@
                 </div>
                 <div id="connection-status">Match ID: <span id="my-peer-id" class="conn-id"
                         onclick="copyToClipboard(this)">Generazione...</span>
-                    <button class="btn-sm" onclick="showQRCode()" title="Mostra QR Code per Spettatori"
+                    <button class="btn-sm" onclick="showQRCode('spectator')" title="Mostra QR Code per Spettatori"
                         style="margin-left: 10px; font-size: 1.2rem; background: transparent; border: 1px solid var(--accent-color); border-radius: 4px; cursor: pointer;">📱</button>
                 </div>
             </div>
@@ -1383,6 +1434,7 @@
                             class="score-btn" onclick="adjustScore('left', -1)">▼</button></div>
                     <div class="score-val" id="score-left">0</div>
                 </div>
+                <div id="pen-flash-left" class="penalty-flash"></div>
                 <div class="penalty-display" id="penalties-left" onclick="editPenalty('left')">Penalità: 0</div>
                 <div class="penalty-box">
                     <button class="btn btn-warning penalty-btn" onclick="addPenalty('left', 1)">1x1</button>
@@ -1460,6 +1512,7 @@
                             onclick="adjustScore('right', -1)">▼</button></div>
                     <div class="score-val" id="score-right">0</div>
                 </div>
+                <div id="pen-flash-right" class="penalty-flash"></div>
                 <div class="penalty-display" id="penalties-right" onclick="editPenalty('right')">Penalità: 0</div>
                 <div class="penalty-box">
                     <button class="btn btn-warning penalty-btn" onclick="addPenalty('right', 1)">1x1</button>
@@ -1543,8 +1596,10 @@
                 showLayoutOverlay: false,
                 showSchedule: false, // NEW
                 currentMatchEvents: [],
+                outdoorMode: false, // NEW
                 matchLog: [], intervalInstance: null, flags: { warn60: false, warn30: false, warn10: false }
             };
+
 
             // GLOBAL SETTINGS (Not affected by Undo)
             let TEAM_STYLE = {
@@ -1641,19 +1696,28 @@
                         }
                     });
 
+                    let currentPhaseTracker = "GIRONI"; // Track state across lines
                     extractedText.forEach(lineRaw => {
+                        // Check for phase change keywords on EVERY line (even if it's not a match line)
+                        const phaseKeywords = ["Girone", "Ottavi", "Quarti", "Semifinali", "Finale", "Pool"];
+                        for (const kw of phaseKeywords) {
+                            if (lineRaw.toLowerCase().includes(kw.toLowerCase())) {
+                                currentPhaseTracker = kw.toUpperCase();
+                                break;
+                            }
+                        }
+
                         // Split by our custom column separator if it exists
                         const possibleMatches = lineRaw.split('|||');
 
                         possibleMatches.forEach((line, colIdx) => {
+                            // Skip knockout phases as per user request (they will be created via Wizard)
+                            if (["OTTAVI", "QUARTI", "SEMIFINALI", "FINALE"].includes(currentPhaseTracker)) return;
+
                             // Find all occurrences of the score-like pattern to identify the valid one
                             const found = [...line.matchAll(/(\d+\s*:\s*\d+)/g)];
 
                             if (found.length > 0) {
-                                // Strategy: If multiple scores found (unlikely in a split column, but possible),
-                                // pick the LAST one as the score, assuming the first might be Time.
-                                // BUT, if we split by columns, "Time" might only be in the LEFT column.
-
                                 let scoreMatch = found[found.length - 1]; // Default to last found
 
                                 // Validation: Ignore "Break" lines or lines containing a date (like footers)
@@ -1666,38 +1730,37 @@
                                 let rawA = line.substring(0, splitIndex);
                                 let rawB = line.substring(splitIndex + matchStr.length);
 
+                                // Generic Cleaning Helper
+                                const cleanTeam = (str) => {
+                                    return str.replace(/^\s*\d{1,2}:\d{2}\s*-?/, '') // Remove Time
+                                        .replace(/Serie\s+[A-Z]\b/gi, '')
+                                        .replace(/Girone\s+\w+/gi, '')
+                                        .replace(/mercy\s+\d+/gi, '')
+                                        .replace(/Ottavi\s*\w*/gi, '')
+                                        .replace(/Quarti\s*\w*/gi, '')
+                                        .replace(/Semifinali\s*\w*/gi, '')
+                                        .replace(/Finale\s*\w*/gi, '')
+                                        .replace(/Pool\s*\w*/gi, '')
+                                        .replace(/^[-\s\.,]+/, '') // Leading artifacts
+                                        .replace(/[-\s\.,]+$/, '') // Trailing artifacts
+                                        .trim();
+                                };
+
                                 // Clean Team Names
-                                let time = rawA.match(/^\s*(\d{1,2}:\d{2})/);
-                                let matchTime = time ? time[1] : (matches.length > 0 ? matches[matches.length - 1].time : "00:00");
+                                let timeMatch = rawA.match(/^\s*(\d{1,2}:\d{2})/);
+                                let matchTime = timeMatch ? timeMatch[1] : (matches.length > 0 ? matches[matches.length - 1].time : "00:00");
 
-                                // Phase Detection
-                                let currentPhase = "GIRONI"; // Default
-                                const phaseKeywords = ["Girone", "Ottavi", "Quarti", "Semifinali", "Finale", "Pool"];
-                                for (const kw of phaseKeywords) {
-                                    if (line.toLowerCase().includes(kw.toLowerCase())) {
-                                        currentPhase = kw.toUpperCase();
-                                        break;
-                                    }
-                                }
-
-                                rawA = rawA.replace(/^\s*\d{1,2}:\d{2}\s*-?/, '') // Remove Time
-                                    .replace(/^\s*Girone\s+\w+\s*-?/, '')
-                                    .replace(/Girone\s+\w+/gi, '')
-                                    .replace(/mercy\s+\d+/gi, '')
-                                    // Don't remove phase keywords from the WHOLE line yet, just clean names
-                                    .replace(/^[-\s]+/, '')
-                                    .trim();
-
-                                rawB = rawB.trim();
+                                let teamA = cleanTeam(rawA);
+                                let teamB = cleanTeam(rawB);
 
                                 // Final Check
-                                if (rawA.length > 1 && rawB.length > 1 && !/^\d{1,2}:\d{2}$/.test(rawA)) {
+                                if (teamA.length > 1 && teamB.length > 1 && !/^\d{1,2}:\d{2}$/.test(teamA)) {
                                     matches.push({
-                                        teamA: rawA,
-                                        teamB: rawB,
+                                        teamA: teamA,
+                                        teamB: teamB,
                                         time: matchTime,
                                         pit: (colIdx === 0 ? 'A' : 'B'),
-                                        phase: currentPhase
+                                        phase: currentPhaseTracker
                                     });
                                 }
                             }
@@ -1755,12 +1818,18 @@
                 // Persistent ID logic
                 let targetId = state.settings.matchId;
 
-                if (!targetId || targetId === "undefined") {
-                    // Generate random if none exists or if it's the broken "undefined" string
-                    targetId = Math.floor(1000 + Math.random() * 9000).toString();
+                if (!targetId || targetId === "undefined" || !targetId.startsWith("IPBA-")) {
+                    // Generate a unique ID but we'll show only numbers to user
+                    const randomVal = Math.floor(100000 + Math.random() * 899999).toString();
+                    targetId = "IPBA-" + randomVal;
                     state.settings.matchId = targetId;
                     localStorage.setItem('pm_settings', JSON.stringify(state.settings));
-                    log("Generato nuovo Match ID: " + targetId);
+                }
+
+                // Update referee link href with the match ID
+                const refLink = document.getElementById('referee-link');
+                if (refLink) {
+                    refLink.href = `referee.html?id=${targetId}`;
                 }
 
                 peer = new Peer(targetId);
@@ -1771,9 +1840,11 @@
                         document.getElementById('my-peer-id').innerText = "ERRORE ID";
                         return;
                     }
-                    document.getElementById('my-peer-id').innerText = id;
+                    // Show only the numeric part to the user
+                    const displayId = id.replace("IPBA-", "");
+                    document.getElementById('my-peer-id').innerText = displayId;
                     document.getElementById('my-peer-id').style.color = 'var(--success-color)';
-                    log("Rete pronta. ID: " + id);
+                    log("Rete pronta. ID: " + displayId);
                 });
 
                 peer.on('connection', (conn) => {
@@ -1782,6 +1853,9 @@
                     // Send immediate state
                     conn.on('open', () => {
                         broadcastState();
+                    });
+                    conn.on('data', (data) => {
+                        handleRemoteCommand(data);
                     });
                     conn.on('close', () => {
                         connections = connections.filter(c => c !== conn);
@@ -1814,26 +1888,39 @@
                 });
             }
             // ---------------------------------------------
-            function showQRCode() {
+            function showQRCode(type = 'spectator') {
                 const qrMain = document.getElementById('qrcode-container');
+                const qrTitle = document.getElementById('qr-title');
                 qrMain.innerHTML = '';
+
                 let peerId = (peer && peer.id) ? peer.id : document.getElementById('my-peer-id').innerText;
                 if (!peerId || peerId === "undefined" || peerId === "Generazione...") {
                     alert("Errore: Match ID non pronto.");
                     return;
                 }
+
                 const baseDir = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
-                const boardUrl = baseDir + "board.html?id=" + peerId + "&v=" + Date.now();
-                document.getElementById('qr-url').innerText = boardUrl;
+                let targetUrl = "";
+
+                if (type === 'referee') {
+                    qrTitle.innerText = "QR Code Arbitro";
+                    targetUrl = baseDir + "referee.html?id=" + peerId + "&v=" + Date.now();
+                } else {
+                    qrTitle.innerText = "QR Code Spettatore";
+                    targetUrl = baseDir + "board.html?id=" + peerId + "&v=" + Date.now();
+                }
+
+                document.getElementById('qr-url').innerText = targetUrl;
                 const warningEl = document.getElementById('qr-file-warning');
                 if (window.location.protocol === 'file:') {
                     warningEl.style.display = 'block';
-                    warningEl.innerHTML = `⚠️ ATTENZIONE: FILE LOCALE. Il QR Code non funzionerà da cellulare.<br><button class="btn-sm" onclick="window.open('${boardUrl}', '_blank')" style="margin-top:5px; background:#3b82f6; color:white; border:none; padding:5px;">APRI BOARD SU PC</button>`;
+                    warningEl.innerHTML = `⚠️ ATTENZIONE: FILE LOCALE. Il QR Code non funzionerà da cellulare.<br><button class="btn-sm" onclick="window.open('${targetUrl}', '_blank')" style="margin-top:5px; background:#3b82f6; color:white; border:none; padding:5px;">APRI ${type.toUpperCase()} SU PC</button>`;
                 } else {
                     warningEl.style.display = 'none';
                 }
+
                 if (typeof QRCode !== 'undefined') {
-                    new QRCode(qrMain, { text: String(boardUrl), width: 256, height: 256 });
+                    new QRCode(qrMain, { text: String(targetUrl), width: 256, height: 256 });
                 }
                 document.getElementById('qr-modal').style.display = 'flex';
             }
@@ -1920,8 +2007,17 @@
                     fastestRound: statsData.records[0] || null,
                     teamStyle: TEAM_STYLE,
                     tournament: state.tournament,
+                    outdoorMode: state.outdoorMode,
                     standingsData: statsData
                 };
+
+                if (statsData.standings.length === 0 && state.tournament.active && state.tournament.currentIndex !== -1) {
+                    console.log("DEBUG: Standings Data is EMPTY - forced save current match");
+                    saveMatchState(state.tournament.currentIndex, false, false);
+                    const refreshedStats = calculateTournamentStats();
+                    packet.standingsData = refreshedStats;
+                    packet.fastestRound = refreshedStats.records[0] || null;
+                }
 
                 try {
                     connections.forEach(conn => {
@@ -1937,6 +2033,45 @@
                 } catch (e) {
                     console.error("Broadcast State Error:", e);
                     alert("SYNC ERROR (General): " + e.message);
+                }
+            }
+
+            function handleRemoteCommand(cmd) {
+                if (!cmd || !cmd.type) return;
+                log(`[REMOTO] Comando: ${cmd.type} ${cmd.side || ''} ${cmd.level || ''}`);
+
+                switch (cmd.type) {
+                    case 'POINT':
+                        handleTeamAction(cmd.side, 'point');
+                        break;
+                    case 'CONFIRM_POINT':
+                        // Directly trigger confirmation logic (decision: APPROVED, REVERSE, REJECT)
+                        pendingPointSide = cmd.side;
+                        confirmPoint(cmd.decision);
+                        break;
+                    case 'ACTION': // Towel / Timeout
+                        handleTeamAction(cmd.side, 'action');
+                        break;
+                    case 'PENALTY':
+                        addPenalty(cmd.side, cmd.level || 1);
+                        break;
+                    case 'START_INTER':
+                        startInter();
+                        break;
+                    case 'START_POINT':
+                        startPoint();
+                        break;
+                    case 'PAUSE':
+                        pause();
+                        break;
+                    case 'UNDO':
+                        undoLastAction();
+                        break;
+                    case 'TECH':
+                        // If peer sends TECH, trigger the tech pause for the side
+                        let teamId = !state.basesSwapped ? (cmd.side === 'left' ? 'A' : 'B') : (cmd.side === 'left' ? 'B' : 'A');
+                        handleTechPause(teamId);
+                        break;
                 }
             }
 
@@ -2115,7 +2250,34 @@
                 // Color logic (Standard for all modes)
                 if (state.timer <= 10 && state.mode !== 'IDLE') mainDisp.style.color = '#ef4444';
                 else mainDisp.style.color = 'var(--text-color)';
+
+                // Ensure penalty flashes update even if render() isn't called
+                updatePenaltyFlashes();
+
                 broadcastState(); // Sync on every tick/update
+            }
+
+            function updatePenaltyFlashes() {
+                const flashL = document.getElementById('pen-flash-left');
+                const flashR = document.getElementById('pen-flash-right');
+                if (!flashL || !flashR) return;
+
+                const now = Date.now();
+                const lT = state.basesSwapped ? state.teams.B : state.teams.A;
+                const rT = state.basesSwapped ? state.teams.A : state.teams.B;
+
+                const check = (el, team) => {
+                    if (team.lastPenalty && (now - team.lastPenalty.timestamp < 5000)) {
+                        el.style.display = 'block';
+                        const type = (team.lastPenalty.type || 'MINOR');
+                        el.innerText = type + " PENALTY";
+                        el.className = 'penalty-flash ' + type.toLowerCase();
+                    } else {
+                        el.style.display = 'none';
+                    }
+                };
+                check(flashL, lT);
+                check(flashR, rT);
             }
 
             function tick() {
@@ -2240,6 +2402,25 @@
                 state.intervalInstance = setInterval(tick, 50); // 20Hz update
             }
             function stopTimerLoop() { if (state.intervalInstance) clearInterval(state.intervalInstance); }
+
+            function handleTechPause(teamId) {
+                if (state.mode !== 'INTERVAL') {
+                    log("Pausa tecnica possibile solo durante l'intervallo!");
+                    return;
+                }
+                const team = state.teams[teamId];
+                if (team.techUsed) {
+                    log(`${team.name} ha già usato la pausa tecnica!`);
+                    return;
+                }
+                saveStateToHistory();
+                team.techUsed = true;
+                state.timer += 60;
+                updateTimerDisplay();
+                speak("Pausa Tecnica", "Technical Pause");
+                log(`PAUSA TECNICA RICHIESTA: ${team.name} (+60s)`);
+                render();
+            }
             function startInter() {
                 state.mode = 'INTERVAL';
                 state.timerMode = 'INTERVAL';
@@ -2271,8 +2452,25 @@
                 startTimerLoop();
             }
             function pause() {
-                if (state.mode === 'POINT' || state.mode === 'INTERVAL' || state.mode === 'OVERTIME') { stopTimerLoop(); if (state.mode === 'POINT' || state.mode === 'OVERTIME') state.gameTimeRemaining = state.timer; state.prevMode = state.mode; state.mode = 'PAUSED'; playBeep('stop'); speak("Pausa", "Pause"); log(`PAUSA (${state.prevMode})`); saveTournamentState(); render(); }
-                else if (state.mode === 'PAUSED' || state.mode === 'TECH_PAUSED') { state.mode = state.prevMode; playBeep('go'); log(`RIPRESA DA PAUSA (${state.mode})`); saveTournamentState(); startTimerLoop(); render(); }
+                if (state.mode === 'POINT' || state.mode === 'INTERVAL' || state.mode === 'OVERTIME') {
+                    stopTimerLoop();
+                    if (state.mode === 'POINT' || state.mode === 'OVERTIME') state.gameTimeRemaining = state.timer;
+                    state.prevMode = state.mode;
+                    state.mode = 'PAUSED';
+                    playBeep('stop');
+                    speak("Pausa", "Pause");
+                    log(`PAUSA (${state.prevMode})`);
+                    saveTournamentState();
+                    render();
+                }
+                else if (state.mode === 'PAUSED' || state.mode === 'TECH_PAUSED') {
+                    state.mode = state.prevMode || 'IDLE';
+                    playBeep('go');
+                    log(`RIPRESA DA PAUSA (${state.mode})`);
+                    saveTournamentState();
+                    startTimerLoop();
+                    render();
+                }
             }
             function techPause(side) {
                 try {
@@ -2353,7 +2551,7 @@
                         }
                     }
                 }
-                else if (state.mode === 'POINT' || state.mode === 'OVERTIME') {
+                else if (state.mode === 'POINT' || state.mode === 'OVERTIME' || state.mode === 'IDLE' || state.mode === 'PAUSED') {
                     if (action === 'point') {
                         // New Verification Flow
                         pendingPointSide = side;
@@ -2475,8 +2673,11 @@
                 rotateMatch(); // Towel ends the point
             }
             function addPenalty(side, lvl) {
-                // GUARD: Only allow penalties during active play (Point or Overtime)
-                if (state.mode !== 'POINT' && state.mode !== 'OVERTIME') return;
+                // Penalties can only be added during active game play
+                if (state.mode !== 'POINT' && state.mode !== 'OVERTIME') {
+                    log("PENALITA' BLOCCATA: Possibile solo durante il gioco.");
+                    return;
+                }
 
                 saveStateToHistory(); // Hook
                 let teamId = !state.basesSwapped ? (side === 'left' ? 'A' : 'B') : (side === 'left' ? 'B' : 'A');
@@ -2554,10 +2755,14 @@
                 return false;
             }
 
-            function matchOver() {
+            function matchOver(force = false) {
+                // Re-entry Guard (bypassed if force is true)
+                if (state.mode === 'MATCH_OVER' && !force) return;
+
                 state.mode = 'MATCH_OVER';
+                state.showNextMatchOverlay = true; // Auto-show next match UI
                 stopTimerLoop();
-                log("PARTITA TERMINATA");
+                log(force ? "SKIP SLOT ATTIVATO" : "PARTITA TERMINATA");
                 recordRealEndTime();
 
                 // 1. Mark Current Match as Finished and Save
@@ -2568,14 +2773,15 @@
                 // Check Peer Interleaved Match (Active?)
                 const matches = state.tournament.matches;
                 const currentM = matches[currIdx];
+                const currentMTime = (currentM.time || "").trim();
                 let nextSlotIdx = -1;
 
                 // Check Forward Peer
-                if (matches[currIdx + 1] && matches[currIdx + 1].time === currentM.time && (!matches[currIdx + 1].savedState || !matches[currIdx + 1].savedState.finished)) {
+                if (matches[currIdx + 1] && (matches[currIdx + 1].time || "").trim() === currentMTime && currentMTime !== "" && (!matches[currIdx + 1].savedState || !matches[currIdx + 1].savedState.finished)) {
                     nextSlotIdx = currIdx + 1;
                 }
                 // Check Backward Peer
-                else if (matches[currIdx - 1] && matches[currIdx - 1].time === currentM.time && (!matches[currIdx - 1].savedState || !matches[currIdx - 1].savedState.finished)) {
+                else if (matches[currIdx - 1] && (matches[currIdx - 1].time || "").trim() === currentMTime && currentMTime !== "" && (!matches[currIdx - 1].savedState || !matches[currIdx - 1].savedState.finished)) {
                     nextSlotIdx = currIdx - 1;
                 }
 
@@ -2584,26 +2790,35 @@
                     log("MATCH TERMINATO -> PASSAGGIO AL MATCH INTERLACCIATO (PEER)");
                     loadMatch(nextSlotIdx, true);
                 } else {
+                    // Centralized Transition Check
                     const trans = getTransitionInfo();
                     if (trans) {
                         if (trans.type === 'PHASE_CHANGE') {
                             log(`RILEVATA TRANSIZIONE: -> ${trans.phase}`);
                             render();
                             showEndPhaseModal(trans.nextIdx);
-                        } else {
+                        } else if (trans.type === 'TOURNAMENT_END') {
                             log("TUTTI I MATCH COMPLETATI!");
                             render();
                             showEndPhaseModal();
                         }
                     } else {
                         // Standard Next Match (same phase)
-                        log("MATCH TERMINATO -> CARICAMENTO PROSSIMO SLOT");
                         let targetNextIdx = currIdx + 1;
-                        while (targetNextIdx < matches.length && matches[targetNextIdx].time === currentM.time) {
+                        // Skip peers that are already finished
+                        while (targetNextIdx < matches.length && (matches[targetNextIdx].time || "").trim() === currentMTime && currentMTime !== "") {
                             targetNextIdx++;
                         }
-                        loadMatch(targetNextIdx);
-                        startInter();
+
+                        if (targetNextIdx < matches.length) {
+                            log("MATCH TERMINATO -> CARICAMENTO PROSSIMO SLOT");
+                            loadMatch(targetNextIdx);
+                            startInter();
+                        } else {
+                            log("FINE TORNEO (Nessun altro match)");
+                            render();
+                            showEndPhaseModal(); // Tournament end
+                        }
                     }
                 }
                 render();
@@ -2733,33 +2948,47 @@
                 render();
             }
             function parseTournament(text) {
-                let currentPhase = "GIRONI";
-                return text.split('\n').filter(l => l.includes(',')).map(l => {
-                    // Check if line specifies a phase (e.g. "Phase: HH:MM - Team A, Team B")
-                    if (l.includes(':') && l.split(':')[0].trim().length > 5 && !l.split(':')[0].includes('-')) {
-                        // Potentially a phase header like "QUARTI: ..."
-                        // But that's complex to parse without breaking 14:10.
-                    }
+                const cleanName = (n) => n.replace(/Serie\s+[A-Z]\b/gi, '')
+                    .replace(/Girone\s+\w+/gi, '')
+                    .replace(/Ottavi\s*\w*/gi, '')
+                    .replace(/Quarti\s*\w*/gi, '')
+                    .replace(/Semifinali\s*\w*/gi, '')
+                    .replace(/Finale\s*\w*/gi, '')
+                    .replace(/Pool\s*\w*/gi, '')
+                    .replace(/^[-\s\.,]+/, '')
+                    .replace(/[-\s\.,]+$/, '')
+                    .trim();
 
-                    // Simple heuristic: if line contains Quarti/Ottavi etc.
-                    const phaseKeywords = ["Girone", "Ottavi", "Quarti", "Semifinali", "Finale", "Pool"];
-                    for (const kw of phaseKeywords) {
-                        if (l.toLowerCase().includes(kw.toLowerCase())) {
-                            currentPhase = kw.toUpperCase();
-                            break;
-                        }
-                    }
+                let currentPhase = "GIRONI";
+                const knockoutPhases = ["OTTAVI", "QUARTI", "SEMIFINALI", "FINALE"];
+                const result = [];
+
+                text.split('\n').forEach(l => {
+                    const lLower = l.toLowerCase();
+                    if (lLower.includes("ottavi")) currentPhase = "OTTAVI";
+                    else if (lLower.includes("quarti")) currentPhase = "QUARTI";
+                    else if (lLower.includes("semifinali")) currentPhase = "SEMIFINALI";
+                    else if (lLower.includes("finale")) currentPhase = "FINALE";
+                    else if (lLower.includes("girone") || lLower.includes("pool")) currentPhase = "GIRONI";
+
+                    if (!l.includes(',')) return;
+                    if (knockoutPhases.includes(currentPhase)) return;
 
                     const parts = l.split('-');
-                    const time = parts.length > 1 && parts[0].includes(':') ? parts[0].trim() : "00:00";
+                    const timeParts = l.split('-');
+                    const extractedTime = timeParts.length > 1 && timeParts[0].includes(':') ? timeParts[0].trim() : "00:00";
+
                     const teams = (parts.length > 1 ? parts.slice(1).join('-') : l).split(',');
-                    return {
-                        time: time,
-                        teamA: teams[0].trim(),
-                        teamB: teams[1].trim(),
+                    if (teams.length < 2) return;
+
+                    result.push({
+                        time: extractedTime,
+                        teamA: cleanName(teams[0]),
+                        teamB: cleanName(teams[1]),
                         phase: currentPhase
-                    };
+                    });
                 });
+                return result;
             }
             // State Persistence
             function saveMatchState(idx, finished = false, shouldSwapNext = true) {
@@ -2869,18 +3098,43 @@
                 const stats = {};
                 const fastestRounds = [];
 
-                state.tournament.matches.forEach(m => {
+                function generateBracketData(matches) {
+                    if (!matches || matches.length === 0) return null;
+                    const phases = ["OTTAVI", "QUARTI", "SEMIFINALI", "FINALE"];
+                    const bracket = { rounds: [] };
+                    phases.forEach(p => {
+                        const roundMatches = matches.filter(m => (m.phase || "").toUpperCase().includes(p))
+                            .map(m => ({
+                                teamA: m.teamA, teamB: m.teamB,
+                                scoreA: m.savedState ? m.savedState.scoreA : 0,
+                                scoreB: m.savedState ? m.savedState.scoreB : 0,
+                                finished: m.savedState ? m.savedState.finished : false,
+                                winner: (m.savedState && m.savedState.finished) ? (m.savedState.scoreA > m.savedState.scoreB ? 'A' : (m.savedState.scoreB > m.savedState.scoreA ? 'B' : null)) : null
+                            }));
+                        if (roundMatches.length > 0) bracket.rounds.push({ name: p, matches: roundMatches });
+                    });
+                    return bracket.rounds.length > 0 ? bracket : null;
+                }
+
+                if (!state.tournament || !state.tournament.matches) return { standings: [], records: [], averageTimes: [], mercyKillers: [], badBoys: [], matchHistory: [], techUsage: [] };
+
+                state.tournament.matches.forEach((m, mIdx) => {
                     if (!m.savedState) return; // Any saved state counts
 
                     const teams = [
-                        { id: 'A', name: m.teamA, score: m.savedState.scoreA, penalties: m.savedState.penaltiesA, tech: m.savedState.techUsedA },
-                        { id: 'B', name: m.teamB, score: m.savedState.scoreB, penalties: m.savedState.penaltiesB, tech: m.savedState.techUsedB }
+                        { id: 'A', name: m.teamA || `Team A (M${mIdx + 1})`, score: m.savedState.scoreA || 0, penalties: m.savedState.penaltiesA || 0, tech: m.savedState.techUsedA },
+                        { id: 'B', name: m.teamB || `Team B (M${mIdx + 1})`, score: m.savedState.scoreB || 0, penalties: m.savedState.penaltiesB || 0, tech: m.savedState.techUsedB }
                     ];
 
                     teams.forEach((t, i) => {
-                        const name = t.name.trim().toUpperCase();
+                        const name = (t.name || "").trim().toUpperCase() || "UNKNOWN";
                         if (!stats[name]) {
-                            stats[name] = { name: t.name, played: 0, wins: 0, losses: 0, rw: 0, rl: 0, pen: 0, tech: 0, fastest: 9999 };
+                            stats[name] = {
+                                name: t.name || "UNKNOWN",
+                                played: 0, wins: 0, losses: 0, draws: 0,
+                                rw: 0, rl: 0, pen: 0, tech: 0,
+                                fastest: 9999, totalDuration: 0, totalPoints: 0, mercyWins: 0
+                            };
                         }
                         const s = stats[name];
                         const oppIdx = i === 0 ? 1 : 0;
@@ -2889,32 +3143,33 @@
                         s.played++;
                         if (t.score > opp.score) s.wins++;
                         else if (t.score < opp.score) s.losses++;
+                        else s.draws++;
 
-                        s.rw += t.score;
-                        s.rl += opp.score;
-                        s.pen += t.penalties;
+                        s.rw += (t.score || 0);
+                        s.rl += (opp.score || 0);
+                        s.pen += (t.penalties || 0);
                         if (t.tech) s.tech++;
 
                         // Fastest Round Analysis
-                        if (m.savedState.history) {
+                        if (m.savedState.history && Array.isArray(m.savedState.history)) {
                             let lastEventTime = CONFIG.gameTime;
                             m.savedState.history.forEach(ev => {
-                                console.log("History Event:", ev); // DEBUG
                                 if (ev.type === 'POINT' && ev.team === (i === 0 ? 'A' : 'B')) {
-                                    const duration = lastEventTime - ev.time;
-                                    console.log("Point Duration:", duration, "Team:", t.name); // DEBUG
-                                    if (duration < s.fastest) s.fastest = duration;
-                                    s.totalDuration = (s.totalDuration || 0) + duration;
-                                    s.totalPoints = (s.totalPoints || 0) + 1;
-                                    fastestRounds.push({ team: t.name, duration: duration, match: `Match ${m.id || ''}` });
+                                    const duration = (lastEventTime - ev.time);
+                                    if (duration > 0) {
+                                        if (duration < s.fastest) s.fastest = duration;
+                                        s.totalDuration += duration;
+                                        s.totalPoints += 1;
+                                        fastestRounds.push({ team: t.name, duration: duration, match: `M${mIdx + 1}` });
+                                    }
                                 }
                                 if (ev.type === 'POINT' || ev.type === 'START') lastEventTime = ev.time;
                             });
                         }
 
                         // Check for Mercy Win
-                        if ((t.score - opp.score) >= CONFIG.mercyDiff) {
-                            s.mercyWins = (s.mercyWins || 0) + 1;
+                        if ((t.score - opp.score) >= (CONFIG.mercyDiff || 4)) {
+                            s.mercyWins++;
                         }
                     });
                 });
@@ -2924,8 +3179,7 @@
                     .filter(s => s.totalPoints > 0)
                     .map(s => ({
                         team: s.name,
-                        avg: s.totalDuration / s.totalPoints,
-                        points: s.totalPoints
+                        avg: s.totalDuration / s.totalPoints
                     }))
                     .sort((a, b) => a.avg - b.avg);
 
@@ -2939,33 +3193,38 @@
                     .map(s => ({ team: s.name, count: s.pen }))
                     .sort((a, b) => b.count - a.count);
 
-                // Match History (Completed Matches with Scores)
+                // Match History (Completed Matches or Matches with Scores)
                 const matchHistory = state.tournament.matches
-                    .filter(m => m.savedState && (m.savedState.scoreA > 0 || m.savedState.scoreB > 0 || m.savedState.status === 'COMPLETED'))
-                    .map(m => ({
-                        id: m.id,
-                        teamA: m.teamA,
-                        scoreA: m.savedState.scoreA,
-                        teamB: m.teamB,
-                        scoreB: m.savedState.scoreB,
-                        winner: m.savedState.scoreA > m.savedState.scoreB ? 'A' : (m.savedState.scoreB > m.savedState.scoreA ? 'B' : 'DRAW')
+                    .map((m, idx) => ({ m, idx }))
+                    .filter(item => item.m.savedState && (item.m.savedState.scoreA > 0 || item.m.savedState.scoreB > 0 || item.m.savedState.finished))
+                    .map(item => ({
+                        id: item.idx + 1,
+                        teamA: item.m.teamA,
+                        scoreA: item.m.savedState.scoreA,
+                        teamB: item.m.teamB,
+                        scoreB: item.m.savedState.scoreB,
+                        winner: item.m.savedState.scoreA > item.m.savedState.scoreB ? 'A' : (item.m.savedState.scoreB > item.m.savedState.scoreA ? 'B' : 'DRAW')
                     }))
                     .sort((a, b) => b.id - a.id); // Newest first
 
+                const standingsArr = Object.values(stats).sort((a, b) => {
+                    if (b.wins !== a.wins) return b.wins - a.wins;
+                    const diffA = a.rw - a.rl;
+                    const diffB = b.rw - b.rl;
+                    if (diffB !== diffA) return diffB - diffA;
+                    return a.pen - b.pen;
+                });
+
                 return {
-                    standings: Object.values(stats).sort((a, b) => {
-                        if (b.wins !== a.wins) return b.wins - a.wins;
-                        const diffA = a.rw - a.rl;
-                        const diffB = b.rw - b.rl;
-                        if (diffB !== diffA) return diffB - diffA;
-                        return a.pen - b.pen;
-                    }),
-                    records: fastestRounds.sort((a, b) => a.duration - b.duration).slice(0, 5),
+                    standings: standingsArr,
+                    records: [...fastestRounds].sort((a, b) => a.duration - b.duration).slice(0, 5),
+                    slowestRounds: [...fastestRounds].sort((a, b) => b.duration - a.duration).slice(0, 5),
                     averageTimes: averageTimes.slice(0, 5),
                     mercyKillers: mercyKillers.slice(0, 5),
                     badBoys: badBoys.slice(0, 5),
-                    matchHistory: matchHistory.slice(0, 10), // Last 10 matches
-                    techUsage: Object.values(stats).map(s => ({ name: s.name, tech: s.tech }))
+                    matchHistory: matchHistory.slice(0, 10),
+                    techUsage: Object.values(stats).map(s => ({ name: s.name, tech: s.tech })),
+                    bracket: generateBracketData(state.tournament.matches)
                 };
             }
 
@@ -3030,6 +3289,9 @@
                     matchOver();
                     return;
                 }
+
+                // Guard: If state is already ending, don't rotate
+                if (state.mode === 'MATCH_OVER' || state.mode === 'BREAK_MATCH') return;
 
                 // 2. Identify Current Slot Context
                 const currIdx = state.tournament.currentIndex;
@@ -3114,6 +3376,9 @@
                         state.currentMatchEvents = [];
                     }
 
+                    // Ensure basic match state is saved immediately so it appears (as 0-0) in stats
+                    saveMatchState(i, false, false);
+
                     speak("Caricato", "Loaded");
                     log(`CARICATO MATCH ${i + 1}: ${m.teamA} vs ${m.teamB}`);
 
@@ -3192,23 +3457,17 @@
                 const lT = state.basesSwapped ? state.teams.B : state.teams.A;
                 const rT = state.basesSwapped ? state.teams.A : state.teams.B;
 
-                // Truncate and Styling (Local Preview)
-                const limit = 11;
-                const dot = '.';
-                const lName = lT.name.length > limit ? lT.name.substring(0, limit) + dot : lT.name;
-                const rName = rT.name.length > limit ? rT.name.substring(0, limit) + dot : rT.name;
-
                 const nameL = document.getElementById('name-left');
                 const nameR = document.getElementById('name-right');
 
-                nameL.innerText = lName;
-                nameR.innerText = rName;
+                nameL.innerText = lT.name;
+                nameR.innerText = rT.name;
 
-                // Set fixed character size for local preview
+                // Styling (Local Preview)
                 [nameL, nameR].forEach(n => {
                     n.style.fontFamily = "'Oswald', sans-serif";
                     n.style.fontWeight = '700';
-                    n.style.fontSize = '50px'; // Reduced from 70px to fit better in panel
+                    n.style.fontSize = '45px'; // Slightly reduced base size for wrapping
                     n.style.transform = 'scale(1.2, 1.0)';
                 });
 
@@ -3219,6 +3478,9 @@
                 document.getElementById('score-right').innerText = rT.score;
                 document.getElementById('penalties-right').innerText = "Pen: " + rT.penalties;
                 document.getElementById('panel-right').style.borderTop = `4px solid ${rT.color}`;
+
+                // PENALTY FLASH LOGIC
+                updatePenaltyFlashes();
                 // Tech Pause UI Control
                 document.getElementById('tech-used-left').style.display = lT.techUsed ? 'block' : 'none';
                 document.getElementById('tech-used-right').style.display = rT.techUsed ? 'block' : 'none';
@@ -3282,18 +3544,9 @@
                 if (btnStartInter) btnStartInter.disabled = isInterval;
 
                 // PENALTY BUTTONS LOGIC
-                // Disable penalty buttons during Interval/Breaks (only active during Game/Overtime)
                 const penDisabled = !(state.mode === 'POINT' || state.mode === 'OVERTIME');
-                const penBtns = document.querySelectorAll('.penalty-btn, .penalty-row button'); // Assuming class or selecting by ID
-                // Since we didn't use convenient classes for all, let's select by ID pattern or just specific IDs if known.
-                // We have: btn-pen-left, btn-major-left, btn-gross-left, and same for right.
-                const penIds = [
-                    'btn-pen-left', 'btn-major-left', 'btn-gross-left',
-                    'btn-pen-right', 'btn-major-right', 'btn-gross-right'
-                ];
-                penIds.forEach(id => {
-                    const el = document.getElementById(id);
-                    if (el) el.disabled = penDisabled;
+                document.querySelectorAll('.penalty-btn').forEach(btn => {
+                    btn.disabled = penDisabled;
                 });
 
                 document.getElementById('tourney-status').style.display = state.tournament.active ? "inline" : "none";
@@ -3362,10 +3615,14 @@
                 const d = document.createElement('div'); d.className = 'log-entry'; d.innerHTML = `<span class="log-time">${new Date().toLocaleTimeString()}</span> <span class="log-msg">${msg}</span>`;
                 document.getElementById('event-log').prepend(d);
             }
-            function formatTimeSeconds(s) {
-                const sec = Math.ceil(s); // Ceil for display (9.1s -> 10s)
-                return `${Math.floor(sec / 60).toString().padStart(2, '0')}:${(sec % 60).toString().padStart(2, '0')} `;
+            function formatTimeSeconds(seconds) {
+                const minutes = Math.floor(seconds / 60);
+                const remainingSeconds = Math.floor(seconds % 60);
+                const milliseconds = Math.floor((seconds % 1) * 100);
+                return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
             }
+
+
             function formatTimeMs(s) {
                 const min = Math.floor(s / 60);
                 const sec = Math.floor(s % 60);
@@ -3646,6 +3903,17 @@
                 speak("Dieci secondi", "Ten seconds");
             });
 
+            document.getElementById('opt-confirm-undo').addEventListener('change', (e) => {
+                state.settings.confirmUndo = e.target.checked;
+                saveTournamentState();
+            });
+
+            document.getElementById('opt-outdoor-mode').addEventListener('change', (e) => {
+                state.outdoorMode = e.target.checked;
+                broadcastState();
+            });
+
+
             document.getElementById('btn-start-inter').addEventListener('click', startInter); document.getElementById('btn-start-point').addEventListener('click', startPoint);
             document.getElementById('btn-pause').addEventListener('click', pause);
             document.getElementById('btn-overtime').addEventListener('click', () => startOvertime());
@@ -3677,8 +3945,10 @@
                 document.getElementById('log-password-input').value = state.settings.logPassword || "";
                 document.getElementById('opt-confirm-towel').checked = state.settings.confirmTowel;
                 document.getElementById('opt-confirm-skip').checked = state.settings.confirmSkipSlot !== false; // Default true
-                document.getElementById('opt-confirm-no-point').checked = state.settings.confirmNoPoint !== false;
-                document.getElementById('opt-confirm-undo').checked = state.settings.confirmUndo !== false; // NEW
+                document.getElementById('opt-confirm-no-point').checked = state.settings.confirmNoPoint;
+                document.getElementById('opt-confirm-undo').checked = state.settings.confirmUndo;
+                document.getElementById('opt-outdoor-mode').checked = state.outdoorMode; // NEW
+                document.getElementById('mercy-diff-input').value = state.settings.mercyDiff;
                 document.getElementById('match-id-input').value = state.settings.matchId || "";
 
                 // Populate Styling Inputs
@@ -3780,8 +4050,8 @@
                     state.timer = 0;
                     updateTimerDisplay();
                 } else {
-                    // In Game
-                    matchOver();
+                    // In Game or Match Over (Force Skip)
+                    matchOver(true);
                 }
             });
 
@@ -4137,20 +4407,28 @@
                 let targetNextIdx = currIdx + 1;
 
                 // Skip Peer Matches (matches with same time)
-                while (targetNextIdx < matches.length && matches[targetNextIdx].time === currentM.time) {
+                // We use trim() and skip empty times to be robust
+                const currentMTime = (currentM.time || "").trim();
+                while (targetNextIdx < matches.length && (matches[targetNextIdx].time || "").trim() === currentMTime && currentMTime !== "") {
                     targetNextIdx++;
                 }
 
                 if (targetNextIdx < matches.length) {
                     const nextM = matches[targetNextIdx];
-                    const nextPhase = nextM.phase || "GIRONI";
-                    const currPhase = currentM.phase || "GIRONI";
+                    const nextPhase = (nextM.phase || "GIRONI").trim().toUpperCase();
+                    const currPhase = (currentM.phase || "GIRONI").trim().toUpperCase();
 
-                    const isKnockout = ["OTTAVI", "QUARTI", "SEMIFINALI", "FINALE"].includes(nextPhase.toUpperCase());
-                    const wasGirone = currPhase.toUpperCase().includes("GIRONE") || currPhase.toUpperCase() === "GIRONI" || currPhase.toUpperCase().includes("POOL");
+                    // If phase name literally changed (aside from whitespace/case)
+                    if (nextPhase !== currPhase) {
+                        // Check if it's a significant transition (e.g. into Knockout)
+                        const isKnockout = ["OTTAVI", "QUARTI", "SEMIFINALI", "FINALE"].some(p => nextPhase.includes(p));
+                        const wasGirone = currPhase.includes("GIRONE") || currPhase === "GIRONI" || currPhase.includes("POOL");
 
-                    if (wasGirone && isKnockout) {
-                        return { type: 'PHASE_CHANGE', nextIdx: targetNextIdx, phase: nextPhase };
+                        // We trigger the modal if we enter Knockout from Groups, 
+                        // or if we switch between different knockout phases (optional, but safer)
+                        if ((wasGirone && isKnockout) || (isKnockout && nextPhase !== currPhase)) {
+                            return { type: 'PHASE_CHANGE', nextIdx: targetNextIdx, phase: nextM.phase || "GIRONI" };
+                        }
                     }
                     return null;
                 } else {
@@ -4630,6 +4908,30 @@
                 state.showNextMatchOverlay = !state.showNextMatchOverlay;
                 broadcastState();
             }
+
+            // --- Screen Wake Lock ---
+            let wakeLock = null;
+            async function requestWakeLock() {
+                try {
+                    if ('wakeLock' in navigator) {
+                        wakeLock = await navigator.wakeLock.request('screen');
+                        console.log("Screen Wake Lock acquisito.");
+                        wakeLock.addEventListener('release', () => {
+                            console.log("Screen Wake Lock rilasciato.");
+                        });
+                    }
+                } catch (err) {
+                    console.error(`${err.name}, ${err.message}`);
+                }
+            }
+
+            document.addEventListener('visibilitychange', async () => {
+                if (wakeLock !== null && document.visibilityState === 'visible') {
+                    await requestWakeLock();
+                }
+            });
+
+            window.addEventListener('load', requestWakeLock);
 
 
         </script>

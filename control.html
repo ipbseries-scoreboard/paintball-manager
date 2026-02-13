@@ -524,6 +524,54 @@
             display: none;
         }
 
+        .penalty-flash {
+            display: none;
+            padding: 8px 15px;
+            border-radius: 6px;
+            font-weight: 900;
+            font-size: 1.8rem;
+            text-align: center;
+            margin: 5px 0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .penalty-flash.minor {
+            background: #facc15;
+            color: #000000;
+            animation: pulse-yellow 0.5s infinite alternate;
+        }
+
+        .penalty-flash.major {
+            background: #ef4444;
+            color: white;
+            animation: pulse-red 0.5s infinite alternate;
+        }
+
+        @keyframes pulse-red {
+            from {
+                background-color: #ef4444;
+                box-shadow: 0 0 10px #ef4444;
+            }
+
+            to {
+                background-color: #b91c1c;
+                box-shadow: 0 0 25px #ef4444;
+            }
+        }
+
+        @keyframes pulse-yellow {
+            from {
+                background-color: #facc15;
+                box-shadow: 0 0 10px #facc15;
+            }
+
+            to {
+                background-color: #ca8a04;
+                box-shadow: 0 0 25px #facc15;
+            }
+        }
+
         /* Connection Status */
         #connection-status {
             margin-left: auto;
@@ -1100,6 +1148,7 @@
                             class="score-btn" onclick="adjustScore('left', -1)">▼</button></div>
                     <div class="score-val" id="score-left">0</div>
                 </div>
+                <div id="pen-flash-left" class="penalty-flash"></div>
                 <div class="penalty-display" id="penalties-left" onclick="editPenalty('left')">Penalità: 0</div>
                 <div class="penalty-box">
                     <button class="btn btn-warning penalty-btn" onclick="addPenalty('left', 1)">1x1</button>
@@ -1172,6 +1221,7 @@
                             onclick="adjustScore('right', -1)">▼</button></div>
                     <div class="score-val" id="score-right">0</div>
                 </div>
+                <div id="pen-flash-right" class="penalty-flash"></div>
                 <div class="penalty-display" id="penalties-right" onclick="editPenalty('right')">Penalità: 0</div>
                 <div class="penalty-box">
                     <button class="btn btn-warning penalty-btn" onclick="addPenalty('right', 1)">1x1</button>
@@ -1325,19 +1375,28 @@
                         }
                     });
 
+                    let currentPhaseTracker = "GIRONI"; // Track state across lines
                     extractedText.forEach(lineRaw => {
+                        // Check for phase change keywords
+                        const phaseKeywords = ["Girone", "Ottavi", "Quarti", "Semifinali", "Finale", "Pool"];
+                        for (const kw of phaseKeywords) {
+                            if (lineRaw.toLowerCase().includes(kw.toLowerCase())) {
+                                currentPhaseTracker = kw.toUpperCase();
+                                break;
+                            }
+                        }
+
                         // Split by our custom column separator if it exists
                         const possibleMatches = lineRaw.split('|||');
 
                         possibleMatches.forEach((line, colIdx) => {
+                            // Skip knockout phases
+                            if (["OTTAVI", "QUARTI", "SEMIFINALI", "FINALE"].includes(currentPhaseTracker)) return;
+
                             // Find all occurrences of the score-like pattern to identify the valid one
                             const found = [...line.matchAll(/(\d+\s*:\s*\d+)/g)];
 
                             if (found.length > 0) {
-                                // Strategy: If multiple scores found (unlikely in a split column, but possible),
-                                // pick the LAST one as the score, assuming the first might be Time.
-                                // BUT, if we split by columns, "Time" might only be in the LEFT column.
-
                                 let scoreMatch = found[found.length - 1]; // Default to last found
 
                                 // Validation: Ignore "Break" lines
@@ -1349,25 +1408,38 @@
                                 let rawA = line.substring(0, splitIndex);
                                 let rawB = line.substring(splitIndex + matchStr.length);
 
+                                // Generic Cleaning Helper
+                                const cleanTeam = (str) => {
+                                    return str.replace(/^\s*\d{1,2}:\d{2}\s*-?/, '') // Remove Time
+                                        .replace(/Serie\s+[A-Z]\b/gi, '')
+                                        .replace(/Girone\s+\w+/gi, '')
+                                        .replace(/mercy\s+\d+/gi, '')
+                                        .replace(/Ottavi\s*\w*/gi, '')
+                                        .replace(/Quarti\s*\w*/gi, '')
+                                        .replace(/Semifinali\s*\w*/gi, '')
+                                        .replace(/Finale\s*\w*/gi, '')
+                                        .replace(/Pool\s*\w*/gi, '')
+                                        .replace(/^[-\s\.,]+/, '') // Leading artifacts
+                                        .replace(/[-\s\.,]+$/, '') // Trailing artifacts
+                                        .trim();
+                                };
+
                                 // Clean Team Names
-                                let time = rawA.match(/^\s*(\d{1,2}:\d{2})/);
-                                let matchTime = time ? time[1] : (matches.length > 0 ? matches[matches.length - 1].time : "00:00"); // Fallback to prev or default
+                                let timeMatch = rawA.match(/^\s*(\d{1,2}:\d{2})/);
+                                let matchTime = timeMatch ? timeMatch[1] : (matches.length > 0 ? matches[matches.length - 1].time : "00:00");
 
-                                rawA = rawA.replace(/^\s*\d{1,2}:\d{2}\s*-?/, '') // Remove Time at start
-                                    .replace(/^\s*Girone\s+\w+\s*-?/, '') // Remove "Girone X"
-                                    .replace(/Girone\s+\w+/gi, '')
-                                    .replace(/mercy\s+\d+/gi, '')
-                                    .replace(/Quarti di finale\s*\w*/gi, '')
-                                    .replace(/Semifinali\s*\w*/gi, '')
-                                    .replace(/Finali\s*.*?Posto/gi, '')
-                                    .replace(/^[-\s]+/, '')
-                                    .trim();
-
-                                rawB = rawB.trim();
+                                let teamA = cleanTeam(rawA);
+                                let teamB = cleanTeam(rawB);
 
                                 // Final Check
-                                if (rawA.length > 1 && rawB.length > 1 && !/^\d{1,2}:\d{2}$/.test(rawA)) {
-                                    matches.push({ teamA: rawA, teamB: rawB, time: matchTime, pit: (colIdx === 0 ? 'A' : 'B') });
+                                if (teamA.length > 1 && teamB.length > 1 && !/^\d{1,2}:\d{2}$/.test(teamA)) {
+                                    matches.push({
+                                        teamA: teamA,
+                                        teamB: teamB,
+                                        time: matchTime,
+                                        pit: (colIdx === 0 ? 'A' : 'B'),
+                                        phase: currentPhaseTracker
+                                    });
                                 }
                             }
                         });
@@ -1425,12 +1497,12 @@
                 // Persistent ID logic
                 let targetId = state.settings.matchId;
 
-                if (!targetId || targetId === "undefined") {
-                    // Generate random if none exists or if it's the broken "undefined" string
-                    targetId = Math.floor(1000 + Math.random() * 9000).toString();
+                if (!targetId || targetId === "undefined" || !targetId.startsWith("IPBA-")) {
+                    // Generate a unique ID but we'll show only numbers to user
+                    const randomVal = Math.floor(100000 + Math.random() * 899999).toString();
+                    targetId = "IPBA-" + randomVal;
                     state.settings.matchId = targetId;
                     localStorage.setItem('pm_settings', JSON.stringify(state.settings));
-                    log("Generato nuovo Match ID: " + targetId);
                 }
 
                 peer = new Peer(targetId);
@@ -1441,9 +1513,11 @@
                         document.getElementById('my-peer-id').innerText = "ERRORE ID";
                         return;
                     }
-                    document.getElementById('my-peer-id').innerText = id;
+                    // Show only the numeric part to the user
+                    const displayId = id.replace("IPBA-", "");
+                    document.getElementById('my-peer-id').innerText = displayId;
                     document.getElementById('my-peer-id').style.color = 'var(--success-color)';
-                    log("Rete pronta. ID: " + id);
+                    log("Rete pronta. ID: " + displayId);
                 });
 
                 peer.on('connection', (conn) => {
@@ -1841,7 +1915,34 @@
                 // Color logic (Standard for all modes)
                 if (state.timer <= 10 && state.mode !== 'IDLE') mainDisp.style.color = '#ef4444';
                 else mainDisp.style.color = 'var(--text-color)';
+
+                // Ensure penalty flashes update even if render() isn't called
+                updatePenaltyFlashes();
+
                 broadcastState(); // Sync on every tick/update
+            }
+
+            function updatePenaltyFlashes() {
+                const flashL = document.getElementById('pen-flash-left');
+                const flashR = document.getElementById('pen-flash-right');
+                if (!flashL || !flashR) return;
+
+                const now = Date.now();
+                const lT = state.basesSwapped ? state.teams.B : state.teams.A;
+                const rT = state.basesSwapped ? state.teams.A : state.teams.B;
+
+                const check = (el, team) => {
+                    if (team.lastPenalty && (now - team.lastPenalty.timestamp < 5000)) {
+                        el.style.display = 'block';
+                        const type = (team.lastPenalty.type || 'MINOR');
+                        el.innerText = type + " PENALTY";
+                        el.className = 'penalty-flash ' + type.toLowerCase();
+                    } else {
+                        el.style.display = 'none';
+                    }
+                };
+                check(flashL, lT);
+                check(flashR, rT);
             }
 
             function tick() {
@@ -2138,7 +2239,10 @@
             }
             function addPenalty(side, lvl) {
                 // GUARD: Only allow penalties during active play (Point or Overtime)
-                if (state.mode !== 'POINT' && state.mode !== 'OVERTIME') return;
+                if (state.mode !== 'POINT' && state.mode !== 'OVERTIME') {
+                    log("PENALITA' BLOCCATA: Possibile solo durante il gioco.");
+                    return;
+                }
 
                 saveStateToHistory(); // Hook
                 let teamId = !state.basesSwapped ? (side === 'left' ? 'A' : 'B') : (side === 'left' ? 'B' : 'A');
@@ -2354,16 +2458,47 @@
                 render();
             }
             function parseTournament(text) {
-                return text.split('\n').filter(l => l.includes(',')).map(l => {
+                const cleanName = (n) => n.replace(/Serie\s+[A-Z]\b/gi, '')
+                    .replace(/Girone\s+\w+/gi, '')
+                    .replace(/Ottavi\s*\w*/gi, '')
+                    .replace(/Quarti\s*\w*/gi, '')
+                    .replace(/Semifinali\s*\w*/gi, '')
+                    .replace(/Finale\s*\w*/gi, '')
+                    .replace(/Pool\s*\w*/gi, '')
+                    .replace(/^[-\s\.,]+/, '')
+                    .replace(/[-\s\.,]+$/, '')
+                    .trim();
+
+                let currentPhase = "GIRONI";
+                const knockoutPhases = ["OTTAVI", "QUARTI", "SEMIFINALI", "FINALE"];
+                const result = [];
+
+                text.split('\n').forEach(l => {
+                    const lLower = l.toLowerCase();
+                    if (lLower.includes("ottavi")) currentPhase = "OTTAVI";
+                    else if (lLower.includes("quarti")) currentPhase = "QUARTI";
+                    else if (lLower.includes("semifinali")) currentPhase = "SEMIFINALI";
+                    else if (lLower.includes("finale")) currentPhase = "FINALE";
+                    else if (lLower.includes("girone") || lLower.includes("pool")) currentPhase = "GIRONI";
+
+                    if (!l.includes(',')) return;
+                    if (knockoutPhases.includes(currentPhase)) return;
+
                     const parts = l.split('-');
-                    const time = parts.length > 1 && parts[0].includes(':') ? parts[0].trim() : "00:00";
-                    const teams = (parts.length > 1 ? parts.slice(1).join('-') : l).split(','); // Handle "14:10 - A, B"
-                    return {
-                        time: time,
-                        teamA: teams[0].trim(),
-                        teamB: teams[1].trim()
-                    };
+                    const timeParts = l.split('-');
+                    const extractedTime = timeParts.length > 1 && timeParts[0].includes(':') ? timeParts[0].trim() : "00:00";
+
+                    const teams = (parts.length > 1 ? parts.slice(1).join('-') : l).split(',');
+                    if (teams.length < 2) return;
+
+                    result.push({
+                        time: extractedTime,
+                        teamA: cleanName(teams[0]),
+                        teamB: cleanName(teams[1]),
+                        phase: currentPhase
+                    });
                 });
+                return result;
             }
             // State Persistence
             function saveMatchState(idx, finished = false) {
@@ -2571,6 +2706,9 @@
                 const lT = state.basesSwapped ? state.teams.B : state.teams.A; const rT = state.basesSwapped ? state.teams.A : state.teams.B;
                 document.getElementById('name-left').innerText = lT.name; document.getElementById('score-left').innerText = lT.score; document.getElementById('penalties-left').innerText = "Pen: " + lT.penalties; document.getElementById('panel-left').style.borderTop = `4px solid ${lT.color}`;
                 document.getElementById('name-right').innerText = rT.name; document.getElementById('score-right').innerText = rT.score; document.getElementById('penalties-right').innerText = "Pen: " + rT.penalties; document.getElementById('panel-right').style.borderTop = `4px solid ${rT.color}`;
+
+                // PENALTY FLASH LOGIC
+                updatePenaltyFlashes();
                 // Tech Pause UI Control
                 document.getElementById('tech-used-left').style.display = lT.techUsed ? 'block' : 'none';
                 document.getElementById('tech-used-right').style.display = rT.techUsed ? 'block' : 'none';
@@ -2615,18 +2753,9 @@
                 }
 
                 // PENALTY BUTTONS LOGIC
-                // Disable penalty buttons during Interval/Breaks (only active during Game/Overtime)
                 const penDisabled = !(state.mode === 'POINT' || state.mode === 'OVERTIME');
-                const penBtns = document.querySelectorAll('.penalty-btn, .penalty-row button'); // Assuming class or selecting by ID
-                // Since we didn't use convenient classes for all, let's select by ID pattern or just specific IDs if known.
-                // We have: btn-pen-left, btn-major-left, btn-gross-left, and same for right.
-                const penIds = [
-                    'btn-pen-left', 'btn-major-left', 'btn-gross-left',
-                    'btn-pen-right', 'btn-major-right', 'btn-gross-right'
-                ];
-                penIds.forEach(id => {
-                    const el = document.getElementById(id);
-                    if (el) el.disabled = penDisabled;
+                document.querySelectorAll('.penalty-btn').forEach(btn => {
+                    btn.disabled = penDisabled;
                 });
 
                 document.getElementById('tourney-status').style.display = state.tournament.active ? "inline" : "none";

@@ -191,7 +191,8 @@
             align-items: center;
             justify-content: center;
             height: 100%;
-            gap: 30px;
+            gap: 15px;
+            /* Reduced gap to pull everything up */
         }
 
         /* PENALTY BOXES */
@@ -200,7 +201,8 @@
             width: 100%;
             justify-content: space-between;
             gap: 20px;
-            margin-bottom: 20px;
+            margin-bottom: 0;
+            /* Removed extra margin */
         }
 
         .penalty-box {
@@ -250,20 +252,24 @@
         }
 
         .timer-display {
-            font-size: 200px;
-            /* Fixed Giant Timer - slightly reduced */
+            font-size: 140px;
+            /* Reduced from 200px to fit 00:00.00 */
             font-weight: bold;
             font-variant-numeric: tabular-nums;
             background: rgba(0, 0, 0, 0.6);
-            padding: 30px 40px;
+            padding: 30px 20px;
+            /* Adjusted padding */
             border-radius: 40px;
             border: 6px solid white;
             text-shadow: 6px 6px 12px rgba(0, 0, 0, 0.6);
-            line-height: 0.9;
+            line-height: 1.0;
             margin: 0;
             width: 100%;
             text-align: center;
             box-sizing: border-box;
+            overflow: hidden;
+            /* Safety */
+            white-space: nowrap;
         }
 
         .state-indicator {
@@ -329,7 +335,7 @@
         /* VISUAL PENALTY POPUPS */
         .penalty-label {
             position: absolute;
-            top: 180px;
+            top: 200px;
             /* Positioned under Team Name */
             left: 50%;
             transform: translateX(-50%);
@@ -598,6 +604,87 @@
             display: block;
         }
 
+        /* OUTDOOR MODE (HIGH VISIBILITY) */
+        body.outdoor-mode {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+        }
+
+        body.outdoor-mode .team-panel,
+        body.outdoor-mode .penalty-box,
+        body.outdoor-mode #top-bar,
+        body.outdoor-mode #next-match-footer {
+            background: #f1f5f9 !important;
+            border-color: #000000 !important;
+            color: #000000 !important;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1) !important;
+        }
+
+        body.outdoor-mode .team-name,
+        body.outdoor-mode .team-score,
+        body.outdoor-mode .timer-display,
+        body.outdoor-mode .pen-active,
+        body.outdoor-mode .pen-total,
+        body.outdoor-mode .state-indicator,
+        body.outdoor-mode #top-bar,
+        body.outdoor-mode #next-match-layer,
+        body.outdoor-mode .nm-header,
+        body.outdoor-mode .nm-vs,
+        body.outdoor-mode .nm-timer,
+        body.outdoor-mode #next-match-footer {
+            color: #000000 !important;
+            text-shadow: none !important;
+        }
+
+        body.outdoor-mode .timer-display,
+        body.outdoor-mode .pen-active,
+        body.outdoor-mode .state-indicator,
+        body.outdoor-mode .nm-team {
+            background: #ffffff !important;
+            border-color: #000000 !important;
+        }
+
+        body.outdoor-mode #next-match-layer {
+            background: #ffffff !important;
+        }
+
+        body.outdoor-mode .nm-team {
+            border-color: #000000 !important;
+            background: #f8fafc !important;
+        }
+
+        body.outdoor-mode .tech-indicator {
+            background: #f1f5f9 !important;
+            border-color: #cbd5e1 !important;
+        }
+
+        body.outdoor-mode .tech-indicator.active {
+            background: #dcfce7 !important;
+            border-color: #22c55e !important;
+        }
+
+        body.outdoor-mode .penalty-label {
+            background: #ffffff !important;
+            color: #000000 !important;
+            border-width: 10px !important;
+        }
+
+        body.outdoor-mode .state-active {
+            color: #166534 !important;
+            border-color: #166534 !important;
+        }
+
+        body.outdoor-mode .state-paused {
+            color: #9a3412 !important;
+            border-color: #9a3412 !important;
+        }
+
+        body.outdoor-mode .state-interval {
+            color: #1e40af !important;
+            border-color: #1e40af !important;
+        }
+
+
         /* STATS OVERLAY */
         #stats-overlay {
             position: absolute;
@@ -820,6 +907,26 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
+        #stats-overlay,
+        #bracket-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 1700px;
+            height: 950px;
+            background: rgba(15, 23, 42, 0.98);
+            border: 4px solid var(--accent-color);
+            border-radius: 40px;
+            z-index: 3000;
+            padding: 50px;
+            box-shadow: 0 0 100px rgba(0, 0, 0, 0.8);
+            display: none;
+            flex-direction: column;
+            animation: fadeIn 0.4s ease-out;
+            backdrop-filter: blur(20px);
+        }
+
         .schedule-scroll-area {
             flex: 1;
             overflow-y: auto;
@@ -917,6 +1024,32 @@
             transform: scale(1.1);
         }
 
+        #btn-open-bracket {
+            position: absolute;
+            bottom: 30px;
+            right: 330px;
+            width: 80px;
+            height: 80px;
+            background: rgba(139, 92, 246, 0.8);
+            /* Purple */
+            border: none;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 2500;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            transition: all 0.2s;
+            font-size: 40px;
+            color: white;
+        }
+
+        #btn-open-bracket:hover {
+            background: rgba(139, 92, 246, 1);
+            transform: scale(1.1);
+        }
+
         /* SPOTLIGHT & LAYOUT ELEMENTS */
         #btn-open-layout {
             position: absolute;
@@ -968,7 +1101,7 @@
             border: 3px solid rgba(255, 215, 0, 0.5);
             padding: 30px 60px;
             border-radius: 30px;
-            margin-top: 25px;
+            margin-top: 15px;
             display: none;
             flex-direction: column;
             align-items: center;
@@ -1036,13 +1169,39 @@
         <p style="text-align: center; color: #94a3b8;">Inserisci il Match ID dalla finestra di Regia</p><input
             type="text" id="match-id" placeholder="es. 1234" /><button id="connect-btn">CONNETTI</button>
         <div style="text-align: center; margin-top: 10px;">
-            <button class="btn-sm" onclick="document.body.className='chroma-green'">Verde</button>
-            <button class="btn-sm" onclick="document.body.className='chroma-blue'">Blu</button>
-            <button class="btn-sm" onclick="document.body.className='bg-black'">Nero</button>
-            <button class="btn-sm" onclick="document.body.className='bg-white'">Bianco</button>
-            <button class="btn-sm" onclick="document.body.className=''">Trasp</button>
+            <button class="btn-sm" onclick="setBg('chroma-green')">Verde</button>
+            <button class="btn-sm" onclick="setBg('chroma-blue')">Blu</button>
+            <button class="btn-sm" onclick="setBg('bg-black')">Nero</button>
+            <button class="btn-sm" onclick="setBg('bg-white')">Bianco</button>
+            <button class="btn-sm" onclick="setBg('')">Trasp</button>
+            <button class="btn-sm" style="background: #fbbf24; color: #000; font-weight: 900; border: 2px solid white;"
+                onclick="toggleOutdoorManual()">☀️ Outdoor</button>
         </div>
     </div>
+
+    <script>
+        let localOutdoorMode = false; // Flag for manual override
+
+        function setBg(cls) {
+            document.body.className = cls;
+            updateOutdoorClass(null); // Just refresh classes
+        }
+
+        function toggleOutdoorManual() {
+            localOutdoorMode = !localOutdoorMode;
+            updateOutdoorClass(null);
+        }
+
+        function updateOutdoorClass(remoteMode) {
+            // Priority: if either remote OR local is ON, show it
+            const shouldBeOutdoor = (remoteMode === true) || localOutdoorMode;
+            if (shouldBeOutdoor) {
+                document.body.classList.add('outdoor-mode');
+            } else {
+                document.body.classList.remove('outdoor-mode');
+            }
+        }
+    </script>
 
     <!-- Scaler Wrapper -->
     <div id="scaler">
@@ -1137,6 +1296,7 @@
         </div>
 
         <button id="btn-open-stats" onclick="toggleStats()">📊</button>
+        <button id="btn-open-bracket" onclick="toggleBracket()">🏆</button>
         <button id="btn-open-schedule" onclick="toggleSchedule()">🗓️</button>
         <button id="btn-open-layout" title="Visualizza Layout Campo">📐</button>
 
@@ -1203,6 +1363,18 @@
             </div>
         </div>
 
+        <!-- Bracket Overlay -->
+        <div id="bracket-overlay">
+            <button id="close-bracket-btn" onclick="toggleBracket()"
+                style="position: absolute; top: 40px; right: 40px; background: var(--danger-color); color: white; border: none; padding: 15px 40px; font-size: 30px; font-weight: bold; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); text-transform: uppercase;">Chiudi
+                X</button>
+            <div class="stats-title">TABELLONE FINALE</div>
+            <div id="bracket-container"
+                style="flex: 1; display: flex; justify-content: space-around; align-items: center; padding: 20px; overflow-x: auto;">
+                <!-- Bracket content will be rendered here -->
+            </div>
+        </div>
+
         <!-- PERSISTENT FOOTER -->
         <div id="next-match-footer">NEXT: <span id="footer-match-info">-- vs --</span></div>
     </div>
@@ -1223,7 +1395,7 @@
 
             const scaleW = winW / targetWidth;
             const scaleH = winH / targetHeight;
-            const scale = Math.min(scaleW, scaleH); // Fit within window
+            const scale = Math.min(scaleW, scaleH) * 0.9; // Adjusted to 0.9 (90%) as requested
 
             scaler.style.transform = `scale(${scale})`;
         }
@@ -1231,13 +1403,19 @@
         window.addEventListener('resize', scaleBoard);
         scaleBoard(); // Initial scale
 
-        // Auto-connect if ID is in URL
+        // Auto-connect if ID is in URL or pre-fill last ID
         window.addEventListener('DOMContentLoaded', () => {
             const params = new URLSearchParams(window.location.search);
             const id = params.get('id');
+            const lastId = localStorage.getItem('last_match_id');
+
             if (id) {
                 input.value = id;
                 startClient(id);
+            } else if (lastId) {
+                input.value = lastId;
+                // We don't auto-connect with lastId to avoid errors if the ID is expired, 
+                // just pre-fill for user convenience.
             }
         });
 
@@ -1248,6 +1426,11 @@
         });
 
         function startClient(hostId) {
+            // Transparently add prefix if user typed only numbers
+            if (hostId && !hostId.startsWith("IPBA-")) {
+                hostId = "IPBA-" + hostId;
+            }
+
             const peer = new Peer();
 
             peer.on('open', (myId) => {
@@ -1256,6 +1439,10 @@
 
                 conn.on('open', () => {
                     console.log("Connected to " + hostId);
+                    // Save for faster login next time
+                    const numericId = hostId.replace('IPBA-', '');
+                    localStorage.setItem('last_match_id', numericId);
+
                     ui.style.display = 'none';
                     board.style.display = 'grid'; // Grid inside the scaler
                     scaleBoard(); // Re-calc just in case
@@ -1283,9 +1470,11 @@
         let currentData = null;
 
         function updateBoard(d) {
+            console.log("DEBUG: Received board update data:", d);
             currentData = d;
             renderBoardState(d);
             if (showSchedule) renderScheduleTable();
+            if (showBracket && d.standingsData && d.standingsData.bracket) renderBracket(d.standingsData.bracket);
         }
 
         setInterval(() => {
@@ -1303,6 +1492,67 @@
             const overlay = document.getElementById('schedule-overlay');
             overlay.style.display = showSchedule ? 'flex' : 'none';
             if (showSchedule) renderScheduleTable();
+        }
+
+        let showBracket = false;
+        function toggleBracket() {
+            showBracket = !showBracket;
+            document.getElementById('bracket-overlay').style.display = showBracket ? 'flex' : 'none';
+            if (showBracket && currentData && currentData.standingsData) renderBracket(currentData.standingsData.bracket);
+        }
+
+        function renderBracket(data) {
+            const container = document.getElementById('bracket-container');
+            container.innerHTML = '';
+            if (!data || !data.rounds || data.rounds.length === 0) {
+                container.innerHTML = '<div style="font-size: 40px; color: #64748b; font-style: italic;">Nessun dato bracket disponibile.</div>';
+                return;
+            }
+
+            data.rounds.forEach(round => {
+                const roundCol = document.createElement('div');
+                roundCol.style.display = 'flex';
+                roundCol.style.flexDirection = 'column';
+                roundCol.style.justifyContent = 'space-around';
+                roundCol.style.height = '100%';
+
+                const roundTitle = document.createElement('div');
+                roundTitle.innerText = round.name;
+                roundTitle.style.textAlign = 'center';
+                roundTitle.style.fontWeight = 'bold';
+                roundTitle.style.color = 'var(--accent-color)';
+                roundTitle.style.marginBottom = '20px';
+                roundTitle.style.fontSize = '30px';
+                roundTitle.style.textTransform = 'uppercase';
+                roundCol.appendChild(roundTitle);
+
+                round.matches.forEach(m => {
+                    const matchCard = document.createElement('div');
+                    matchCard.style.background = 'rgba(255,255,255,0.05)';
+                    matchCard.style.padding = '20px';
+                    matchCard.style.borderRadius = '15px';
+                    matchCard.style.border = '1px solid rgba(255,255,255,0.1)';
+                    matchCard.style.width = '350px';
+                    matchCard.style.margin = '15px 0';
+                    matchCard.style.boxShadow = '0 5px 15px rgba(0,0,0,0.3)';
+
+                    const renderTeamLine = (name, score, isWinner) => {
+                        return `<div style="display: flex; justify-content: space-between; align-items: center; margin: 5px 0; font-size: 26px; ${isWinner ? 'color: #fbbf24; font-weight: 900;' : 'color: #cbd5e1;'}">
+                            <span>${name || 'TBD'}</span>
+                            <span style="background: rgba(0,0,0,0.3); padding: 5px 15px; border-radius: 8px;">${score}</span>
+                        </div>`;
+                    };
+
+                    matchCard.innerHTML = `
+                        ${renderTeamLine(m.teamA, m.scoreA, m.winner === 'A')}
+                        <div style="height: 2px; background: rgba(255,255,255,0.05); margin: 10px 0;"></div>
+                        ${renderTeamLine(m.teamB, m.scoreB, m.winner === 'B')}
+                    `;
+                    roundCol.appendChild(matchCard);
+                });
+
+                container.appendChild(roundCol);
+            });
         }
 
         function renderScheduleTable() {
@@ -1343,10 +1593,22 @@
         }
         let lastStandingsData = null;
 
-        document.getElementById('btn-open-stats').addEventListener('click', () => {
-            document.getElementById('stats-overlay').style.display = 'flex';
-            renderStandingsTable();
-        });
+        function toggleStats() {
+            console.log("DEBUG: toggleStats() called");
+            const overlay = document.getElementById('stats-overlay');
+            if (!overlay) {
+                console.error("DEBUG: stats-overlay element NOT FOUND");
+                return;
+            }
+            const isVisible = overlay.style.display === 'flex';
+            overlay.style.display = isVisible ? 'none' : 'flex';
+            console.log("DEBUG: stats-overlay display set to:", overlay.style.display);
+
+            if (!isVisible && currentData && currentData.standingsData) {
+                console.log("DEBUG: Rendering standings table...");
+                renderStandingsTable(currentData.standingsData);
+            }
+        }
 
         document.getElementById('close-stats-btn').addEventListener('click', () => {
             document.getElementById('stats-overlay').style.display = 'none';
@@ -1360,48 +1622,162 @@
             document.getElementById('layout-overlay').style.display = 'none';
         });
 
-        function renderStandingsTable() {
-            if (!lastStandingsData) return;
-            const tbody = document.getElementById('board-standings-body');
-            tbody.innerHTML = '';
-            lastStandingsData.standings.slice(0, 10).forEach((s, idx) => {
-                const tr = document.createElement('tr');
-                const diff = s.rw - s.rl;
-                tr.innerHTML = `
-                    <td><span class="stats-rank-badge">${idx + 1}</span> ${s.name}</td>
-                    <td style="text-align: center">${s.played}</td>
-                    <td style="text-align: center" class="stats-val-green">${s.wins}</td>
-                    <td style="text-align: center" class="stats-val-red">${s.losses}</td>
-                    <td style="text-align: center">${s.rw}</td>
-                    <td style="text-align: center">${s.rl}</td>
-                    <td style="text-align: center" class="${diff > 0 ? 'stats-val-green' : (diff < 0 ? 'stats-val-red' : 'stats-val-neutral')}">${diff > 0 ? '+' + diff : diff}</td>
-                    <td style="text-align: center; color: #94a3b8; font-weight: bold;">${s.pen}</td>
-                `;
-                tbody.appendChild(tr);
-            });
+        function renderStandingsTable(data) {
+            if (!data || !data.standings) return;
 
-            // Render Fastest Rounds
-            const fastestList = document.getElementById('board-fastest-list');
-            fastestList.innerHTML = '';
-            if (lastStandingsData.records && lastStandingsData.records.length > 0) {
-                lastStandingsData.records.slice(0, 5).forEach(r => {
+            // 1. Standings Table
+            const tbody = document.getElementById('board-standings-body');
+            if (tbody) {
+                tbody.innerHTML = '';
+                data.standings.forEach((s, idx) => {
+                    const tr = document.createElement('tr');
+                    const diff = (s.rw || 0) - (s.rl || 0);
+                    tr.innerHTML = `
+                        <td><span class="stats-rank-badge">${idx + 1}</span> ${s.name}</td>
+                        <td style="text-align: center">${s.played}</td>
+                        <td style="text-align: center" class="stats-val-green">${s.wins}</td>
+                        <td style="text-align: center" class="stats-val-red">${s.losses}</td>
+                        <td style="text-align: center">${s.rw}</td>
+                        <td style="text-align: center">${s.rl}</td>
+                        <td style="text-align: center" class="${diff > 0 ? 'stats-val-green' : (diff < 0 ? 'stats-val-red' : 'stats-val-neutral')}">${diff > 0 ? '+' + diff : diff}</td>
+                        <td style="text-align: center; color: #94a3b8; font-weight: bold;">${s.pen}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            // 2. Stats Grid (4 Quadrants)
+            const recContainer = document.getElementById('stats-records');
+            if (recContainer) {
+                renderStatsQuadrants(recContainer, data);
+            }
+
+            // 3. Match History
+            const histList = document.getElementById('history-list');
+            if (histList) {
+                renderMatchHistory(histList, data.matchHistory);
+            }
+        }
+
+        function renderStatsQuadrants(container, data) {
+            container.innerHTML = '';
+            container.style.display = 'grid';
+            container.style.gridTemplateColumns = 'repeat(auto-fit, minmax(400px, 1fr))';
+            container.style.gap = '25px';
+            container.style.alignItems = 'start';
+
+            const createSection = (title, icon, items, formatter) => {
+                const wrapper = document.createElement('div');
+                wrapper.innerHTML = `
+                    <div style="font-weight: 900; color: var(--accent-color); border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 12px; margin-bottom: 15px; text-transform: uppercase; font-size: 0.8em; letter-spacing: 2px;">
+                        ${icon} ${title}
+                    </div>
+                    <ul style="list-style: none; padding: 0; margin: 0; font-size: 24px;"></ul>
+                `;
+                const list = wrapper.querySelector('ul');
+
+                if (items && items.length > 0) {
+                    items.forEach(r => {
+                        const li = document.createElement('li');
+                        li.style.marginBottom = '12px';
+                        li.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+                        li.style.paddingBottom = '8px';
+                        li.style.display = 'flex';
+                        li.style.justifyContent = 'space-between';
+                        li.innerHTML = `
+                            <span><strong style="color: #e2e8f0">${r.team}</strong> <span style="font-size: 0.8em; color: #94a3b8; margin-left: 10px;">${r.match || ''}</span></span>
+                            <span style="font-weight: 900; color: #fbbf24; text-shadow: 0 0 10px rgba(251, 191, 36, 0.3);">${formatter(r.duration || r.avg || r.count)}</span>
+                        `;
+                        list.appendChild(li);
+                    });
+                } else {
+                    list.innerHTML = '<li style="color: #64748b; font-style: italic;">Nessun dato</li>';
+                }
+                return wrapper;
+            };
+
+            const formatCount = (val) => val;
+            const formatTime = (val) => formatTimeSeconds(val) + 's';
+
+            container.appendChild(createSection('Round Veloci', '⚡', data.records, formatTime));
+            container.appendChild(createSection('Round Più Lenti', '🐌', data.slowestRounds, formatTime));
+            container.appendChild(createSection('Tempo Medio', '⏱️', data.averageTimes, formatTime));
+            container.appendChild(createSection('Mercy Killers', '💀', data.mercyKillers, formatCount));
+            container.appendChild(createSection('Cattivi Ragazzi', '🟨', data.badBoys, formatCount));
+        }
+
+        function renderMatchHistory(list, history) {
+            list.innerHTML = '';
+            if (history && history.length > 0) {
+                history.slice(0, 4).forEach(m => {
                     const li = document.createElement('li');
-                    li.style.marginBottom = '8px';
-                    li.innerHTML = `<span style="color:var(--accent-color); font-weight:bold;">${formatTimeSeconds(r.duration)}</span> - ${r.team}`;
-                    fastestList.appendChild(li);
+                    li.style.marginBottom = '12px';
+                    li.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+                    li.style.paddingBottom = '8px';
+                    li.style.display = 'flex';
+                    li.style.flexDirection = 'column';
+
+                    const winnerColor = '#22c55e';
+                    const loserColor = '#94a3b8';
+                    const colorA = m.winner === 'A' ? winnerColor : (m.winner === 'B' ? loserColor : 'white');
+                    const colorB = m.winner === 'B' ? winnerColor : (m.winner === 'A' ? loserColor : 'white');
+
+                    li.innerHTML = `
+                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                            <span style="color:${colorA}; font-weight:${m.winner === 'A' ? 'bold' : 'normal'}">${m.teamA}</span>
+                            <span style="font-weight:bold; color:#fbbf24; font-size:1.1em;">${m.scoreA}</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between;">
+                            <span style="color:${colorB}; font-weight:${m.winner === 'B' ? 'bold' : 'normal'}">${m.teamB}</span>
+                            <span style="font-weight:bold; color:#fbbf24; font-size:1.1em;">${m.scoreB}</span>
+                        </div>
+                    `;
+                    list.appendChild(li);
                 });
             } else {
-                fastestList.innerHTML = '<li>Nessun dato</li>';
+                list.innerHTML = '<li style="color: #64748b; font-style: italic;">Nessuna partita conclusa</li>';
+            }
+        }
+
+        function smartTruncate(str, limit) {
+            if (!str) return "";
+            str = str.trim().toUpperCase();
+            if (str.length <= limit) return str;
+
+            const words = str.split(/\s+/).filter(w => w.length > 0);
+
+            if (words.length >= 3) {
+                // First 4 letters + 2nd word initial + Last word
+                const w1 = words[0].substring(0, 4);
+                const w2Initial = words[1].substring(0, 1) + ".";
+                const lastWord = words[words.length - 1];
+
+                const prefix = w1 + " " + w2Initial + " ";
+                const remaining = limit - prefix.length;
+
+                return (prefix + (remaining > 0 ? lastWord.substring(0, remaining) : "")).trim();
+            } else if (words.length === 2) {
+                // First 4 letters + Last word
+                const w1 = words[0].substring(0, 4);
+                const lastWord = words[1];
+                const prefix = w1 + " ";
+                const remaining = limit - prefix.length;
+
+                return (prefix + (remaining > 0 ? lastWord.substring(0, remaining) : "")).trim();
+            } else {
+                // Single word
+                return str.substring(0, limit);
             }
         }
 
         function renderBoardState(d) {
-            // Update standings cache
+            // Outdoor Mode Logic with Persistence
+            updateOutdoorClass(d.outdoorMode);
+
+            // Update standings cache and render
             if (d.standingsData) {
                 lastStandingsData = d.standingsData;
-                if (document.getElementById('stats-overlay').style.display === 'flex') {
-                    renderStandingsTable();
-                }
+                renderStandingsTable(d.standingsData);
             }
 
             // Fastest Round Spotlight
@@ -1439,7 +1815,7 @@
 
             // Left Team
             const lNameRaw = d.teamLeft.name || "";
-            const lNameTrunc = lNameRaw.length > style.limit ? lNameRaw.substring(0, style.limit) + style.dot : lNameRaw;
+            const lNameTrunc = smartTruncate(lNameRaw, style.limit || 11);
             document.getElementById('name-left').innerText = lNameTrunc;
 
             const lPanel = document.getElementById('panel-left');
@@ -1476,7 +1852,7 @@
 
             // Right Team
             const rNameRaw = d.teamRight.name || "";
-            const rNameTrunc = rNameRaw.length > style.limit ? rNameRaw.substring(0, style.limit) + style.dot : rNameRaw;
+            const rNameTrunc = smartTruncate(rNameRaw, style.limit || 11);
             document.getElementById('name-right').innerText = rNameTrunc;
 
             const rPanel = document.getElementById('panel-right');
@@ -1572,122 +1948,13 @@
 
             const showOverlay = d.showNextMatchOverlay || (d.isBreak && d.nextMatch);
             if (showOverlay && d.nextMatch) {
-                nmLayer.style.display = 'flex';
+                nmLayer.style.display = 'none';
+                /* nmLayer.style.display = 'flex'; */
                 document.getElementById('nm-team-a').innerText = d.nextMatch.teamA;
                 document.getElementById('nm-team-b').innerText = d.nextMatch.teamB;
                 document.getElementById('nm-timer').innerText = d.timer;
             } else {
                 nmLayer.style.display = 'none';
-            }
-
-            // STATS RENDERING (FIXED)
-            if (d.standingsData) {
-                console.log("Stats Data Received:", d.standingsData); // DEBUG
-                // 1. Standings Table
-                const tbody = document.getElementById('board-standings-body');
-                if (tbody) {
-                    tbody.innerHTML = '';
-                    d.standingsData.standings.forEach((s, idx) => {
-                        const tr = document.createElement('tr');
-                        const diff = s.rw - s.rl;
-                        tr.innerHTML = `
-                            <td><span class="stats-rank-badge">${idx + 1}</span> ${s.name}</td>
-                            <td style="text-align: center">${s.played}</td>
-                            <td style="text-align: center" class="stats-val-green">${s.wins}</td>
-                            <td style="text-align: center" class="stats-val-red">${s.losses}</td>
-                            <td style="text-align: center">${s.rw}</td>
-                            <td style="text-align: center">${s.rl}</td>
-                            <td style="text-align: center" class="${diff > 0 ? 'stats-val-green' : (diff < 0 ? 'stats-val-red' : 'stats-val-neutral')}">${diff > 0 ? '+' + diff : diff}</td>
-                            <td style="text-align: center; color: #94a3b8; font-weight: bold;">${s.pen}</td>
-                        `;
-                        tbody.appendChild(tr);
-                    });
-                }
-
-                // 2. Stats Grid (4 Quadrants)
-                const recContainer = document.getElementById('stats-records');
-                if (recContainer) {
-                    recContainer.innerHTML = '';
-                    recContainer.style.display = 'grid';
-                    recContainer.style.gridTemplateColumns = '1fr 1fr';
-                    recContainer.style.gap = '25px';
-                    recContainer.style.alignItems = 'start';
-
-                    // Helper to create a list section
-                    const createSection = (title, icon, data, formatter) => {
-                        const wrapper = document.createElement('div');
-                        wrapper.innerHTML = `
-                            <div style="font-weight: 900; color: var(--accent-color); border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 12px; margin-bottom: 15px; text-transform: uppercase; font-size: 0.8em; letter-spacing: 2px;">
-                                ${icon} ${title}
-                            </div>
-                            <ul style="list-style: none; padding: 0; margin: 0; font-size: 24px;"></ul>
-                        `;
-                        const list = wrapper.querySelector('ul');
-
-                        if (data && data.length > 0) {
-                            data.forEach(r => {
-                                const li = document.createElement('li');
-                                li.style.marginBottom = '12px';
-                                li.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
-                                li.style.paddingBottom = '8px';
-                                li.style.display = 'flex';
-                                li.style.justifyContent = 'space-between';
-                                li.innerHTML = `
-                                    <span><strong style="color: #e2e8f0">${r.team}</strong> <span style="font-size: 0.8em; color: #94a3b8; margin-left: 10px;">${r.match || ''}</span></span>
-                                    <span style="font-weight: 900; color: #fbbf24; text-shadow: 0 0 10px rgba(251, 191, 36, 0.3);">${formatter(r.duration || r.avg || r.count)}</span>
-                                `;
-                                list.appendChild(li);
-                            });
-                        } else {
-                            list.innerHTML = '<li style="color: #64748b; font-style: italic;">Nessun dato</li>';
-                        }
-                        return wrapper;
-                    };
-
-                    const formatCount = (val) => val;
-                    const formatTime = (val) => formatTimeSeconds(val) + 's';
-
-                    // Append Sections
-                    recContainer.appendChild(createSection('Round Veloci', '⚡', d.standingsData.records, formatTime));
-                    recContainer.appendChild(createSection('Tempo Medio', '⏱️', d.standingsData.averageTimes, formatTime));
-                    recContainer.appendChild(createSection('Mercy Killers', '💀', d.standingsData.mercyKillers, formatCount));
-                    recContainer.appendChild(createSection('Cattivi Ragazzi', '🟨', d.standingsData.badBoys, formatCount));
-                }
-
-                // 3. Match History
-                const histList = document.getElementById('history-list');
-                if (histList) {
-                    histList.innerHTML = '';
-                    if (d.standingsData.matchHistory && d.standingsData.matchHistory.length > 0) {
-                        d.standingsData.matchHistory.slice(0, 4).forEach(m => {
-                            const li = document.createElement('li');
-                            li.style.marginBottom = '12px';
-                            li.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
-                            li.style.paddingBottom = '8px';
-                            li.style.display = 'flex';
-                            li.style.flexDirection = 'column'; // Stack for space
-
-                            const winnerColor = '#22c55e';
-                            const loserColor = '#94a3b8';
-                            const colorA = m.winner === 'A' ? winnerColor : (m.winner === 'B' ? loserColor : 'white');
-                            const colorB = m.winner === 'B' ? winnerColor : (m.winner === 'A' ? loserColor : 'white');
-
-                            li.innerHTML = `
-                                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                                    <span style="color:${colorA}; font-weight:${m.winner === 'A' ? 'bold' : 'normal'}">${m.teamA}</span>
-                                    <span style="font-weight:bold; color:#fbbf24; font-size:1.1em;">${m.scoreA}</span>
-                                </div>
-                                <div style="display:flex; justify-content:space-between;">
-                                    <span style="color:${colorB}; font-weight:${m.winner === 'B' ? 'bold' : 'normal'}">${m.teamB}</span>
-                                    <span style="font-weight:bold; color:#fbbf24; font-size:1.1em;">${m.scoreB}</span>
-                                </div>
-                            `;
-                            histList.appendChild(li);
-                        });
-                    } else {
-                        histList.innerHTML = '<li style="color: #64748b; font-style: italic;">Nessuna partita conclusa</li>';
-                    }
-                }
             }
         }
 
@@ -1697,6 +1964,28 @@
             const milliseconds = Math.floor((seconds % 1) * 100);
             return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
         }
+
+        // --- Screen Wake Lock ---
+        let wakeLock = null;
+        async function requestWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log("Screen Wake Lock acquisito.");
+                }
+            } catch (err) {
+                // Ignore errors on non-supported browsers
+            }
+        }
+
+        document.addEventListener('visibilitychange', async () => {
+            if (wakeLock !== null && document.visibilityState === 'visible') {
+                await requestWakeLock();
+            }
+        });
+
+        window.addEventListener('load', requestWakeLock);
+
 
         function updatePenaltyVisuals(side, teamData) {
             const panel = document.getElementById('panel-' + side);

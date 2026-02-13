@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Referee Field Control - IPBA</title>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@700&family=Inter:wght@400;900&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #000000;
+            --btn-left: #3b82f6;
+            --btn-right: #ef4444;
+            --btn-accent: #22d3ee;
+            --text-color: #ffffff;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* CONNECT UI */
+        #connect-ui {
+            position: fixed;
+            inset: 0;
+            background: #000;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        #connect-ui input {
+            width: 100%;
+            max-width: 300px;
+            padding: 20px;
+            border-radius: 12px;
+            border: 3px solid #333;
+            background: #111;
+            color: white;
+            font-size: 24px;
+            text-align: center;
+        }
+
+        #connect-ui button {
+            width: 100%;
+            max-width: 300px;
+            padding: 20px;
+            border-radius: 12px;
+            border: none;
+            background: var(--btn-accent);
+            color: black;
+            font-weight: 900;
+            font-size: 20px;
+        }
+
+        /* MAIN APP UI */
+        #app {
+            display: none;
+            flex-grow: 1;
+            flex-direction: column;
+            padding: 8px;
+            gap: 8px;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        /* TABLET LAYOUT OVERRIDES */
+        #app.layout-tablet {
+            /* Controlled by JS */
+            grid-template-areas:
+                "timer timer"
+                "left right"
+                "bottom bottom";
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto 1fr auto;
+        }
+
+        #app.layout-tablet #timer {
+            grid-area: timer;
+            font-size: 150px;
+        }
+
+        #app.layout-tablet #section-left {
+            grid-area: left;
+        }
+
+        #app.layout-tablet #section-right {
+            grid-area: right;
+        }
+
+        #app.layout-tablet .bottom-bar {
+            grid-area: bottom;
+        }
+
+        #app.layout-tablet .team-name {
+            font-size: 50px;
+        }
+
+        #app.layout-tablet .team-score {
+            font-size: 140px;
+        }
+
+        #app.layout-tablet .btn-point {
+            height: 120px;
+            font-size: 40px;
+        }
+
+        #app.layout-tablet .btn-special {
+            font-size: 24px;
+        }
+
+        #app.layout-tablet .btn-pen {
+            font-size: 30px;
+            padding: 20px 0;
+        }
+
+        #app.layout-tablet .btn-main {
+            height: 110px;
+            font-size: 40px;
+        }
+
+        /* Smartphone layout is default (v2) */
+        #app.layout-phone {}
+
+        /* CONNECTION STATUS BAR */
+        #connection-status {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 6px;
+            background: #ef4444;
+            z-index: 99999;
+            transition: all 0.3s ease;
+        }
+
+        #connection-status.online {
+            background: #22c55e;
+            box-shadow: 0 0 15px #22c55e;
+        }
+
+        /* TIMER AREA */
+        #timer {
+            font-size: 110px;
+            font-weight: 900;
+            text-align: center;
+            background: #111;
+            border-radius: 15px;
+            padding: 10px;
+            border: 5px solid #333;
+            font-family: 'Oswald', sans-serif;
+            line-height: 1;
+            color: var(--warning);
+        }
+
+        /* TEAMS VERTICAL STACK */
+        .team-section {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex: 1;
+            background: #111;
+            border-radius: 20px;
+            padding: 12px;
+            border-left: 15px solid #ccc;
+        }
+
+        .team-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .team-name {
+            font-size: 40px;
+            font-weight: 900;
+            text-transform: uppercase;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 65%;
+            color: #fff;
+        }
+
+        .team-score {
+            font-size: 80px;
+            font-weight: 900;
+            font-family: 'Oswald', sans-serif;
+            line-height: 1;
+        }
+
+        /* ACTION GRID inside team section */
+        .action-row {
+            display: flex;
+            gap: 8px;
+            height: 80px;
+        }
+
+        .btn-point {
+            flex: 2;
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-weight: 900;
+            font-size: 22px;
+            text-transform: uppercase;
+        }
+
+        .btn-left {
+            background: var(--btn-left);
+        }
+
+        .btn-right {
+            background: var(--btn-right);
+        }
+
+        .btn-special {
+            flex: 1;
+            background: #334155;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-weight: 900;
+            font-size: 16px;
+            text-transform: uppercase;
+        }
+
+        .penalty-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+        }
+
+        .btn-pen {
+            padding: 12px 0;
+            border-radius: 12px;
+            border: 2px solid #444;
+            background: #222;
+            color: #fbbf24;
+            font-weight: 900;
+            font-size: 20px;
+        }
+
+        /* BOTTOM CONTROLS */
+        .bottom-bar {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-main {
+            flex: 2;
+            height: 90px;
+            border-radius: 15px;
+            border: none;
+            font-weight: 900;
+            font-size: 28px;
+            text-transform: uppercase;
+        }
+
+        .btn-undo {
+            flex: 1;
+            background: #475569;
+            color: white;
+            border-radius: 15px;
+            border: none;
+            font-size: 24px;
+        }
+
+        /* MODAL */
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 10000;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        .modal-title {
+            font-size: 32px;
+            font-weight: 900;
+            text-align: center;
+            color: var(--btn-accent);
+            margin-bottom: 20px;
+        }
+
+        .modal-btn {
+            width: 100%;
+            padding: 30px;
+            border-radius: 20px;
+            border: none;
+            font-size: 28px;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .btn-confirm {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-reverse {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-reject {
+            background: #475569;
+            color: white;
+        }
+
+        .btn-cancel {
+            background: #1e293b;
+            color: #94a3b8;
+            font-size: 18px;
+            padding: 15px;
+        }
+
+        /* Conditional colors */
+        .bg-active {
+            background: var(--success) !important;
+            color: black !important;
+        }
+
+        .bg-pause {
+            background: var(--warning) !important;
+            color: white !important;
+        }
+
+        .layout-selector {
+            display: flex;
+            gap: 15px;
+            width: 100%;
+            max-width: 320px;
+            margin-bottom: 5px;
+        }
+
+        #connect-ui .layout-btn {
+            flex: 1;
+            padding: 25px 15px;
+            border-radius: 12px;
+            border: 3px solid #333;
+            background: #111;
+            color: #64748b;
+            font-weight: 900;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            font-size: 16px;
+        }
+
+        #connect-ui .layout-btn.selected {
+            border-color: var(--btn-accent);
+            color: black !important;
+            background: var(--btn-accent) !important;
+            transform: scale(1.05);
+            box-shadow: 0 0 20px rgba(34, 211, 238, 0.4);
+        }
+
+        #connect-ui .layout-btn span {
+            font-size: 30px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="connection-status"></div>
+    <div id="connect-ui">
+        <h1 style="font-family: 'Oswald'; font-size: 40px; margin: 0;">REFEREE CONTROL</h1>
+        <input type="text" id="host-id" placeholder="MATCH ID">
+        <div id="my-id-display" style="color: #475569; font-size: 11px;">Caricamento rete...</div>
+
+        <div
+            style="font-weight: 900; color: #94a3b8; margin-top: 10px; text-transform: uppercase; font-size: 14px; letter-spacing: 1px;">
+            Seleziona Layout</div>
+        <div class="layout-selector">
+            <button id="btn-layout-phone" class="layout-btn selected" onclick="setLayout('phone')">
+                <span>📱</span> PHONE
+            </button>
+            <button id="btn-layout-tablet" class="layout-btn" onclick="setLayout('tablet')">
+                <span>📟</span> TABLET
+            </button>
+        </div>
+
+        <button id="btn-connect" onclick="connectToHost()">CONNETTI</button>
+        <div id="connect-status-text" style="color: #64748b; font-size: 14px; font-weight: bold;">Pronto</div>
+    </div>
+
+    <div id="app">
+        <div id="timer">00:00.00</div>
+
+        <!-- TEAM LEFT -->
+        <div id="section-left" class="team-section" style="border-color: var(--btn-left);">
+            <div class="team-header">
+                <div id="name-left" class="team-name">TEAM LEFT</div>
+                <div id="score-left" class="team-score">0</div>
+            </div>
+            <div class="action-row">
+                <button class="btn-point btn-left" onclick="openPointModal('left')">+1 PUNTO</button>
+                <button id="spec-left" class="btn-special" onclick="handleSpecial('left')">TOWEL</button>
+            </div>
+            <div class="penalty-grid">
+                <button class="btn-pen" onclick="sendCommand('PENALTY', 'left', 1)">1x1</button>
+                <button class="btn-pen" onclick="sendCommand('PENALTY', 'left', 2)">2x1</button>
+                <button class="btn-pen" onclick="sendCommand('PENALTY', 'left', 3)">3x1</button>
+            </div>
+        </div>
+
+        <!-- TEAM RIGHT -->
+        <div id="section-right" class="team-section" style="border-color: var(--btn-right);">
+            <div class="team-header">
+                <div id="name-right" class="team-name">TEAM RIGHT</div>
+                <div id="score-right" class="team-score">0</div>
+            </div>
+            <div class="action-row">
+                <button class="btn-point btn-right" onclick="openPointModal('right')">+1 PUNTO</button>
+                <button id="spec-right" class="btn-special" onclick="handleSpecial('right')">TOWEL</button>
+            </div>
+            <div class="penalty-grid">
+                <button class="btn-pen" onclick="sendCommand('PENALTY', 'right', 1)">1x1</button>
+                <button class="btn-pen" onclick="sendCommand('PENALTY', 'right', 2)">2x1</button>
+                <button class="btn-pen" onclick="sendCommand('PENALTY', 'right', 3)">3x1</button>
+            </div>
+        </div>
+
+        <div class="bottom-bar">
+            <button id="pause-btn" class="btn-main" onclick="handlePauseToggle()">START</button>
+            <button class="btn-undo" onclick="sendCommand('UNDO')">↩️</button>
+        </div>
+    </div>
+
+    <!-- POINT CONFIRMATION MODAL -->
+    <div id="point-modal" class="modal">
+        <div id="modal-team-name" class="modal-title">VERIFICA PUNTO</div>
+        <button class="modal-btn btn-confirm" onclick="submitPoint('APPROVED')">CONFIRMED POINT</button>
+        <button class="modal-btn btn-reverse" onclick="submitPoint('REVERSE')">REVERSE POINT</button>
+        <button class="modal-btn btn-reject" onclick="submitPoint('REJECT')">NOT APPROVED</button>
+        <button class="modal-btn btn-cancel" onclick="closeModal()">CANCEL / CLOSE</button>
+    </div>
+
+    <script>
+        let peer = null;
+        let conn = null;
+        let currentMode = 'IDLE';
+        let pendingSide = null;
+        let chosenLayout = 'phone';
+
+        function setLayout(type) {
+            chosenLayout = type;
+            document.getElementById('btn-layout-phone').classList.toggle('selected', type === 'phone');
+            document.getElementById('btn-layout-tablet').classList.toggle('selected', type === 'tablet');
+        }
+
+        function setStatus(msg, color = "#64748b") {
+            const el = document.getElementById('connect-status-text');
+            if (el) {
+                el.innerText = msg;
+                el.style.color = color;
+            }
+            console.log("STATUS:", msg);
+        }
+
+        function connectToHost() {
+            let idInput = document.getElementById('host-id').value.trim();
+            if (!idInput) {
+                setStatus("Inserisci un ID", "var(--danger)");
+                return;
+            }
+
+            // Transparently add prefix if user typed only numbers
+            if (!idInput.startsWith("IPBA-")) {
+                idInput = "IPBA-" + idInput;
+            }
+
+            const btnConnect = document.getElementById('btn-connect');
+            btnConnect.disabled = true;
+            btnConnect.innerText = "CONNETTO...";
+            setStatus("Inizializzazione rete...", "var(--btn-accent)");
+
+            if (peer) peer.destroy();
+
+            // Client creates its own random peer ID
+            peer = new Peer();
+
+            peer.on('open', (myId) => {
+                const myIdEl = document.getElementById('my-id-display');
+                if (myIdEl) myIdEl.innerText = "IL TUO ID: " + myId;
+
+                setStatus("Connessione a " + idInput + "...", "var(--btn-accent)");
+
+                // Connection Timeout to help diagnose peer-unavailable
+                const connTimeout = setTimeout(() => {
+                    if (!conn || !conn.open) {
+                        setStatus("Tempo scaduto. Controlla Match ID.", "var(--danger)");
+                        btnConnect.disabled = false;
+                        btnConnect.innerText = "RIPROVA";
+                    }
+                }, 10000);
+
+                // Connect to the host using the provided ID
+                conn = peer.connect(idInput, { reliable: true });
+
+                conn.on('open', () => {
+                    clearTimeout(connTimeout);
+                    setStatus("Connesso!", "var(--success)");
+                    document.getElementById('connect-ui').style.display = 'none';
+                    const app = document.getElementById('app');
+                    app.className = `layout-${chosenLayout}`;
+                    app.style.display = (chosenLayout === 'tablet') ? 'grid' : 'flex';
+                    document.getElementById('connection-status').classList.add('online');
+                });
+
+                conn.on('data', (data) => {
+                    updateUI(data);
+                });
+
+                conn.on('close', () => {
+                    setStatus("Connessione persa", "var(--danger)");
+                    document.getElementById('connection-status').classList.remove('online');
+                    document.getElementById('connect-ui').style.display = 'flex';
+                    btnConnect.disabled = false;
+                    btnConnect.innerText = "RICONNETTI";
+                });
+
+                conn.on('error', (err) => {
+                    clearTimeout(connTimeout);
+                    setStatus("Errore Connessione: " + err, "var(--danger)");
+                    btnConnect.disabled = false;
+                    btnConnect.innerText = "RIPROVA";
+                });
+            });
+
+            peer.on('error', (err) => {
+                setStatus("Errore Peer: " + err.type, "var(--danger)");
+                btnConnect.disabled = false;
+                btnConnect.innerText = "RIPROVA";
+                if (err.type === 'peer-unavailable') {
+                    setStatus("Match non trovato (Verifica ID)", "var(--danger)");
+                }
+            });
+        }
+
+        function updateUI(data) {
+            try {
+                if (!data) return;
+                document.getElementById('connection-status').classList.add('online');
+                document.getElementById('timer').innerText = data.timer;
+                currentMode = data.mode;
+
+                const btn = document.getElementById('pause-btn');
+                if (data.mode === 'PAUSED' || data.mode === 'IDLE' || data.mode === 'BREAK_MATCH') {
+                    btn.className = 'btn-main bg-active';
+                    btn.innerText = "START";
+                } else {
+                    btn.className = 'btn-main bg-pause';
+                    btn.innerText = "PAUSA";
+                }
+
+                // Update Special Buttons (Towel vs Tech)
+                const isPlay = (data.mode === 'POINT' || data.mode === 'OVERTIME');
+                const specL = document.getElementById('spec-left');
+                const specR = document.getElementById('spec-right');
+
+                // Disable Penalty Buttons when not playing
+                document.querySelectorAll('.btn-pen').forEach(b => {
+                    b.disabled = !isPlay;
+                    b.style.opacity = isPlay ? '1' : '0.5';
+                });
+
+                if (isPlay) {
+                    specL.innerText = "TOWEL";
+                    specR.innerText = "TOWEL";
+                    specL.style.background = "#64748b";
+                    specR.style.background = "#64748b";
+                } else {
+                    specL.innerText = "TECH";
+                    specR.innerText = "TECH";
+                    specL.style.background = "#0ea5e9";
+                    specR.style.background = "#0ea5e9";
+                }
+
+                if (data.teamLeft) {
+                    document.getElementById('name-left').innerText = data.teamLeft.name;
+                    document.getElementById('score-left').innerText = data.teamLeft.score;
+                }
+                if (data.teamRight) {
+                    document.getElementById('name-right').innerText = data.teamRight.name;
+                    document.getElementById('score-right').innerText = data.teamRight.score;
+                }
+            } catch (err) {
+                console.error("UI Update Error:", err);
+            }
+        }
+
+        function openPointModal(side) {
+            pendingSide = side;
+            const name = side === 'left' ? document.getElementById('name-left').innerText : document.getElementById('name-right').innerText;
+            document.getElementById('modal-team-name').innerText = `PUNTO PER: ${name}`;
+            document.getElementById('point-modal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('point-modal').style.display = 'none';
+        }
+
+        function submitPoint(decision) {
+            sendCommand('CONFIRM_POINT', pendingSide, null, decision);
+            closeModal();
+        }
+
+        function handleSpecial(side) {
+            if (currentMode === 'POINT' || currentMode === 'OVERTIME') {
+                sendCommand('ACTION', side); // Action triggers Towel in POINT mode
+            } else {
+                sendCommand('TECH', side);
+            }
+        }
+
+        function sendCommand(type, side, level, decision) {
+            if (!conn || !conn.open) {
+                console.error("COMMAND FAILED: Connection not open.");
+                document.getElementById('connection-status').classList.remove('online');
+                return;
+            }
+            // Rapid visual feedback
+            const payload = { type, side, level, decision };
+            console.log("SENDING COMMAND:", payload);
+            conn.send(payload);
+        }
+
+        function handlePauseToggle() {
+            if (currentMode === 'PAUSED' || currentMode === 'IDLE') {
+                sendCommand('START_POINT');
+            } else if (currentMode === 'BREAK_MATCH') {
+                sendCommand('START_INTER');
+            } else {
+                sendCommand('PAUSE');
+            }
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get('id');
+        if (id) {
+            document.getElementById('host-id').value = id;
+            setTimeout(connectToHost, 500);
+        }
+    </script>
+</body>
+
+</html>
