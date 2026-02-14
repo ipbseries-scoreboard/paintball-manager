@@ -84,21 +84,25 @@
         #top-bar {
             position: absolute;
             top: 0;
-            left: 0;
-            width: 100%;
-            height: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            height: 48px;
             background: rgba(15, 23, 42, 0.95);
             display: none;
-            /* Hidden by default */
             justify-content: center;
             align-items: center;
             color: #cbd5e1;
-            font-size: 30px;
-            font-weight: 500;
-            z-index: 500;
-            border-bottom: 2px solid var(--accent-color);
+            font-size: 22px;
+            font-weight: 700;
+            z-index: 3000;
+            border: 2px solid var(--accent-color);
+            border-top: none;
+            border-bottom-left-radius: 15px;
+            border-bottom-right-radius: 15px;
             letter-spacing: 1px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+            transition: all 0.2s;
         }
 
         .tb-live-score {
@@ -117,68 +121,67 @@
             height: 100%;
             display: grid;
             grid-template-columns: 610px 620px 610px;
-            /* Exact fixed widths for symmetry */
             gap: 20px;
-            /* Reduced gap */
-            align-items: center;
-            padding: 20px;
-            padding-top: 80px;
-            /* Space for Top Bar */
+            align-items: start;
+            padding: 0 20px 20px 20px;
             box-sizing: border-box;
             justify-content: center;
-            /* Ensure grid is centered in the 1920 container */
         }
 
         .team-panel {
             background: var(--panel-bg);
             border-radius: 30px;
-            padding: 30px;
+            padding: 15px 30px 30px 30px;
             border-top: 15px solid white;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: flex-start;
             box-shadow: 0 15px 25px rgba(0, 0, 0, 0.5);
-            height: 940px;
-            /* Increased height slightly to fill space */
+            height: 1040px;
             box-sizing: border-box;
             position: relative;
+        }
+
+        .team-logo-display {
+            width: 450px;
+            height: 450px;
+            margin-top: auto;
+            margin-bottom: 0;
+            object-fit: contain;
+            border-radius: 15px;
+            padding: 10px;
+            display: none;
         }
 
         .team-name {
             font-family: var(--font-narrow);
             font-size: 80px;
-            /* Reverted to 80px as requested */
             font-weight: 400;
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
             white-space: nowrap;
             overflow: hidden;
             width: 100%;
             max-width: 610px;
-            /* Full panel width */
             padding: 0;
             text-transform: uppercase;
             text-shadow: 4px 4px 8px rgba(0, 0, 0, 0.5);
             flex-shrink: 0;
             transform: scale(1.0, 2.1);
-            /* Reduced height (2.1) to avoid excessive stretching */
             transform-origin: center;
         }
 
         .team-score {
             font-size: 350px;
-            /* Scaling down score slightly */
             font-weight: 900;
             text-align: center;
             line-height: 0.8;
             padding: 0;
-            padding-top: 260px;
-            /* Push score down to clear penalty area */
+            padding-top: 120px;
             width: 100%;
             display: flex;
             align-items: flex-start;
-            /* Align to top instead of center */
             justify-content: center;
             flex-grow: 1;
             margin-bottom: 50px;
@@ -189,10 +192,10 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             height: 100%;
-            gap: 15px;
-            /* Reduced gap to pull everything up */
+            padding-top: 60px;
+            gap: 5px;
         }
 
         /* PENALTY BOXES */
@@ -335,8 +338,8 @@
         /* VISUAL PENALTY POPUPS */
         .penalty-label {
             position: absolute;
-            top: 200px;
-            /* Positioned under Team Name */
+            top: 170px;
+            /* Moved higher to sit under name */
             left: 50%;
             transform: translateX(-50%);
             font-size: 60px;
@@ -1078,58 +1081,108 @@
             border-color: rgba(255, 255, 255, 0.5);
         }
 
-        #layout-overlay {
+        #layout-overlay,
+        #roster-overlay {
             position: absolute;
             top: 0;
             left: 0;
             width: 1920px;
             height: 1080px;
-            background: rgba(15, 23, 42, 0.9);
+            background: rgba(15, 23, 42, 0.95);
             backdrop-filter: blur(25px);
             z-index: 3100;
             display: none;
             flex-direction: column;
-            padding: 50px;
+            padding: 40px 60px;
             box-sizing: border-box;
             color: white;
             animation: fadeIn 0.4s ease-out;
+            overflow: hidden;
+        }
+
+        .roster-title-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 5px;
+            border-bottom: 1px solid rgba(34, 211, 238, 0.3);
+            padding-bottom: 5px;
+            margin-top: 5px;
+        }
+
+        .roster-prefix {
+            display: none;
+        }
+
+        .roster-team-name {
+            font-size: 35px;
+            font-weight: 700;
+            color: #22d3ee;
+            text-transform: uppercase;
+        }
+
+        .iframe-scale-wrapper {
+            width: 100%;
+            flex: 1;
+            /* Occupy remaining vertical space */
+            position: relative;
+            /* overflow: hidden; REMOVED */
+            border-radius: 15px;
+            background: white;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            margin-bottom: 20px;
+        }
+
+        #roster-iframe {
+            width: 4000px;
+            height: 2100px;
+            border: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            transform-origin: top left;
+        }
+
+        .zoom-controls {
+            position: absolute;
+            top: 10px;
+            left: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 3300;
+        }
+
+        .btn-zoom {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-zoom:hover {
+            background: var(--accent-color);
+            color: #0f172a;
         }
 
         #fastest-round-spotlight {
-            background: rgba(255, 215, 0, 0.08);
-            /* Sophisticated gold tint */
-            border: 3px solid rgba(255, 215, 0, 0.5);
-            padding: 30px 60px;
+            background: rgba(255, 215, 0, 0.1);
+            border: 2px solid rgba(255, 215, 0, 0.5);
+            padding: 20px 60px;
             border-radius: 30px;
             margin-top: 15px;
             display: none;
             flex-direction: column;
             align-items: center;
             backdrop-filter: blur(15px);
-            box-shadow: 0 0 60px rgba(255, 215, 0, 0.2), inset 0 0 20px rgba(255, 215, 0, 0.1);
-            animation: goldPulsePremium 3s infinite;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
             z-index: 10;
         }
 
-        @keyframes goldPulsePremium {
-            0% {
-                border-color: rgba(255, 215, 0, 0.4);
-                box-shadow: 0 0 30px rgba(255, 215, 0, 0.1);
-                transform: scale(1.0);
-            }
-
-            50% {
-                border-color: rgba(255, 215, 0, 1);
-                box-shadow: 0 0 80px rgba(255, 215, 0, 0.5);
-                transform: scale(1.05);
-            }
-
-            100% {
-                border-color: rgba(255, 215, 0, 0.4);
-                box-shadow: 0 0 30px rgba(255, 215, 0, 0.1);
-                transform: scale(1.0);
-            }
-        }
 
         .spotlight-label {
             font-size: 24px;
@@ -1214,9 +1267,11 @@
 
             <!-- MAIN GRID CONTENT -->
             <div class="team-panel" id="panel-left">
-                <div class="team-name" id="name-left">TEAM A</div>
+                <div class="team-name" id="name-left" onclick="handleTeamClick('left')" style="cursor: pointer;">TEAM A
+                </div>
                 <div class="team-score" id="score-left">0</div>
                 <div class="penalty-label" id="pen-label-left"></div>
+                <img id="logo-left" class="team-logo-display" src="" alt="Logo Left">
             </div>
 
             <div class="center-column">
@@ -1255,9 +1310,11 @@
             </div>
 
             <div class="team-panel" id="panel-right">
-                <div class="team-name" id="name-right">TEAM B</div>
+                <div class="team-name" id="name-right" onclick="handleTeamClick('right')" style="cursor: pointer;">TEAM
+                    B</div>
                 <div class="team-score" id="score-right">0</div>
                 <div class="penalty-label" id="pen-label-right"></div>
+                <img id="logo-right" class="team-logo-display" src="" alt="Logo Right">
             </div>
         </div>
 
@@ -1298,16 +1355,33 @@
         <button id="btn-open-stats" onclick="toggleStats()">📊</button>
         <button id="btn-open-bracket" onclick="toggleBracket()">🏆</button>
         <button id="btn-open-schedule" onclick="toggleSchedule()">🗓️</button>
-        <button id="btn-open-layout" title="Visualizza Layout Campo">📐</button>
+        <button id="btn-open-layout" title="Visualizza Layout Campo" onclick="toggleLayout()">📐</button>
 
 
         <div id="layout-overlay">
-            <button id="close-layout-btn" class="close-btn"
+            <button id="close-layout-btn" class="close-btn" onclick="toggleLayout()"
                 style="position: absolute; top: 40px; right: 40px; background: var(--danger-color); color: white; border: none; padding: 15px 40px; font-size: 30px; font-weight: bold; border-radius: 10px; cursor: pointer; z-index: 3200;">Chiudi
                 X</button>
             <div class="stats-title">LAYOUT CAMPO</div>
             <iframe id="layout-iframe" src="" frameborder="0"
                 style="width: 100%; height: calc(100% - 200px); border-radius: 20px; background: white; margin-top: 20px;"></iframe>
+        </div>
+
+        <div id="roster-overlay">
+            <div class="zoom-controls">
+                <button class="btn-zoom" style="background: #f59e0b; color: black;" onclick="reloadRosterFrame()">↻
+                    Ricarica</button>
+            </div>
+            <button id="close-roster-btn" class="close-btn" onclick="toggleRoster()"
+                style="position: absolute; top: 10px; right: 20px; background: var(--danger-color); color: white; border: none; padding: 15px 40px; font-size: 30px; font-weight: bold; border-radius: 10px; cursor: pointer; z-index: 3200;">Chiudi
+                X</button>
+            <div class="roster-title-container">
+                <!-- PREFIX REMOVED -->
+                <span id="roster-team-name" class="roster-team-name">TEAM NAME</span>
+            </div>
+            <div class="iframe-scale-wrapper" id="roster-scale-wrapper">
+                <iframe id="roster-iframe" src="" scrolling="auto"></iframe>
+            </div>
         </div>
 
         <div id="stats-overlay">
@@ -1386,6 +1460,12 @@
         const board = document.getElementById('scoreboard');
         const scaler = document.getElementById('scaler');
 
+        let clanConfig = [];
+        const storedClans = localStorage.getItem('pm_stream_clans');
+        if (storedClans) {
+            try { clanConfig = JSON.parse(storedClans); } catch (e) { clanConfig = []; }
+        }
+
         // SCALING LOGIC
         function scaleBoard() {
             const targetWidth = 1920;
@@ -1431,40 +1511,49 @@
                 hostId = "IPBA-" + hostId;
             }
 
-            const peer = new Peer();
+            try {
+                const peer = new Peer();
 
-            peer.on('open', (myId) => {
-                console.log("My peer ID: " + myId);
-                const conn = peer.connect(hostId);
-
-                conn.on('open', () => {
-                    console.log("Connected to " + hostId);
-                    // Save for faster login next time
-                    const numericId = hostId.replace('IPBA-', '');
-                    localStorage.setItem('last_match_id', numericId);
-
-                    ui.style.display = 'none';
-                    board.style.display = 'grid'; // Grid inside the scaler
-                    scaleBoard(); // Re-calc just in case
+                peer.on('error', (err) => {
+                    console.error("PeerJS Error:", err);
+                    alert("Errore PeerJS: " + err.type);
                 });
 
-                conn.on('data', (data) => {
-                    updateBoard(data);
-                });
+                peer.on('open', (myId) => {
+                    console.log("My peer ID: " + myId);
+                    const conn = peer.connect(hostId);
 
-                conn.on('close', () => {
-                    alert("Connessione persa!");
-                    location.reload();
-                });
+                    conn.on('open', () => {
+                        console.log("Connected to " + hostId);
+                        // Save for faster login next time
+                        const numericId = hostId.replace('IPBA-', '');
+                        localStorage.setItem('last_match_id', numericId);
 
-                conn.on('error', (err) => {
-                    alert("Errore di connessione: " + err);
-                    ui.style.display = 'flex';
-                    board.style.display = 'none';
-                });
-            });
+                        ui.style.display = 'none';
+                        board.style.display = 'grid'; // Grid inside the scaler
+                        scaleBoard(); // Re-calc just in case
+                    });
 
-            peer.on('error', err => alert("Errore PeerJS: " + err.type));
+                    conn.on('data', (data) => {
+                        updateBoard(data);
+                    });
+
+                    conn.on('close', () => {
+                        alert("Connessione persa!");
+                        location.reload();
+                    });
+
+                    conn.on('error', (err) => {
+                        console.error("Connection Error:", err);
+                        alert("Errore di connessione: " + err);
+                        ui.style.display = 'flex';
+                        board.style.display = 'none';
+                    });
+                });
+            } catch (e) {
+                console.error("Critical Error starting client:", e);
+                alert("Errore Critico: " + e.message);
+            }
         }
 
         let currentData = null;
@@ -1850,6 +1939,9 @@
                 lPenActive.style.display = 'none';
             }
 
+            // Left Logo
+            updateLogo('left', d.teamLeft.name);
+
             // Right Team
             const rNameRaw = d.teamRight.name || "";
             const rNameTrunc = smartTruncate(rNameRaw, style.limit || 11);
@@ -1864,6 +1956,15 @@
                 rScore.classList.remove('score-pop');
                 void rScore.offsetWidth; // Trigger reflow
                 rScore.classList.add('score-pop');
+            }
+
+            // Right Logo
+            const rLogo = document.getElementById('logo-right');
+            if (d.logoRight) {
+                rLogo.src = d.logoRight;
+                rLogo.style.display = 'block';
+            } else {
+                rLogo.style.display = 'none';
             }
 
             // Tech Pause Right
@@ -1886,6 +1987,9 @@
             } else {
                 rPenActive.style.display = 'none';
             }
+
+            // Right Logo
+            updateLogo('right', d.teamRight.name);
 
             // Mercy
             if (d.mercy) board.style.border = "10px solid red"; // Warning border scaled
@@ -2010,6 +2114,135 @@
                 }
             }
         }
+
+        function updateLogo(side, teamName) {
+            const imgEl = document.getElementById('logo-' + side);
+            if (!imgEl) return;
+
+            if (!teamName) {
+                imgEl.style.display = 'none';
+                return;
+            }
+
+            const config = clanConfig.find(c => c.name.trim().toLowerCase() === teamName.trim().toLowerCase());
+            if (config && config.logoUrl) {
+                imgEl.src = config.logoUrl;
+                imgEl.style.display = 'block';
+            } else {
+                imgEl.style.display = 'none';
+            }
+        }
+
+        function handleTeamClick(side) {
+            if (!currentData) return;
+            const team = side === 'left' ? currentData.teamLeft : currentData.teamRight;
+            if (team && team.name) {
+                openRoster(team.name);
+            }
+        }
+
+        let showLayout = false;
+        function toggleLayout() {
+            const over = document.getElementById('layout-overlay');
+            showLayout = !showLayout;
+            over.style.display = showLayout ? 'flex' : 'none';
+        }
+
+        let showRoster = false;
+        let rosterBaseScale = 1.0;
+        let rosterManualZoom = 0;
+        let rosterPanX = 0;
+
+        function toggleRoster(url = "", teamName = "") {
+            const over = document.getElementById('roster-overlay');
+            const iframe = document.getElementById('roster-iframe');
+            const teamSpan = document.getElementById('roster-team-name');
+            const wrapper = document.getElementById('roster-scale-wrapper');
+
+            if (!showRoster && url) {
+                // Sanitize URL
+                if (!url.startsWith('http')) {
+                    url = 'https://' + url;
+                }
+
+                iframe.src = url;
+                teamSpan.innerText = teamName.toUpperCase();
+                over.style.display = 'flex';
+                showRoster = true;
+                rosterManualZoom = 0;
+                rosterPanX = 0; // Reset pan on open
+
+                // Scaling logic
+                setTimeout(() => {
+                    const targetW = wrapper.clientWidth;
+                    const iframeW = 4000;
+
+                    if (targetW < 100) {
+                        alert("ERRORE: Larghezza finestra troppo piccola (" + targetW + "). Il sito potrebbe non vedersi.");
+                        rosterBaseScale = 0.5;
+                    } else {
+                        rosterBaseScale = targetW / iframeW;
+                    }
+
+                    applyRosterScale();
+                }, 1000);
+
+            } else {
+                over.style.display = 'none';
+                iframe.src = "";
+                showRoster = false;
+            }
+        }
+
+        function adjustRosterZoom(delta) {
+            rosterManualZoom += delta;
+            applyRosterScale();
+        }
+
+        function adjustRosterPan(delta) {
+            rosterPanX += delta;
+            applyRosterScale();
+        }
+
+        function reloadRosterFrame() {
+            const iframe = document.getElementById('roster-iframe');
+            iframe.src = iframe.src;
+        }
+
+        function resetRosterZoom() {
+            rosterManualZoom = 0;
+            rosterPanX = 0;
+            applyRosterScale();
+        }
+
+        function applyRosterScale() {
+            const iframe = document.getElementById('roster-iframe');
+            const wrapper = document.getElementById('roster-scale-wrapper');
+            const scale = rosterBaseScale + rosterManualZoom;
+            const iframeW = 4000;
+
+            iframe.style.transform = `scale(${scale}) translateX(${rosterPanX}px)`;
+            const targetW = wrapper.clientWidth;
+        }
+
+        function openRoster(teamName) {
+            if (!teamName) return;
+            const cleanName = teamName.trim().toLowerCase();
+            const config = clanConfig.find(c => c.name.trim().toLowerCase() === cleanName);
+
+            if (config && config.rosterUrl) {
+                toggleRoster(config.rosterUrl, teamName);
+            } else {
+                console.log("No roster URL found for " + teamName);
+            }
+        }
+
+        // Listen for storage changes (if logos are updated in streaming.html)
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'pm_stream_clans' && e.newValue) {
+                try { clanConfig = JSON.parse(e.newValue); } catch (ex) { }
+            }
+        });
     </script>
 </body>
 

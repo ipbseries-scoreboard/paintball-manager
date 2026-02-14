@@ -563,22 +563,92 @@
         /* --- STATS / BRACKET / SCHEDULE STYLES --- */
         #stats-overlay,
         #schedule-overlay,
-        #layout-overlay {
+        #layout-overlay,
+        #roster-overlay {
             position: absolute;
             top: 0;
             left: 0;
             width: 1920px;
             height: 1080px;
-            background: rgba(15, 23, 42, 0.9);
+            background: rgba(15, 23, 42, 0.95);
             backdrop-filter: blur(25px);
             z-index: 3000;
             display: none;
             flex-direction: column;
-            padding: 50px;
+            padding: 40px 60px;
             box-sizing: border-box;
             color: white;
-            animation: fadeIn 0.5s ease-out;
-            overflow-y: auto;
+            animation: fadeIn 0.4s ease-out;
+            overflow: hidden;
+        }
+
+        .roster-title-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 5px;
+            border-bottom: 1px solid rgba(34, 211, 238, 0.3);
+            padding-bottom: 5px;
+            margin-top: 5px;
+        }
+
+        .roster-prefix {
+            display: none;
+        }
+
+        .roster-team-name {
+            font-size: 35px;
+            font-weight: 700;
+            color: #22d3ee;
+            text-transform: uppercase;
+        }
+
+        .iframe-scale-wrapper {
+            width: 100%;
+            flex: 1;
+            /* Occupy remaining vertical space */
+            position: relative;
+            /* overflow: hidden; REMOVED to see if content is just outside */
+            border-radius: 15px;
+            background: white;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            margin-bottom: 20px;
+        }
+
+        #roster-iframe {
+            width: 4000px;
+            height: 2100px;
+            border: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            transform-origin: top left;
+        }
+
+        .zoom-controls {
+            position: absolute;
+            top: 10px;
+            left: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 3300;
+        }
+
+        .btn-zoom {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-zoom:hover {
+            background: var(--accent-color);
+            color: #0f172a;
         }
 
         #bracket-overlay {
@@ -1078,6 +1148,23 @@
                 <iframe id="layout-iframe" src="" frameborder="0"
                     style="width:100%; height:calc(100% - 200px); border-radius:20px; background:white; margin-top:20px;"></iframe>
             </div>
+
+            <!-- ROSTER OVERLAY -->
+            <div id="roster-overlay">
+                <div class="zoom-controls">
+                    <button class="btn-zoom" style="background: #f59e0b; color: black;"
+                        onclick="reloadRosterFrame()">↻</button>
+                </div>
+                <button class="close-overlay-btn" onclick="toggleRoster()"
+                    style="position:absolute; top:10px; right:20px;">CHIUDI X</button>
+                <div class="roster-title-container">
+                    <!-- PREFIX REMOVED -->
+                    <span id="roster-team-name" class="roster-team-name">TEAM NAME</span>
+                </div>
+                <div class="iframe-scale-wrapper" id="roster-scale-wrapper">
+                    <iframe id="roster-iframe" src="" scrolling="no"></iframe>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1133,38 +1220,60 @@
             if (!hostId) return alert("Inserisci ID");
             if (!hostId.startsWith("IPBA-")) hostId = "IPBA-" + hostId;
 
-            const peer = new Peer();
-            peer.on('open', (id) => {
-                const conn = peer.connect(hostId);
-                conn.on('open', () => {
-                    localStorage.setItem('last_match_id', hostId.replace('IPBA-', ''));
-                    ui.style.display = 'none';
-                    board.style.display = 'grid';
-                    scaleBoard();
-                });
-                conn.on('data', (d) => {
-                    if (!hasLocalStyle && d.teamStyle) {
-                        try {
-                            // Sync defaults only once or if not locally overridden
-                            // Map fields if needed, but they match mostly
-                            // Override only if we haven't set local style yet
-                            styleConfig = {
-                                fontSize: d.teamStyle.fontSize || 80,
-                                fontFamily: d.teamStyle.fontFamily || "'Oswald', sans-serif",
-                                bold: !!d.teamStyle.bold,
-                                scaleX: d.teamStyle.scaleX || 1.0,
-                                scaleY: d.teamStyle.scaleY || 2.1,
-                                limit: d.teamStyle.limit || 11
-                            };
-                            applyStyleConfig();
-                            // We don't save to localStorage automatically to allow "reset" to host by clearing storage
-                        } catch (e) { console.error("Style Sync Error", e); }
-                    }
+            try {
+                const peer = new Peer();
 
-                    currentData = d;
-                    updateBoard(d);
+                peer.on('error', (err) => {
+                    console.error("PeerJS Error:", err);
+                    alert("Errore PeerJS: " + err.type);
                 });
-            });
+
+                peer.on('open', (id) => {
+                    console.log("My Peer ID:", id);
+                    const conn = peer.connect(hostId);
+
+                    conn.on('error', (err) => {
+                        console.error("Connection Error:", err);
+                        alert("Errore Connessione: " + err);
+                    });
+
+                    conn.on('open', () => {
+                        console.log("Connected to Host:", hostId);
+                        localStorage.setItem('last_match_id', hostId.replace('IPBA-', ''));
+                        ui.style.display = 'none';
+                        board.style.display = 'grid';
+                        scaleBoard();
+                    });
+
+                    conn.on('data', (d) => {
+                        if (!hasLocalStyle && d.teamStyle) {
+                            try {
+                                styleConfig = {
+                                    fontSize: d.teamStyle.fontSize || 80,
+                                    fontFamily: d.teamStyle.fontFamily || "'Oswald', sans-serif",
+                                    bold: !!d.teamStyle.bold,
+                                    scaleX: d.teamStyle.scaleX || 1.0,
+                                    scaleY: d.teamStyle.scaleY || 2.1,
+                                    limit: d.teamStyle.limit || 11
+                                };
+                                applyStyleConfig();
+                            } catch (e) { console.error("Style Sync Error", e); }
+                        }
+
+                        currentData = d;
+                        updateBoard(d);
+                    });
+
+                    // Close handler
+                    conn.on('close', () => {
+                        alert("Connessione chiusa dall'host");
+                        location.reload();
+                    });
+                });
+            } catch (e) {
+                console.error("Critical Error starting client:", e);
+                alert("Errore Critico: " + e.message);
+            }
         }
 
         function updateBoard(d) {
@@ -1366,11 +1475,95 @@
             }
         }, 100);
 
+        let showRoster = false;
+        let rosterBaseScale = 1.0;
+        let rosterManualZoom = 0;
+        let rosterPanX = 0;
+
+        function toggleRoster(url = "", teamName = "") {
+            const over = document.getElementById('roster-overlay');
+            const iframe = document.getElementById('roster-iframe');
+            const teamSpan = document.getElementById('roster-team-name');
+            const wrapper = document.getElementById('roster-scale-wrapper');
+
+            if (!showRoster && url) {
+                // Sanitize URL
+                if (!url.startsWith('http')) {
+                    url = 'https://' + url;
+                }
+
+                console.log("Opening Roster URL:", url);
+                iframe.src = url;
+                teamSpan.innerText = teamName.toUpperCase();
+                over.style.display = 'flex';
+                showRoster = true;
+                rosterManualZoom = 0;
+
+                // Scaling logic
+                setTimeout(() => {
+                    const targetW = wrapper.clientWidth;
+                    const iframeW = 4000;
+
+                    if (targetW < 100) {
+                        alert("ERRORE: Larghezza finestra troppo piccola (" + targetW + "). Il sito potrebbe non vedersi.");
+                        rosterBaseScale = 0.5;
+                    } else {
+                        rosterBaseScale = targetW / iframeW;
+                    }
+
+                    applyRosterScale();
+                }, 1000);
+
+            } else {
+                over.style.display = 'none';
+                iframe.src = "";
+                showRoster = false;
+            }
+        }
+
+        function adjustRosterZoom(delta) {
+            rosterManualZoom += delta;
+            applyRosterScale();
+        }
+
+        function adjustRosterPan(delta) {
+            rosterPanX += delta;
+            applyRosterScale();
+        }
+
+        function reloadRosterFrame() {
+            const iframe = document.getElementById('roster-iframe');
+            iframe.src = iframe.src;
+        }
+
+        function resetRosterZoom() {
+            rosterManualZoom = 0;
+            rosterPanX = 0;
+            applyRosterScale();
+        }
+
+        function applyRosterScale() {
+            const iframe = document.getElementById('roster-iframe');
+            const wrapper = document.getElementById('roster-scale-wrapper');
+            const scale = rosterBaseScale + rosterManualZoom;
+            const iframeW = 4000;
+
+            iframe.style.transform = `scale(${scale}) translateX(${rosterPanX}px)`;
+            const targetW = wrapper.clientWidth;
+
+            // Adjust height
+            const scaledH = 2100 * scale;
+            if (scaledH < 800) {
+                // If becomes too short, maybe min-height?
+            }
+        }
+
+
         function openRoster(teamName) {
             if (!teamName) return;
             const config = clanConfig.find(c => c.name.trim().toLowerCase() === teamName.trim().toLowerCase());
             if (config && config.rosterUrl) {
-                window.open(config.rosterUrl, '_blank');
+                toggleRoster(config.rosterUrl, teamName);
             } else {
                 alert(`Nessun link rosa configurato per: ${teamName}`);
             }
