@@ -796,6 +796,17 @@
             }
         }
 
+        @keyframes flash-red {
+            from {
+                text-shadow: none;
+            }
+
+            to {
+                text-shadow: 0 0 20px #ef4444;
+                color: #ef4444;
+            }
+        }
+
         /* TECH PAUSE INDICATOR - Ported from board.html */
         .tech-indicator {
             position: absolute;
@@ -1292,13 +1303,16 @@
             }
 
             // Render Teams with Local Style Config
-            document.getElementById('name-left').innerText = smartTruncate(d.teamLeft.name, styleConfig.limit);
+            const cleanL = cleanTeamName(d.teamLeft.name);
+            const cleanR = cleanTeamName(d.teamRight.name);
+
+            document.getElementById('name-left').innerText = smartTruncate(cleanL, styleConfig.limit);
             document.getElementById('score-left').innerText = d.teamLeft.score;
             document.getElementById('panel-left').style.borderTopColor = d.teamLeft.color;
             document.getElementById('pen-box-left').style.borderTopColor = d.teamLeft.color;
             document.getElementById('pen-total-left').innerText = "TOT: " + (d.teamLeft.totalPenalties || 0);
 
-            document.getElementById('name-right').innerText = smartTruncate(d.teamRight.name, styleConfig.limit);
+            document.getElementById('name-right').innerText = smartTruncate(cleanR, styleConfig.limit);
             document.getElementById('score-right').innerText = d.teamRight.score;
             document.getElementById('panel-right').style.borderTopColor = d.teamRight.color;
             document.getElementById('pen-box-right').style.borderTopColor = d.teamRight.color;
@@ -1355,8 +1369,8 @@
             }
 
             // Update Team Logos
-            updateLogo('left', d.teamLeft.name);
-            updateLogo('right', d.teamRight.name);
+            updateLogo('left', cleanL);
+            updateLogo('right', cleanR);
 
             // Fastest Round
             if (d.fastestRound) {
@@ -1401,7 +1415,7 @@
             label.style.display = 'none';
             label.className = 'penalty-label';
 
-            if (teamData.lastPenalty && (Date.now() - teamData.lastPenalty.timestamp < 5000)) {
+            if (teamData.lastPenalty && (Math.abs(Date.now() - teamData.lastPenalty.timestamp) < 5000)) {
                 const type = (teamData.lastPenalty.type || 'MINOR').toUpperCase();
                 label.innerText = type;
                 label.style.display = 'block';
@@ -1436,7 +1450,16 @@
         }
 
 
-        // --- TRUNCATION UTILS ---
+        // --- TRUNCATION & CLEANING UTILS ---
+        function cleanTeamName(name) {
+            if (!name) return "";
+            // Remove prefixes like "Quarti di finale E - ", "Semifinale - ", etc.
+            return name.replace(/^(Ottavi|Quarti|Semifinali|Semifinale|Finale|Small Finale|Girone|Pool|Serie)[^-\n]*-\s*/gi, '')
+                .replace(/^[-\s\.,]+/, '')
+                .replace(/[-\s\.,]+$/, '')
+                .trim();
+        }
+
         function smartTruncate(str, limit) {
             if (!str) return "";
             str = str.trim().toUpperCase();
