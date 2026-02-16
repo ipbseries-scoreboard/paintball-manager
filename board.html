@@ -21,6 +21,25 @@
             --font-narrow: 'Bebas Neue', sans-serif;
             --team-a-color: #3b82f6;
             --team-b-color: #ef4444;
+
+            /* Mascot animation defaults */
+            --glow-color-left: rgba(34, 211, 238, 0.5);
+            --glow-intensity-left: 0px;
+            --pulse-speed-left: 2s;
+            --breath-speed-left: 4s;
+            --breath-scale-left: 1;
+
+            --glow-color-right: rgba(34, 211, 238, 0.5);
+            --glow-intensity-right: 0px;
+            --pulse-speed-right: 2s;
+            --breath-speed-right: 4s;
+            --breath-scale-right: 1;
+
+            /* Smoke defaults */
+            --smoke-color-left: rgba(74, 222, 128, 0.4);
+            --smoke-intensity-left: 0;
+            --smoke-color-right: rgba(74, 222, 128, 0.4);
+            --smoke-intensity-right: 0;
         }
 
         body {
@@ -80,7 +99,7 @@
             background-color: #0000ff !important;
         }
 
-        /* TOP BAR NEXT MATCH */
+        /* TOP BAR RECORD */
         #top-bar {
             position: absolute;
             top: 0;
@@ -88,31 +107,29 @@
             transform: translateX(-50%);
             width: 600px;
             height: 48px;
-            background: rgba(15, 23, 42, 0.95);
+            background: rgba(0, 0, 0, 0.9);
             display: none;
-            justify-content: center;
+            justify-content: flex-start;
+            padding-left: 25px;
             align-items: center;
-            color: #cbd5e1;
-            font-size: 22px;
+            color: #ffd700;
+            font-size: 20px;
             font-weight: 700;
             z-index: 3000;
-            border: 2px solid var(--accent-color);
+            border: 2px solid #ffd700;
             border-top: none;
             border-bottom-left-radius: 15px;
             border-bottom-right-radius: 15px;
             letter-spacing: 1px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
-            transition: all 0.2s;
+            box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3);
+            text-transform: uppercase;
         }
 
-        .tb-live-score {
-            margin-left: 20px;
-            color: #fbbf24;
-            /* Amber */
-            font-weight: 700;
-            background: rgba(0, 0, 0, 0.3);
-            padding: 0 10px;
-            border-radius: 4px;
+        .tb-record-val {
+            margin-left: 10px;
+            color: white;
+            font-family: 'Roboto', sans-serif;
+            font-size: 22px;
         }
 
         #scoreboard {
@@ -146,12 +163,153 @@
         .team-logo-display {
             width: 450px;
             height: 450px;
-            margin-top: auto;
-            margin-bottom: 150px;
             object-fit: contain;
             border-radius: 15px;
             padding: 10px;
             display: none;
+            transition: filter 0.3s ease;
+        }
+
+        #logo-left {
+            filter: drop-shadow(0 0 var(--glow-intensity-left) var(--glow-color-left));
+            animation:
+                breath-left var(--breath-speed-left) ease-in-out infinite,
+                pulse-glow-left var(--pulse-speed-left) ease-in-out infinite;
+        }
+
+        #logo-left.custom-anim {
+            animation:
+                breath-left var(--breath-speed-left) ease-in-out infinite,
+                pulse-glow-left var(--pulse-speed-left) ease-in-out infinite,
+                ai-custom-anim-left 3s ease-in-out infinite !important;
+        }
+
+        #logo-right {
+            filter: drop-shadow(0 0 var(--glow-intensity-right) var(--glow-color-right));
+            animation:
+                breath-right var(--breath-speed-right) ease-in-out infinite,
+                pulse-glow-right var(--pulse-speed-right) ease-in-out infinite;
+        }
+
+        #logo-right.custom-anim {
+            animation:
+                breath-right var(--breath-speed-right) ease-in-out infinite,
+                pulse-glow-right var(--pulse-speed-right) ease-in-out infinite,
+                ai-custom-anim-right 3s ease-in-out infinite !important;
+        }
+
+        .shaking {
+            animation: mascot-shake 0.2s ease-in-out infinite !important;
+        }
+
+        @keyframes breath-left {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(var(--breath-scale-left));
+            }
+        }
+
+        @keyframes breath-right {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(var(--breath-scale-right));
+            }
+        }
+
+        @keyframes pulse-glow-left {
+
+            0%,
+            100% {
+                filter: drop-shadow(0 0 5px var(--glow-color-left));
+            }
+
+            50% {
+                filter: drop-shadow(0 0 var(--glow-intensity-left) var(--glow-color-left));
+            }
+        }
+
+        @keyframes pulse-glow-right {
+
+            0%,
+            100% {
+                filter: drop-shadow(0 0 5px var(--glow-color-right));
+            }
+
+            50% {
+                filter: drop-shadow(0 0 var(--glow-intensity-right) var(--glow-color-right));
+            }
+        }
+
+        @keyframes mascot-shake {
+
+            0%,
+            100% {
+                transform: translate(0, 0);
+            }
+
+            25% {
+                transform: translate(-10px, 10px);
+            }
+
+            75% {
+                transform: translate(10px, -10px);
+            }
+        }
+
+        /* Smoke Systems */
+        .logo-wrapper {
+            position: relative;
+            width: 450px;
+            height: 450px;
+            margin-top: auto;
+            margin-bottom: 150px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .smoke-emitter {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .smoke-particle {
+            position: absolute;
+            background: var(--p-color);
+            border-radius: 50%;
+            filter: blur(10px);
+            pointer-events: none;
+            opacity: 0;
+            animation: smoke-rise var(--duration) ease-out forwards;
+        }
+
+        @keyframes smoke-rise {
+            0% {
+                transform: translate(0, 0) scale(0.5);
+                opacity: 0;
+            }
+
+            20% {
+                opacity: 0.6;
+            }
+
+            100% {
+                transform: translate(var(--drift-x), var(--drift-y)) scale(2);
+                opacity: 0;
+            }
         }
 
         .team-name {
@@ -1130,9 +1288,9 @@
             color: #0f172a;
         }
 
-        #fastest-round-spotlight {
-            background: rgba(255, 215, 0, 0.1);
-            border: 2px solid rgba(255, 215, 0, 0.5);
+        #next-match-spotlight {
+            background: rgba(34, 211, 238, 0.1);
+            border: 2px solid rgba(34, 211, 238, 0.5);
             padding: 10px 40px;
             border-radius: 25px;
             margin-top: 10px;
@@ -1144,18 +1302,17 @@
             z-index: 10;
         }
 
-
         .spotlight-label {
             font-size: 20px;
-            color: #ffd700;
+            color: var(--accent-color);
             font-weight: 900;
             letter-spacing: 3px;
             margin-bottom: 5px;
             text-transform: uppercase;
-            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+            text-shadow: 0 0 10px rgba(34, 211, 238, 0.5);
         }
 
-        .spotlight-team {
+        .spotlight-teams {
             font-size: 36px;
             font-weight: 900;
             color: white;
@@ -1164,17 +1321,34 @@
             margin-bottom: 5px;
             font-family: 'Oswald', sans-serif;
             transform: scale(1.1, 1);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
         }
 
-        .spotlight-time {
+        .spotlight-score {
+            font-size: 40px;
+            font-weight: 900;
+            color: white;
+            font-family: 'Roboto', sans-serif;
+            margin-bottom: 5px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0 15px;
+            border-radius: 8px;
+        }
+
+        .spotlight-timer {
             font-size: 60px;
             font-weight: 900;
-            color: #ffd700;
-            font-family: 'Orbitron', sans-serif;
-            text-shadow: 0 0 25px rgba(255, 215, 0, 0.8);
+            color: #fbbf24;
+            font-family: 'Roboto', sans-serif;
+            text-shadow: 0 0 25px rgba(251, 191, 36, 0.8);
             line-height: 1;
         }
     </style>
+    <style id="dynamic-style-left"></style>
+    <style id="dynamic-style-right"></style>
 </head>
 
 <body class="bg-black">
@@ -1220,10 +1394,10 @@
     <!-- Scaler Wrapper -->
     <div id="scaler">
         <div id="scoreboard" style="display: none;">
-            <!-- TOP BAR -->
-            <div id="top-bar">
-                NEXT: <span id="tb-teams" style="color: white; margin-left: 10px;">-- vs --</span>
-                <span id="tb-score" class="tb-live-score" style="display:none;">0 - 0</span>
+            <!-- TOP BAR RECORD -->
+            <div id="top-bar" style="white-space: nowrap; gap: 15px;">
+                ⚡ RECORD DEL GIORNO <span id="tb-record-val" class="tb-record-val" style="margin: 0;">00:00</span>
+                <span id="tb-record-team" style="color:white; font-family: 'Oswald', sans-serif;">--</span>
             </div>
 
             <!-- MAIN GRID CONTENT -->
@@ -1232,7 +1406,10 @@
                 </div>
                 <div class="team-score" id="score-left">0</div>
                 <div class="penalty-label" id="pen-label-left"></div>
-                <img id="logo-left" class="team-logo-display" src="" alt="Logo Left">
+                <div class="logo-wrapper">
+                    <div id="smoke-left" class="smoke-emitter"></div>
+                    <img id="logo-left" class="team-logo-display" src="" alt="Logo Left">
+                </div>
             </div>
 
             <div class="center-column">
@@ -1261,10 +1438,11 @@
                 <div id="game-state-ind" class="state-indicator visible state-idle">PRONTO</div>
                 <div class="timer-display" id="timer">10:00</div>
 
-                <div id="fastest-round-spotlight">
-                    <div class="spotlight-label">⚡ RECORD DEL GIORNO ⚡</div>
-                    <div class="spotlight-team" id="spotlight-team-name">--</div>
-                    <div class="spotlight-time" id="spotlight-time-val">00:00</div>
+                <div id="next-match-spotlight">
+                    <div class="spotlight-label">PROSSIMO MATCH</div>
+                    <div class="spotlight-teams" id="spot-nm-teams">-- vs --</div>
+                    <div class="spotlight-score" id="spot-nm-score" style="display:none;">[ 0 - 0 ]</div>
+                    <div class="spotlight-timer" id="spot-nm-timer">00:00</div>
                 </div>
 
                 <div class="board-controls">
@@ -1282,7 +1460,10 @@
                     B</div>
                 <div class="team-score" id="score-right">0</div>
                 <div class="penalty-label" id="pen-label-right"></div>
-                <img id="logo-right" class="team-logo-display" src="" alt="Logo Right">
+                <div class="logo-wrapper">
+                    <div id="smoke-right" class="smoke-emitter"></div>
+                    <img id="logo-right" class="team-logo-display" src="" alt="Logo Right">
+                </div>
             </div>
         </div>
 
@@ -1425,10 +1606,72 @@
         const board = document.getElementById('scoreboard');
         const scaler = document.getElementById('scaler');
 
+        // Load Stored Clans
         let clanConfig = [];
         const storedClans = localStorage.getItem('pm_stream_clans');
         if (storedClans) {
             try { clanConfig = JSON.parse(storedClans); } catch (e) { clanConfig = []; }
+        }
+
+        // Load Mascot Animations
+        let mascotAnims = {};
+        function loadMascotAnims() {
+            const storedMascot = localStorage.getItem('pm_mascot_animations');
+            if (storedMascot) {
+                try { mascotAnims = JSON.parse(storedMascot); } catch (e) { mascotAnims = {}; }
+            }
+        }
+        loadMascotAnims();
+
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'pm_mascot_animations') {
+                loadMascotAnims();
+                if (currentData) updateBoard(currentData);
+            }
+            if (e.key === 'pm_stream_clans') {
+                const storedClans = localStorage.getItem('pm_stream_clans');
+                if (storedClans) {
+                    try { clanConfig = JSON.parse(storedClans); } catch (e) { clanConfig = []; }
+                }
+                if (currentData) updateBoard(currentData);
+            }
+        });
+
+        const smokeIntensities = { left: 0, right: 0 };
+        function initSmokeSystem() {
+            setInterval(() => {
+                if (smokeIntensities.left > 0) createSmoke('left');
+                if (smokeIntensities.right > 0) createSmoke('right');
+            }, 100);
+        }
+
+        function createSmoke(side) {
+            const container = document.getElementById('smoke-' + side);
+            if (!container || container.children.length > 20) return;
+
+            const p = document.createElement('div');
+            p.className = 'smoke-particle';
+
+            const x = 50 + (Math.random() - 0.5) * 40;
+            const y = 60 + (Math.random() - 0.5) * 20;
+            const size = 15 + Math.random() * 30;
+            const duration = 1 + Math.random() * 2;
+            const driftX = (Math.random() - 0.5) * 120;
+            const driftY = -120 - Math.random() * 80;
+
+            const color = getComputedStyle(document.documentElement).getPropertyValue(`--smoke-color-${side}`);
+
+            p.style.left = x + '%';
+            p.style.top = y + '%';
+            p.style.width = size + 'px';
+            p.style.height = size + 'px';
+            p.style.setProperty('--duration', duration + 's');
+            p.style.setProperty('--drift-x', driftX + 'px');
+            p.style.setProperty('--drift-y', driftY + 'px');
+            p.style.setProperty('--p-color', color);
+
+            container.appendChild(p);
+            setTimeout(() => p.remove(), duration * 1000);
         }
 
         // SCALING LOGIC
@@ -1499,7 +1742,16 @@
                         scaleBoard(); // Re-calc just in case
                     });
 
+                    let oldData = null; // Declare oldData here
+
                     conn.on('data', (data) => {
+                        currentData = data;
+
+                        // Impact Trigger (Points)
+                        if (oldData && (data.teamLeft.score > oldData.teamLeft.score)) triggerMascotImpact('left');
+                        if (oldData && (data.teamRight.score > oldData.teamRight.score)) triggerMascotImpact('right');
+
+                        oldData = JSON.parse(JSON.stringify(data));
                         updateBoard(data);
                     });
 
@@ -1793,6 +2045,14 @@
             }
         }
 
+        function cleanTeamName(name) {
+            if (!name) return "";
+            return name.trim()
+                .replace(/^SQUADRA\s+[A-Z]$/i, "") // Rimuove "SQUADRA A", "SQUADRA B" generico
+                .replace(/^TEAM\s+[A-Z]$/i, "")    // Rimuove "TEAM A", "TEAM B" generico
+                .trim() || name;                   // Se rimane vuoto, usa il nome originale
+        }
+
         function smartTruncate(str, limit) {
             if (!str) return "";
             str = str.trim().toUpperCase();
@@ -1834,13 +2094,14 @@
                 renderStandingsTable(d.standingsData);
             }
 
-            // Fastest Round Spotlight
+            // Fastest Round (TOP BAR)
+            const topBar = document.getElementById('top-bar');
             if (d.fastestRound) {
-                document.getElementById('fastest-round-spotlight').style.display = 'flex';
-                document.getElementById('spotlight-team-name').innerText = d.fastestRound.team;
-                document.getElementById('spotlight-time-val').innerText = formatTimeSeconds(d.fastestRound.duration);
+                topBar.style.display = 'flex';
+                document.getElementById('tb-record-team').innerText = d.fastestRound.team;
+                document.getElementById('tb-record-val').innerText = formatTimeSeconds(d.fastestRound.duration);
             } else {
-                document.getElementById('fastest-round-spotlight').style.display = 'none';
+                topBar.style.display = 'none';
             }
 
             // IPBA Layout URL Sync
@@ -1993,21 +2254,33 @@
             updatePenaltyVisuals('left', d.teamLeft);
             updatePenaltyVisuals('right', d.teamRight);
 
-            // NEXT MATCH LOGIC (TOP BAR)
-            const topBar = document.getElementById('top-bar');
+            // NEXT MATCH SPOTLIGHT
+            const nmSpot = document.getElementById('next-match-spotlight');
             if (d.nextMatch) {
-                topBar.style.display = 'flex';
-                document.getElementById('tb-teams').innerText = `${d.nextMatch.teamA} vs ${d.nextMatch.teamB}`;
+                nmSpot.style.display = 'flex';
 
-                const tbScore = document.getElementById('tb-score');
+                // Smart Truncation for spotlight
+                const nmLimit = 11; // Same as team panels for consistency
+                const tATrunc = smartTruncate(d.nextMatch.teamA, nmLimit);
+                const tBTrunc = smartTruncate(d.nextMatch.teamB, nmLimit);
+
+                document.getElementById('spot-nm-teams').innerText = `${tATrunc} vs ${tBTrunc}`;
+
+                const spotNmScore = document.getElementById('spot-nm-score');
+                const spotNmTimer = document.getElementById('spot-nm-timer');
+
                 if (d.nextMatch.isStarted) {
-                    tbScore.style.display = 'inline';
-                    tbScore.innerText = `[ ${d.nextMatch.scoreA} - ${d.nextMatch.scoreB} ]`;
+                    spotNmScore.style.display = 'block';
+                    spotNmScore.innerText = `[ ${d.nextMatch.scoreA} - ${d.nextMatch.scoreB} ]`;
+                    spotNmTimer.innerText = d.nextMatch.timer || "";
+                    spotNmTimer.style.color = "#fbbf24";
                 } else {
-                    tbScore.style.display = 'none';
+                    spotNmScore.style.display = 'none';
+                    spotNmTimer.innerText = d.nextMatch.time || "--:--";
+                    spotNmTimer.style.color = "#94a3b8";
                 }
             } else {
-                topBar.style.display = 'none';
+                nmSpot.style.display = 'none';
             }
 
             // HIDE OLD FOOTER
@@ -2080,6 +2353,7 @@
             }
         }
 
+        // Helper for team logos
         function updateLogo(side, teamName) {
             const imgEl = document.getElementById('logo-' + side);
             if (!imgEl) return;
@@ -2093,9 +2367,68 @@
             if (config && config.logoUrl) {
                 imgEl.src = config.logoUrl;
                 imgEl.style.display = 'block';
+
+                // Apply Mascot Animation
+                applyMascotStyle(side, teamName);
             } else {
                 imgEl.style.display = 'none';
             }
+        }
+
+        function applyMascotStyle(side, teamName) {
+            const root = document.documentElement;
+            const anim = mascotAnims[teamName];
+
+            if (anim) {
+                root.style.setProperty(`--glow-color-${side}`, hexToRgbA(anim.glowColor, 0.6));
+                root.style.setProperty(`--glow-intensity-${side}`, anim.glowIntensity + 'px');
+                root.style.setProperty(`--pulse-speed-${side}`, anim.pulseSpeed + 's');
+                root.style.setProperty(`--breath-speed-${side}`, anim.breathSpeed + 's');
+                root.style.setProperty(`--breath-scale-${side}`, anim.breathScale);
+                root.style.setProperty(`--smoke-color-${side}`, hexToRgbA(anim.smokeColor || '#4ade80', 0.4));
+                smokeIntensities[side] = anim.smokeIntensity || 0;
+
+                // Handle AI Custom CSS
+                const dynStyle = document.getElementById(`dynamic-style-${side}`);
+                const logo = document.getElementById(`logo-${side}`);
+                if (dynStyle && logo) {
+                    if (anim.customCSS) {
+                        const processedCSS = anim.customCSS.replaceAll('ai-custom-anim', `ai-custom-anim-${side}`);
+                        dynStyle.innerText = processedCSS;
+                        logo.classList.add('custom-anim');
+                    } else {
+                        dynStyle.innerText = "";
+                        logo.classList.remove('custom-anim');
+                    }
+                }
+            } else {
+                // Reset to neutral
+                root.style.setProperty(`--glow-intensity-${side}`, '0px');
+                root.style.setProperty(`--breath-scale-${side}`, '1');
+                smokeIntensities[side] = 0;
+                const dynStyle = document.getElementById(`dynamic-style-${side}`);
+                const logo = document.getElementById(`logo-${side}`);
+                if (dynStyle) dynStyle.innerText = "";
+                if (logo) logo.classList.remove('custom-anim');
+            }
+        }
+
+        function triggerMascotImpact(side) {
+            const img = document.getElementById('logo-' + side);
+            if (!img) return;
+            img.classList.add('shaking');
+            setTimeout(() => img.classList.remove('shaking'), 1000);
+        }
+
+        function hexToRgbA(hex, alpha) {
+            let c;
+            if (/^#([A-Fa-f0-9]{3}){1,2}$/.test(hex)) {
+                c = hex.substring(1).split('');
+                if (c.length == 3) c = [c[0], c[0], c[1], c[1], c[2], c[2]];
+                c = '0x' + c.join('');
+                return 'rgba(' + [(c >> 16) & 255, (c >> 8) & 255, c & 255].join(',') + ',' + alpha + ')';
+            }
+            return hex;
         }
 
         function handleTeamClick(side) {

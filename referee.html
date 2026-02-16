@@ -303,7 +303,7 @@
         }
 
         .btn-main {
-            flex: 2;
+            flex: 1;
             height: 90px;
             border-radius: 15px;
             border: none;
@@ -313,12 +313,58 @@
         }
 
         .btn-undo {
-            flex: 1;
+            flex: 0 0 70px;
             background: #475569;
             color: white;
             border-radius: 15px;
             border: none;
             font-size: 24px;
+        }
+
+        /* NEXT MATCH BOX (BOTTOM RIGHT) */
+        .next-match-box {
+            flex: 2.5;
+            background: #1e293b;
+            border-radius: 15px;
+            padding: 8px 12px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            border-left: 5px solid var(--warning);
+            min-width: 0;
+            /* Allow truncation */
+        }
+
+        .next-match-label {
+            font-size: 16px;
+            font-weight: 900;
+            color: var(--warning);
+            text-transform: uppercase;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .next-match-info {
+            font-family: 'Oswald', sans-serif;
+            font-size: 28px;
+            font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: white;
+            margin-top: 2px;
+            line-height: 1;
+        }
+
+        .next-match-timer {
+            font-family: 'Roboto', sans-serif;
+            font-weight: 900;
+            color: #fbbf24;
+            font-size: 36px;
+            text-shadow: 0 0 15px rgba(251, 191, 36, 0.6);
+            line-height: 1;
         }
 
         /* MODAL */
@@ -540,10 +586,13 @@
 
         <div class="bottom-bar">
             <button id="pause-btn" class="btn-main" onclick="handlePauseToggle()">START</button>
-            <button class="btn-undo" style="background: var(--warning); color: black; font-size: 1.2rem;"
-                onclick="sendCommand('NO_POINT')" title="NO POINT / SALTA SLOT">🚫</button>
-            <button class="btn-undo" onclick="sendCommand('UNDO')">↩️</button>
-            <button class="btn-undo" style="background: #334155; color: white;" onclick="openSettings()">⚙️</button>
+            <div id="next-match-panel" class="next-match-box">
+                <div class="next-match-label">
+                    <span>NEXT MATCH</span>
+                    <span id="nm-timer" class="next-match-timer"></span>
+                </div>
+                <div id="nm-info" class="next-match-info">-- vs --</div>
+            </div>
         </div>
     </div>
 
@@ -697,6 +746,31 @@
             });
         }
 
+        function smartTruncate(str, limit) {
+            if (!str) return "";
+            str = str.trim().toUpperCase();
+            if (str.length <= limit) return str;
+
+            const words = str.split(/\s+/).filter(w => w.length > 0);
+
+            if (words.length >= 3) {
+                const w1 = words[0].substring(0, 4);
+                const w2Initial = words[1].substring(0, 1) + ".";
+                const lastWord = words[words.length - 1];
+                const prefix = w1 + " " + w2Initial + " ";
+                const remaining = limit - prefix.length;
+                return (prefix + (remaining > 0 ? lastWord.substring(0, remaining) : "")).trim();
+            } else if (words.length === 2) {
+                const w1 = words[0].substring(0, 4);
+                const lastWord = words[1];
+                const prefix = w1 + " ";
+                const remaining = limit - prefix.length;
+                return (prefix + (remaining > 0 ? lastWord.substring(0, remaining) : "")).trim();
+            } else {
+                return str.substring(0, limit);
+            }
+        }
+
         function updateUI(data) {
             try {
                 if (!data) return;
@@ -800,6 +874,31 @@
                     // Remote penalty flash
                     const newPens = data.teamRight.totalPenalties || 0;
                     lastPensRight = newPens;
+                }
+
+                // Update Next Match Panel
+                const nmPanel = document.getElementById('next-match-panel');
+                if (data.nextMatch) {
+                    nmPanel.style.display = 'flex';
+                    const nmInfo = document.getElementById('nm-info');
+                    const nmTimer = document.getElementById('nm-timer');
+
+                    const nmLimit = 11;
+                    const tATrunc = smartTruncate(data.nextMatch.teamA, nmLimit);
+                    const tBTrunc = smartTruncate(data.nextMatch.teamB, nmLimit);
+
+                    let teamsText = `${tATrunc} vs ${tBTrunc}`;
+                    if (data.nextMatch.isStarted) {
+                        teamsText += ` [ ${data.nextMatch.scoreA} - ${data.nextMatch.scoreB} ]`;
+                        nmTimer.innerText = data.nextMatch.timer || "";
+                        nmTimer.style.color = "#fbbf24";
+                    } else {
+                        nmTimer.innerText = data.nextMatch.time || "--:--";
+                        nmTimer.style.color = "#94a3b8";
+                    }
+                    nmInfo.innerText = teamsText;
+                } else {
+                    nmPanel.style.display = 'none';
                 }
             } catch (err) {
                 console.error("UI Update Error:", err);

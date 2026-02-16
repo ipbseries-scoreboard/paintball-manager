@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPBA Pit Display</title>
+    <!-- PeerJS CDN -->
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <!-- Google Fonts -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Oswald:wght@700&family=Orbitron:wght@700&family=Inter:wght@400;900&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #000000;
+            --text-color: #ffffff;
+            --accent-color: #fbbf24;
+            /* Warning Yellow */
+            --timer-color: #fbbf24;
+            --team-a-color: #3b82f6;
+            --team-b-color: #ef4444;
+            --panel-bg: #111827;
+        }
+
+        body {
+            margin: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            padding: 2vh;
+            box-sizing: border-box;
+        }
+
+        /* CONNECTION UI */
+        #connect-ui {
+            position: fixed;
+            inset: 0;
+            background: #0f172a;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            gap: 20px;
+        }
+
+        #connect-ui input {
+            padding: 15px;
+            font-size: 24px;
+            border-radius: 8px;
+            border: none;
+            width: 300px;
+            text-align: center;
+            text-transform: uppercase;
+        }
+
+        #connect-ui button {
+            padding: 15px 40px;
+            font-size: 24px;
+            font-weight: bold;
+            background: var(--accent-color);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        /* PIT LAYOUT */
+        #pit-display {
+            display: none;
+            /* Shown after connection */
+            flex-direction: column;
+            height: 100%;
+            gap: 2vh;
+        }
+
+        /* TOP SECTION: TIMER */
+        .timer-container {
+            flex: 0 0 30%;
+            background: var(--panel-bg);
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-bottom: 8px solid var(--accent-color);
+        }
+
+        #timer {
+            font-family: 'Oswald', sans-serif;
+            font-size: 22vh;
+            line-height: 0.9;
+            color: var(--timer-color);
+        }
+
+        #status-text {
+            font-family: 'Oswald', sans-serif;
+            font-size: 5vh;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            color: #94a3b8;
+        }
+
+        /* MIDDLE SECTION: CURRENT MATCH */
+        .match-container {
+            flex: 1;
+            display: flex;
+            gap: 2vh;
+        }
+
+        .team-card {
+            flex: 1;
+            background: #1f2937;
+            border-radius: 20px;
+            padding: 2vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            border-top: 10px solid white;
+        }
+
+        .team-card.left {
+            border-color: var(--team-a-color);
+        }
+
+        .team-card.right {
+            border-color: var(--team-b-color);
+        }
+
+        .team-name {
+            font-family: 'Oswald', sans-serif;
+            font-size: 11vh;
+            font-weight: 900;
+            text-transform: uppercase;
+            line-height: 1;
+            margin-bottom: 0.5vh;
+        }
+
+        .team-score {
+            font-family: 'Oswald', sans-serif;
+            font-size: 18vh;
+            color: #ffffff;
+            font-weight: 900;
+            line-height: 1;
+        }
+
+        /* BOTTOM SECTION: ON DECK / UPCOMING */
+        .footer-container {
+            flex: 0 0 30%;
+            display: flex;
+            gap: 2vh;
+        }
+
+        .next-match-box {
+            flex: 1;
+            background: #1e293b;
+            border-radius: 20px;
+            padding: 1.5vh 3vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .label {
+            font-size: 2.5vh;
+            font-weight: 900;
+            color: var(--accent-color);
+            text-transform: uppercase;
+            margin-bottom: 0.5vh;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .next-match-teams {
+            font-family: 'Oswald', sans-serif;
+            font-size: 6vh;
+            font-weight: 700;
+            text-transform: uppercase;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .upcoming-list {
+            flex: 1;
+            background: #0f172a;
+            border-radius: 20px;
+            padding: 1.5vh 3vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            font-size: 3.2vh;
+            color: #64748b;
+        }
+
+        .upcoming-item {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid #1e293b;
+            padding: 0.5vh 0;
+        }
+
+        .upcoming-item:last-child {
+            border-bottom: none;
+        }
+
+        .upcoming-item b {
+            color: #e2e8f0;
+        }
+
+        /* ANIMATIONS */
+        @keyframes pulse-red {
+
+            0%,
+            100% {
+                color: var(--accent-color);
+            }
+
+            50% {
+                color: #ef4444;
+            }
+        }
+
+        .timer-warning {
+            animation: pulse-red 1s infinite;
+        }
+
+        /* PENALTY FLASHING */
+        @keyframes flash-minor {
+
+            0%,
+            100% {
+                background: #1f2937;
+            }
+
+            50% {
+                background: #eab308;
+            }
+
+            /* Yellow */
+        }
+
+        @keyframes flash-major {
+
+            0%,
+            100% {
+                background: #1f2937;
+            }
+
+            50% {
+                background: #ef4444;
+            }
+
+            /* Red */
+        }
+
+        .flash-minor {
+            animation: flash-minor 0.5s infinite;
+        }
+
+        .flash-major {
+            animation: flash-major 0.5s infinite;
+        }
+
+        .penalty-label {
+            font-family: 'Oswald', sans-serif;
+            font-size: 8vh;
+            font-weight: 700;
+            padding: 0.5vh 2vh;
+            border-radius: 12px;
+            display: none;
+            text-transform: uppercase;
+            line-height: 1;
+        }
+
+        .tech-label {
+            font-family: 'Oswald', sans-serif;
+            font-size: 6vh;
+            font-weight: 700;
+            padding: 0.5vh 2vh;
+            border-radius: 12px;
+            background: #3b82f6;
+            color: white;
+            display: none;
+            text-transform: uppercase;
+            line-height: 1;
+            border: 4px solid white;
+        }
+
+        .pen-minor {
+            background: #eab308;
+            color: black;
+        }
+
+        .pen-major {
+            background: #ef4444;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="connect-ui">
+        <h1 style="color: var(--accent-color); font-family: 'Oswald'; font-size: 48px; margin: 0;">PIT DISPLAY</h1>
+        <p style="color: #64748b; margin-top: -10px;">Inserisci il MATCH ID per connetterti</p>
+        <input type="text" id="match-id" placeholder="ID MATCH">
+        <button id="connect-btn">CONNETTI</button>
+        <div id="status-link" style="color: #475569; font-size: 14px;">In attesa...</div>
+    </div>
+
+    <div id="pit-display">
+        <!-- TIMER SECTION -->
+        <div class="timer-container">
+            <div id="status-text">PRONTO</div>
+            <div id="timer">00:00</div>
+        </div>
+
+        <!-- CURRENT MATCH SECTION -->
+        <div class="match-container">
+            <div id="card-left" class="team-card left">
+                <div id="name-left" class="team-name">TEAM A</div>
+                <div style="display: flex; align-items: center; gap: 3vh;">
+                    <span id="pen-label-left" class="penalty-label pen-minor">MINOR</span>
+                    <div id="score-left" class="team-score">0</div>
+                    <span id="tech-label-left" class="tech-label">TECH</span>
+                </div>
+            </div>
+            <div id="card-right" class="team-card right">
+                <div id="name-right" class="team-name">TEAM B</div>
+                <div style="display: flex; align-items: center; gap: 3vh;">
+                    <span id="tech-label-right" class="tech-label">TECH</span>
+                    <div id="score-right" class="team-score">0</div>
+                    <span id="pen-label-right" class="penalty-label pen-minor">MINOR</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- FOOTER SECTION: NEXT & UPCOMING -->
+        <div class="footer-container">
+            <div class="next-match-box">
+                <div class="label" style="justify-content: center;">
+                    <span>PROSSIMO MATCH</span>
+                </div>
+                <div id="next-match-time"
+                    style="color:var(--accent-color); font-size: 10vh; font-weight: 900; text-align: center; line-height: 1; margin: 0.5vh 0; font-family: 'Oswald', sans-serif;">
+                    --:--</div>
+                <div style="display: flex; align-items: baseline; gap: 20px; justify-content: center;">
+                    <div id="next-match-names" class="next-match-teams" style="font-size: 5vh;">TBD vs TBD</div>
+                    <span id="next-match-score"
+                        style="display:none; color:white; font-size: 4.5vh; font-family: 'Oswald', sans-serif; font-weight: bold; white-space: nowrap;">[
+                        0 - 0 ]</span>
+                </div>
+            </div>
+
+            <div id="upcoming-container" class="upcoming-list">
+                <div class="label">IN ARRIVO</div>
+                <div id="upcoming-items">
+                    <!-- Dynamic items -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const connectUI = document.getElementById('connect-ui');
+        const pitUI = document.getElementById('pit-display');
+        const matchIdInput = document.getElementById('match-id');
+        const connectBtn = document.getElementById('connect-btn');
+        const statusText = document.getElementById('status-link');
+
+        let peer = null;
+        let conn = null;
+
+        // Load last ID
+        const lastId = localStorage.getItem('last_match_id');
+        if (lastId) matchIdInput.value = lastId;
+
+        connectBtn.addEventListener('click', () => {
+            let id = matchIdInput.value.trim().toUpperCase();
+            if (!id) return;
+
+            // Auto-prepend IPBA- if missing
+            if (!id.startsWith('IPBA-')) {
+                id = 'IPBA-' + id;
+            }
+
+            localStorage.setItem('last_match_id', id.replace('IPBA-', '')); // Store only the numeric part for UI
+            startClient(id);
+        });
+
+        function startClient(hostId) {
+            statusText.innerText = "Connessione in corso...";
+
+            if (peer) peer.destroy();
+
+            peer = new Peer();
+
+            peer.on('open', (id) => {
+                const connection = peer.connect(hostId);
+                setupConnection(connection);
+            });
+
+            peer.on('error', (err) => {
+                console.error(err);
+                statusText.innerText = "Errore: " + err.type;
+            });
+        }
+
+        function setupConnection(c) {
+            conn = c;
+
+            conn.on('open', () => {
+                statusText.innerText = "Connesso!";
+                setTimeout(() => {
+                    connectUI.style.display = 'none';
+                    pitUI.style.display = 'flex';
+                }, 500);
+            });
+
+            conn.on('data', (data) => {
+                updateUI(data);
+            });
+
+            conn.on('close', () => {
+                statusText.innerText = "Disconnesso. Riconnessione...";
+                connectUI.style.display = 'flex';
+                pitUI.style.display = 'none';
+            });
+        }
+
+        function updateUI(data) {
+            // Timer
+            const timerEl = document.getElementById('timer');
+            timerEl.innerText = data.timer;
+
+            // Timer Color/Warning
+            const timeVal = parseTime(data.timer);
+            if (timeVal <= 10 && data.mode !== 'IDLE') {
+                timerEl.classList.add('timer-warning');
+            } else {
+                timerEl.classList.remove('timer-warning');
+            }
+
+            // Status
+            document.getElementById('status-text').innerText = data.statusText || data.mode;
+
+            // Teams
+            document.getElementById('name-left').innerText = smartTruncate(cleanTeamName(data.teamLeft.name), 11);
+            document.getElementById('score-left').innerText = data.teamLeft.score;
+            document.getElementById('card-left').style.borderColor = data.teamLeft.color;
+
+            document.getElementById('name-right').innerText = smartTruncate(cleanTeamName(data.teamRight.name), 11);
+            document.getElementById('score-right').innerText = data.teamRight.score;
+            document.getElementById('card-right').style.borderColor = data.teamRight.color;
+
+            // Next Match
+            if (data.nextMatch) {
+                const tATrunc = smartTruncate(cleanTeamName(data.nextMatch.teamA), 15);
+                const tBTrunc = smartTruncate(cleanTeamName(data.nextMatch.teamB), 15);
+                document.getElementById('next-match-names').innerText = `${tATrunc} vs ${tBTrunc}`;
+                const nmScore = document.getElementById('next-match-score');
+                const nmTime = document.getElementById('next-match-time');
+
+                if (data.nextMatch.isStarted) {
+                    nmScore.style.display = 'inline';
+                    nmScore.innerText = `[ ${data.nextMatch.scoreA} - ${data.nextMatch.scoreB} ]`;
+                    nmTime.innerText = data.nextMatch.timer || "00:00";
+                    nmTime.style.color = 'var(--accent-color)';
+                } else {
+                    nmScore.style.display = 'none';
+                    nmTime.innerText = data.nextMatch.time || "--:--";
+                    nmTime.style.color = '#64748b';
+                }
+            }
+
+            // Upcoming Matches (from tournament object if available)
+            if (data.tournament && data.tournament.active) {
+                renderUpcoming(data.tournament);
+            }
+
+            // Penalty & Tech Alerts
+            updatePenaltyVisuals('left', data.teamLeft);
+            updatePenaltyVisuals('right', data.teamRight);
+
+            // Tech Pause Display
+            document.getElementById('tech-label-left').style.display = data.teamLeft.techUsed ? 'block' : 'none';
+            document.getElementById('tech-label-right').style.display = data.teamRight.techUsed ? 'block' : 'none';
+        }
+
+        function updatePenaltyVisuals(side, teamData) {
+            const card = document.getElementById('card-' + side);
+            const label = document.getElementById('pen-label-' + side);
+            if (!card || !label) return;
+
+            card.classList.remove('flash-minor', 'flash-major');
+            label.style.display = 'none';
+
+            if (teamData.lastPenalty && (Math.abs(Date.now() - teamData.lastPenalty.timestamp) < 5000)) {
+                const type = (teamData.lastPenalty.type || 'MINOR').toUpperCase();
+                label.innerText = type; // Metti solo MINOR o MAJOR come richiesto
+                label.style.display = 'block';
+                label.className = 'penalty-label ' + (type === 'MAJOR' ? 'pen-major' : 'pen-minor');
+                card.classList.add(type === 'MAJOR' ? 'flash-major' : 'flash-minor');
+            }
+        }
+
+        function renderUpcoming(tourney) {
+            const container = document.getElementById('upcoming-items');
+            container.innerHTML = '';
+
+            const matches = tourney.matches;
+            const currentIdx = tourney.currentIndex;
+
+            // Show next 2 matches after the current one
+            let count = 0;
+            for (let i = currentIdx + 1; i < matches.length; i++) {
+                if (count >= 2) break;
+
+                const m = matches[i];
+                const div = document.createElement('div');
+                div.className = 'upcoming-item';
+                const tATrunc = smartTruncate(cleanTeamName(m.teamA), 11);
+                const tBTrunc = smartTruncate(cleanTeamName(m.teamB), 11);
+                div.innerHTML = `
+                    <span>${m.time || '--:--'}</span>
+                    <b>${tATrunc} vs ${tBTrunc}</b>
+                    <span style="font-size: 0.8em">${m.phase || ''}</span>
+                `;
+                container.appendChild(div);
+                count++;
+            }
+        }
+
+        function parseTime(str) {
+            const p = str.split(':');
+            return parseInt(p[0]) * 60 + parseInt(p[1]);
+        }
+
+        function cleanTeamName(name) {
+            if (!name) return "";
+            // Remove prefixes like "Quarti di finale E - ", "Semifinale - ", etc.
+            let clean = name.replace(/^(Ottavi|Quarti|Semifinali|Semifinale|Finale|Small Finale|Girone|Pool|Serie)[^-\n]*-\s*/gi, '')
+                .replace(/\s*\(.*?\)\s*/g, ' ') // Rimuove il contenuto tra parentesi (es. "(ex Idols)")
+                .replace(/^SQUADRA\s+[A-Z]$/i, "") // Rimuove "SQUADRA A", "SQUADRA B" generico
+                .replace(/^TEAM\s+[A-Z]$/i, "")    // Rimuove "TEAM A", "TEAM B" generico
+                .replace(/^[-\s\.,\(\)]+/, '')
+                .replace(/[-\s\.,\(\)]+$/, '')
+                .trim();
+            return clean || name;
+        }
+
+        function smartTruncate(str, limit) {
+            if (!str) return "";
+            str = str.trim().toUpperCase();
+            if (str.length <= limit) return str;
+
+            const words = str.split(/\s+/).filter(w => w.length > 0);
+
+            if (words.length >= 3) {
+                const w1 = words[0].substring(0, 4);
+                const w2Initial = words[1].substring(0, 1) + ".";
+                const lastWord = words[words.length - 1];
+                const prefix = w1 + " " + w2Initial + " ";
+                const remaining = limit - prefix.length;
+                return (prefix + (remaining > 0 ? lastWord.substring(0, remaining) : "")).trim();
+            } else if (words.length === 2) {
+                const w1 = words[0].substring(0, 4);
+                const lastWord = words[1];
+                const prefix = w1 + " ";
+                const remaining = limit - prefix.length;
+                return (prefix + (remaining > 0 ? lastWord.substring(0, remaining) : "")).trim();
+            } else {
+                return str.substring(0, limit);
+            }
+        }
+
+    </script>
+</body>
+
+</html>

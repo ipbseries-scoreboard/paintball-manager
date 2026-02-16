@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPBA LED Wall Scoreboard</title>
+    <!-- PeerJS CDN -->
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <!-- Google Fonts -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Oswald:wght@700&family=Orbitron:wght@700&family=Bebas+Neue&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #000000;
+            --text-color: #ffffff;
+            --accent-color: #ffff00;
+            /* High visibility yellow */
+            --timer-color: #ffff00;
+            --team-a-color: #ffffff;
+            --team-b-color: #ffffff;
+            --font-main: 'Oswald', sans-serif;
+            --font-timer: 'Oswald', sans-serif;
+            --font-narrow: 'Bebas Neue', sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-main);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* SCALER CONTAINER (SQUARE 1:1) */
+        #scaler {
+            width: 1080px;
+            height: 1080px;
+            position: absolute;
+            transform-origin: center center;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        #connect-ui {
+            background: #1e293b;
+            padding: 40px;
+            border-radius: 12px;
+            border: 4px solid var(--accent-color);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            z-index: 1000;
+            position: fixed;
+            width: 80%;
+            max-width: 600px;
+        }
+
+        input {
+            padding: 15px;
+            font-size: 1.5rem;
+            border-radius: 8px;
+            border: none;
+            background: #000;
+            color: white;
+            text-align: center;
+        }
+
+        button {
+            padding: 15px 30px;
+            font-size: 1.5rem;
+            background: var(--accent-color);
+            color: black;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        /* LED WALL LAYOUT */
+        #scoreboard {
+            display: none;
+            width: 100%;
+            height: 100%;
+            flex-direction: column;
+            justify-content: space-around;
+            align-items: center;
+        }
+
+        /* TOP SECTION: TIMER */
+        .timer-section {
+            width: 100%;
+            text-align: center;
+            flex: 0 0 auto;
+            margin-top: 20px;
+        }
+
+        #timer {
+            font-family: var(--font-timer);
+            font-size: 450px;
+            line-height: 0.9;
+            color: var(--timer-color);
+            text-shadow: 0 0 30px rgba(255, 255, 0, 0.3);
+            font-variant-numeric: tabular-nums;
+            margin-top: -20px;
+        }
+
+        /* MIDDLE SECTION: TEAMS & SCORES */
+        .match-section {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex: 1;
+            padding: 0 10px;
+        }
+
+        .team-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 48%;
+        }
+
+        .team-name {
+            font-family: var(--font-narrow);
+            font-size: 100px;
+            text-transform: uppercase;
+            white-space: nowrap;
+            overflow: hidden;
+            width: 100%;
+            text-align: center;
+            margin-bottom: -10px;
+            letter-spacing: 2px;
+        }
+
+        .score {
+            font-size: 550px;
+            font-weight: 900;
+            line-height: 0.75;
+        }
+
+        #panel-left .team-name {
+            color: var(--team-a-color);
+        }
+
+        #panel-left .score {
+            color: var(--team-a-color);
+        }
+
+        #panel-right .team-name {
+            color: var(--team-b-color);
+        }
+
+        #panel-right .score {
+            color: var(--team-b-color);
+        }
+
+        /* BOTTOM SECTION: STATUS */
+        .status-section {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            /* Stacked for square aspect */
+            justify-content: center;
+            gap: 20px;
+            align-items: center;
+            flex: 0 0 auto;
+            padding-bottom: 40px;
+        }
+
+        #status-text {
+            font-size: 60px;
+            /* Reduced */
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            color: #64748b;
+            padding: 10px 30px;
+            border: 3px solid #64748b;
+            border-radius: 15px;
+        }
+
+        #status-text.state-active {
+            color: #22c55e;
+            border-color: #22c55e;
+            box-shadow: 0 0 30px rgba(34, 197, 94, 0.4);
+        }
+
+        #status-text.state-paused {
+            color: #f59e0b;
+            border-color: #f59e0b;
+            animation: pulse 1s infinite alternate;
+        }
+
+        #status-text.state-interval {
+            color: var(--team-a-color);
+            border-color: var(--team-a-color);
+        }
+
+        @keyframes pulse {
+            from {
+                opacity: 1;
+            }
+
+            to {
+                opacity: 0.5;
+            }
+        }
+
+        #match-phase {
+            font-size: 40px;
+            /* Reduced */
+            color: var(--accent-color);
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="connect-ui">
+        <h2 style="color: var(--accent-color); margin: 0; text-align: center; font-size: 2.5rem;">LED WALL VIEWER (1:1)
+        </h2>
+        <p style="text-align: center; color: #94a3b8; font-size: 1.2rem;">Inserisci il Match ID dalla finestra di Regia
+            (index.html)</p>
+        <input type="text" id="match-id" placeholder="es. 1234" />
+        <button id="connect-btn">CONNETTI</button>
+    </div>
+
+    <div id="scaler">
+        <div id="scoreboard">
+            <!-- TIMER TOP -->
+            <div class="timer-section">
+                <div id="timer">10:00</div>
+            </div>
+
+            <!-- TEAMS MIDDLE -->
+            <div class="match-section">
+                <div class="team-box" id="panel-left">
+                    <div class="team-name" id="name-left">TEAM A</div>
+                    <div class="score" id="score-left">0</div>
+                </div>
+
+                <div class="team-box" id="panel-right">
+                    <div class="team-name" id="name-right">TEAM B</div>
+                    <div class="score" id="score-right">0</div>
+                </div>
+            </div>
+
+            <!-- STATUS BOTTOM -->
+            <div class="status-section">
+                <div id="match-phase">GIRONI</div>
+                <div id="status-text">PRONTO</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const btn = document.getElementById('connect-btn');
+        const input = document.getElementById('match-id');
+        const ui = document.getElementById('connect-ui');
+        const sb = document.getElementById('scoreboard');
+        const scaler = document.getElementById('scaler');
+
+        // SCALING (SQUARE 1:1)
+        function scaleBoard() {
+            const targetWidth = 1080;
+            const targetHeight = 1080;
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+            const scale = Math.min(winW / targetWidth, winH / targetHeight);
+            scaler.style.transform = `scale(${scale})`;
+        }
+
+        window.addEventListener('resize', scaleBoard);
+        scaleBoard();
+
+        // PEERJS
+        btn.addEventListener('click', () => {
+            const id = input.value.trim();
+            if (!id) return;
+            startClient(id);
+        });
+
+        function startClient(hostId) {
+            if (hostId && !hostId.startsWith("IPBA-")) hostId = "IPBA-" + hostId;
+
+            const peer = new Peer();
+            peer.on('open', (myId) => {
+                const conn = peer.connect(hostId);
+                conn.on('open', () => {
+                    localStorage.setItem('last_match_id', hostId.replace('IPBA-', ''));
+                    ui.style.display = 'none';
+                    sb.style.display = 'flex';
+                    scaleBoard();
+                });
+
+                conn.on('data', (data) => {
+                    updateUI(data);
+                });
+
+                conn.on('close', () => {
+                    alert("Connessione persa!");
+                    location.reload();
+                });
+            });
+        }
+
+        function updateUI(d) {
+            // Timer
+            let timerStr = d.timer || "00:00";
+            if (timerStr.includes('.')) {
+                timerStr = timerStr.split('.')[0];
+            }
+            document.getElementById('timer').innerText = timerStr;
+
+            // Teams & Scores
+            document.getElementById('name-left').innerText = d.teamLeft.name.toUpperCase();
+            document.getElementById('score-left').innerText = d.teamLeft.score;
+            document.getElementById('name-right').innerText = d.teamRight.name.toUpperCase();
+            document.getElementById('score-right').innerText = d.teamRight.score;
+
+            // Status
+            const st = document.getElementById('status-text');
+            st.innerText = d.statusText || "IDLE";
+            st.className = d.statusClass || "";
+
+            const phase = document.getElementById('match-phase');
+            phase.innerText = d.phase || "";
+
+
+            // Auto Color Sync
+            // Removed dynamic team color sync for scores/names as per user request (kept white)
+            // if (d.teamLeft.color) document.documentElement.style.setProperty('--team-a-color', d.teamLeft.color);
+            // if (d.teamRight.color) document.documentElement.style.setProperty('--team-b-color', d.teamRight.color);
+        }
+
+
+        // Auto-connect if last ID exists
+        const lastId = localStorage.getItem('last_match_id');
+        if (lastId) input.value = lastId;
+
+    </script>
+</body>
+
+</html>
