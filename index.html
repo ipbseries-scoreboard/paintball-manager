@@ -156,11 +156,12 @@
             min-height: 0;
             /* Important for flex scrolling */
             transition: grid-template-columns 0.4s ease;
+            position: relative;
+            /* Anchor for absolute children */
         }
 
-        .main-content.show-schedule {
-            grid-template-columns: 320px 1fr 320px 400px;
-        }
+        /* Overlay Mode - No grid change */
+        /* .main-content.show-schedule { grid-template-columns: 320px 1fr 320px 400px; } */
 
         #schedule-panel {
             display: none;
@@ -170,6 +171,13 @@
             flex-direction: column;
             overflow: hidden;
             border: 1px solid rgba(255, 255, 255, 0.1);
+            /* ABSOLUTE OVERLAY */
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 9999;
         }
 
         .main-content.show-schedule #schedule-panel {
@@ -246,6 +254,38 @@
             margin-top: 4px;
         }
 
+        .log-entry.red {
+            color: #ef4444;
+            font-weight: bold;
+        }
+
+        .smart-alert {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(239, 68, 68, 0.9);
+            color: white;
+            padding: 20px 60px;
+            border-radius: 20px;
+            font-size: 3.5rem;
+            font-weight: bold;
+            z-index: 10000;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+            border: 5px solid white;
+            text-align: center;
+            pointer-events: none;
+            transition: opacity 0.5s ease;
+            text-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+            font-family: 'Oswald', sans-serif;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .smart-alert.tech {
+            background: rgba(14, 165, 233, 0.9);
+        }
+
         .team-panel {
             background-color: var(--panel-bg);
             border-radius: 12px;
@@ -255,6 +295,81 @@
             align-items: center;
             justify-content: space-between;
             position: relative;
+            z-index: 500;
+        }
+
+        /* Dropdown Menu */
+        .dropdown {
+            position: relative;
+            display: inline-block;
+            z-index: 600;
+        }
+
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: var(--panel-bg);
+            min-width: 260px;
+            box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.5);
+            z-index: 10001;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            top: 100%;
+            right: 0;
+            padding: 5px 0;
+        }
+
+        .dropdown:hover .dropdown-content {
+            display: block;
+        }
+
+        .dropdown-item {
+            padding: 10px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--text-color);
+            transition: background 0.2s;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .dropdown-item:last-child {
+            border-bottom: none;
+        }
+
+        .dropdown-item:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .dropdown-link {
+            color: var(--text-color);
+            text-decoration: none;
+            font-weight: bold;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .dropdown-link:hover {
+            color: var(--accent-color);
+        }
+
+        .qr-icon-btn {
+            background: transparent;
+            border: 1px solid #334155;
+            color: var(--text-color);
+            border-radius: 4px;
+            padding: 2px 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin-left: 10px;
+        }
+
+        .qr-icon-btn:hover {
+            background: var(--accent-color);
+            color: var(--bg-color);
+            border-color: var(--accent-color);
         }
 
         .team-name {
@@ -1032,11 +1147,13 @@
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                                 <div><small>Pausa (sec)</small><input type="number" id="break-duration"
                                         class="form-control" value="0"></div>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
-                                    <div><small>Int. Punto (s)</small><input type="number" id="point-interval-duration"
+                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px;">
+                                    <div><small>Int. Punto</small><input type="number" id="point-interval-duration"
                                             class="form-control" value="30"></div>
-                                    <div><small>Int. Slot (s)</small><input type="number" id="slot-interval-duration"
+                                    <div><small>Int. Slot</small><input type="number" id="slot-interval-duration"
                                             class="form-control" value="120"></div>
+                                    <div><small>Int. Singolo</small><input type="number"
+                                            id="single-slot-interval-duration" class="form-control" value="120"></div>
                                 </div>
                                 <div><small>Game (min)</small><input type="number" id="game-duration-setting"
                                         class="form-control" value="10"></div>
@@ -1170,11 +1287,13 @@
                                     <option value="POINT_B">PUNTO Team B</option>
                                     <option value="PAUSE">Pausa/Riprendi</option>
                                     <option value="START">Inizia Punto</option>
-                                    <option value="TOWEL_A">Towel Team A</option>
-                                    <option value="TOWEL_B">Towel Team B</option>
+                                    <option value="TOWEL_A">Towel Team A (Smart: Towel/Tech)</option>
+                                    <option value="TOWEL_B">Towel Team B (Smart: Towel/Tech)</option>
                                     <option value="NO_POINT">No Point</option>
                                     <option value="TECH_A">Tech Team A</option>
                                     <option value="TECH_B">Tech Team B</option>
+
+
                                     <option value="VERIFY_APPROVE">✓ Approva Punto</option>
                                     <option value="VERIFY_REVERSE">⇄ Capovolgi Punto</option>
                                     <option value="VERIFY_REJECT">✕ Rifiuta Punto</option>
@@ -1492,25 +1611,61 @@
             </div>
 
             <div style="display: flex; gap: 10px;">
-                <button id="btn-open-board" class="btn" onclick="window.open('board.html', '_blank')">📺 Apri
-                    Board</button>
+                <div class="dropdown">
+                    <button class="btn">📺 Visualizzazione ▼</button>
+                    <div class="dropdown-content">
+                        <div class="dropdown-item">
+                            <a href="#" onclick="openView('board.html'); return false;" class="dropdown-link">📺
+                                Scoreboard</a>
+                            <button class="qr-icon-btn"
+                                onclick="showViewQR('board.html', 'Scoreboard', '📺')">📱</button>
+                        </div>
+                        <div class="dropdown-item">
+                            <a href="#" onclick="openView('pit.html'); return false;" class="dropdown-link">📺 Pit
+                                Display</a>
+                            <button class="qr-icon-btn"
+                                onclick="showViewQR('pit.html', 'Pit Display', '📺')">📱</button>
+                        </div>
+                        <div class="dropdown-item">
+                            <a href="#" onclick="openView('ledwall.html'); return false;" class="dropdown-link">📟 Led
+                                Wall</a>
+                            <button class="qr-icon-btn"
+                                onclick="showViewQR('ledwall.html', 'Led Wall', '📟')">📱</button>
+                        </div>
+                        <div class="dropdown-item">
+                            <a href="#" onclick="openView('streaming.html'); return false;" class="dropdown-link">📡
+                                Streaming</a>
+                            <button class="qr-icon-btn"
+                                onclick="showViewQR('streaming.html', 'Streaming', '📡')">📱</button>
+                        </div>
+                        <div class="dropdown-item">
+                            <a href="#" onclick="openView('referee.html'); return false;" class="dropdown-link">📱
+                                Referee</a>
+                            <button class="qr-icon-btn"
+                                onclick="showViewQR('referee.html', 'Referee', '📱')">📱</button>
+                        </div>
+                        <div class="dropdown-item">
+                            <a href="#" onclick="openView('obs_bar.html'); return false;" class="dropdown-link">🎥 OBS
+                                Bar</a>
+                            <button class="qr-icon-btn"
+                                onclick="showViewQR('obs_bar.html', 'OBS Bar', '🎥')">📱</button>
+                        </div>
+                    </div>
+                </div>
+
                 <button id="btn-tournament" class="btn">🏆 Torneo</button>
                 <button id="btn-history" class="btn">📜 Storico</button>
                 <button id="btn-reopen-phase" class="btn"
                     style="display: none; background: #c2410c; color: white; border-color: #ea580c; animation: pulse 2s infinite;"
                     onclick="reopenPhaseModal()">🏁 OPZIONI FINE</button>
                 <button id="btn-settings" class="btn">⚙️ Setup</button>
-                <button id="btn-pit-display" class="btn" onclick="window.open('pit.html', '_blank')">📺 Pit
-                    Display</button>
-                <button id="btn-connect-buzzer" class="btn" style="background: #059669; color: white;"
-                    onclick="connectBuzzer()">🔌 Connetti Buzzer</button>
                 <button id="btn-toggle-schedule" class="btn" onclick="toggleSchedule()">🗓️ Programma</button>
             </div>
         </header>
 
         <div class="main-content">
             <!-- Left Panel -->
-            <div id="panel-left" class="team-panel">
+            <div id="panel-left" class="team-panel" onclick="event.stopPropagation()">
                 <div class="team-name" id="name-left">TEAM A</div>
                 <div class="tech-used-label" id="tech-used-left">PAUSA USATA</div>
                 <div class="team-score">
@@ -1529,8 +1684,7 @@
                     <button id="btn-point-left" class="btn btn-large">PUNTO</button>
                     <div style="display: flex; gap: 5px; margin-top: 5px;">
                         <button id="btn-action-left" class="btn btn-danger" style="flex: 1;">TOWEL</button>
-                        <button id="btn-tech-left" class="btn btn-tech" style="flex: 1;"
-                            onclick="techPause('left')">TECH</button>
+                        <button id="btn-tech-left" class="btn btn-tech" style="display: none;">TECH</button>
                     </div>
                 </div>
             </div>
@@ -1587,7 +1741,7 @@
             </div>
 
             <!-- Right Panel -->
-            <div id="panel-right" class="team-panel">
+            <div id="panel-right" class="team-panel" onclick="event.stopPropagation()">
                 <div class="team-name" id="name-right">TEAM B</div>
                 <div class="tech-used-label" id="tech-used-right">PAUSA USATA</div>
                 <div class="team-score">
@@ -1607,8 +1761,7 @@
                     <button id="btn-point-right" class="btn btn-large">PUNTO</button>
                     <div style="display: flex; gap: 5px; margin-top: 5px;">
                         <button id="btn-action-right" class="btn btn-danger" style="flex: 1;">TOWEL</button>
-                        <button id="btn-tech-right" class="btn btn-tech" style="flex: 1;"
-                            onclick="techPause('right')">TECH</button>
+                        <button id="btn-tech-right" class="btn btn-tech" style="display: none;">TECH</button>
                     </div>
                 </div>
             </div>
@@ -1642,6 +1795,7 @@
                 gameTime: (parseInt(savedSettings.gameDuration) || 10) * 60,
                 pointInterTime: (parseInt(savedSettings.pointIntervalDuration) || 30),
                 slotInterTime: (parseInt(savedSettings.slotIntervalDuration) || 120),
+                singleSlotInterTime: (parseInt(savedSettings.singleSlotIntervalDuration) || 120),
                 mercyDiff: parseInt(savedSettings.mercyDiff) || 4,
                 goldenTime: (parseInt(savedSettings.goldenDuration) || 3) * 60
             };
@@ -1661,6 +1815,7 @@
                     breakDuration: parseInt(savedSettings.breakDuration) || 0,
                     pointIntervalDuration: parseInt(savedSettings.pointIntervalDuration) || 30,
                     slotIntervalDuration: parseInt(savedSettings.slotIntervalDuration) || 120,
+                    singleSlotIntervalDuration: parseInt(savedSettings.singleSlotIntervalDuration) || 120,
                     goldenDuration: parseInt(savedSettings.goldenDuration) || 3,
                     voiceURI: savedSettings.voiceURI || null,
                     mercyDiff: parseInt(savedSettings.mercyDiff) || 4,
@@ -1794,7 +1949,7 @@
                     let currentPhaseTracker = "GIRONI"; // Track state across lines
                     extractedText.forEach(lineRaw => {
                         // Check for phase change keywords on EVERY line (even if it's not a match line)
-                        const phaseKeywords = ["Girone", "Ottavi", "Quarti", "Semifinali", "Finale", "Pool"];
+                        const phaseKeywords = ["Girone", "Ottavi", "Quarti", "Semifinali", "Finale", "Pool", "Playout"];
                         for (const kw of phaseKeywords) {
                             if (lineRaw.toLowerCase().includes(kw.toLowerCase())) {
                                 currentPhaseTracker = kw.toUpperCase();
@@ -1807,7 +1962,7 @@
 
                         possibleMatches.forEach((line, colIdx) => {
                             // Skip knockout phases as per user request (they will be created via Wizard)
-                            if (["OTTAVI", "QUARTI", "SEMIFINALI", "FINALE"].includes(currentPhaseTracker)) return;
+                            if (["OTTAVI", "QUARTI", "SEMIFINALI", "FINALE", "PLAYOUT"].includes(currentPhaseTracker)) return;
 
                             // Find all occurrences of the score-like pattern to identify the valid one
                             const found = [...line.matchAll(/(\d+\s*:\s*\d+)/g)];
@@ -1826,30 +1981,32 @@
                                 let rawB = line.substring(splitIndex + matchStr.length);
 
                                 // Generic Cleaning Helper
-                                const cleanTeam = (str) => {
-                                    return str.replace(/^\s*\d{1,2}:\d{2}\s*-?/, '') // Remove Time
+                                const cleanName = (str) => {
+                                    return str.replace(/^\s*\d{1,2}[\.:]\d{2}\s*-?/, '') // Remove Time (HH:MM or HH.MM)
                                         .replace(/Serie\s+[A-Z]\b/gi, '')
                                         .replace(/Girone\s+\w+/gi, '')
                                         .replace(/mercy\s+\d+/gi, '')
+                                        .replace(/\d+\s*min/gi, '') // Remove duration (e.g. 10 min)
                                         .replace(/Ottavi\s*\w*/gi, '')
                                         .replace(/Quarti\s*\w*/gi, '')
                                         .replace(/Semifinali\s*\w*/gi, '')
                                         .replace(/Finale\s*\w*/gi, '')
                                         .replace(/Pool\s*\w*/gi, '')
+                                        .replace(/Playout\s*\w*/gi, '')
                                         .replace(/^[-\s\.,]+/, '') // Leading artifacts
                                         .replace(/[-\s\.,]+$/, '') // Trailing artifacts
                                         .trim();
                                 };
 
                                 // Clean Team Names
-                                let timeMatch = rawA.match(/^\s*(\d{1,2}:\d{2})/);
-                                let matchTime = timeMatch ? timeMatch[1] : (matches.length > 0 ? matches[matches.length - 1].time : "00:00");
+                                let timeMatch = rawA.match(/^\s*(\d{1,2}[\.:]\d{2})/);
+                                let matchTime = timeMatch ? timeMatch[1].replace('.', ':') : (matches.length > 0 ? matches[matches.length - 1].time : "00:00");
 
-                                let teamA = cleanTeam(rawA);
-                                let teamB = cleanTeam(rawB);
+                                let teamA = cleanName(rawA);
+                                let teamB = cleanName(rawB);
 
                                 // Final Check
-                                if (teamA.length > 1 && teamB.length > 1 && !/^\d{1,2}:\d{2}$/.test(teamA)) {
+                                if (teamA.length > 1 && teamB.length > 1 && !/^\d{1,2}[\.:]\d{2}$/.test(teamA)) {
                                     matches.push({
                                         teamA: teamA,
                                         teamB: teamB,
@@ -1914,9 +2071,8 @@
                 let targetId = state.settings.matchId;
 
                 if (!targetId || targetId === "undefined" || !targetId.startsWith("IPBA-")) {
-                    // Generate a unique ID but we'll show only numbers to user
-                    const randomVal = Math.floor(1000 + Math.random() * 9000).toString();
-                    targetId = "IPBA-" + randomVal;
+                    // Default to standard ID 1674 as requested
+                    targetId = "IPBA-1674";
                     state.settings.matchId = targetId;
                     localStorage.setItem('pm_settings', JSON.stringify(state.settings));
                 }
@@ -1936,7 +2092,7 @@
                         return;
                     }
                     // Show only the numeric part to the user
-                    const displayId = id.replace("IPBA-", "");
+                    const displayId = id.replace("IPBA-" + "", "");
                     document.getElementById('my-peer-id').innerText = displayId;
                     document.getElementById('my-peer-id').style.color = 'var(--success-color)';
                     log("Rete pronta. ID: " + displayId);
@@ -1955,31 +2111,6 @@
                     conn.on('close', () => {
                         connections = connections.filter(c => c !== conn);
                     });
-                });
-
-                peer.on('error', (err) => {
-                    console.error(err);
-                    if (err.type === 'unavailable-id') {
-                        document.getElementById('my-peer-id').innerText = "OCCUPATO (" + targetId + ")";
-                        document.getElementById('my-peer-id').style.color = 'var(--danger-color)';
-                        log(`ERRORE: L'ID '${targetId}' è già in uso globale. Scegline un altro nel Setup.`);
-
-                        // Suggerisci cambio rapido nei log
-                        const d = document.createElement('div');
-                        d.style.margin = "10px 0";
-                        d.style.padding = "10px";
-                        d.style.border = "1px solid var(--danger-color)";
-                        d.style.borderRadius = "8px";
-                        d.innerHTML = `
-                            <div style="color:var(--danger-color); margin-bottom:5px;">L'ID <b>${targetId}</b> non è disponibile.</div>
-                            <button class="btn" onclick="state.settings.matchId=''; localStorage.setItem('pm_settings', JSON.stringify(state.settings)); location.reload();">
-                                Usa ID Casuale
-                            </button>
-                        `;
-                        document.getElementById('event-log').prepend(d);
-                    } else {
-                        log("Errore Rete: " + err.type);
-                    }
                 });
             }
             // ---------------------------------------------
@@ -2134,6 +2265,17 @@
                 }
             }
 
+            function handleSmartAction(side) {
+                if (state.mode === 'INTERVAL') {
+                    let teamId = !state.basesSwapped ? (side === 'left' ? 'A' : 'B') : (side === 'left' ? 'B' : 'A');
+                    handleTechPause(teamId);
+                } else if (state.mode === 'POINT' || state.mode === 'OVERTIME' || state.mode === 'PAUSED' || state.mode === 'IDLE') {
+                    let teamId = !state.basesSwapped ? (side === 'left' ? 'A' : 'B') : (side === 'left' ? 'B' : 'A');
+                    const opponentId = teamId === 'A' ? 'B' : 'A';
+                    executeTowel(teamId, opponentId);
+                }
+            }
+
             function handleRemoteCommand(cmd) {
                 if (!cmd || !cmd.type) return;
                 log(`[REMOTO] Comando: ${cmd.type} ${cmd.side || ''} ${cmd.level || ''}`);
@@ -2147,8 +2289,8 @@
                         pendingPointSide = cmd.side;
                         confirmPoint(cmd.decision);
                         break;
-                    case 'ACTION': // Towel / Timeout
-                        handleTeamAction(cmd.side, 'action');
+                    case 'ACTION': // Smart Action (Towel / Tech Pause)
+                        handleSmartAction(cmd.side);
                         break;
                     case 'PENALTY':
                         addPenalty(cmd.side, cmd.level || 1);
@@ -2164,6 +2306,9 @@
                         break;
                     case 'STOP_TIMER':
                         if (state.mode !== 'PAUSED' && state.mode !== 'TECH_PAUSED') pause();
+                        break;
+                    case 'requestState':
+                        broadcastState();
                         break;
                     case 'UNDO':
                         undoLastAction();
@@ -2519,13 +2664,16 @@
             function stopTimerLoop() { if (state.intervalInstance) clearInterval(state.intervalInstance); }
 
             function handleTechPause(teamId) {
-                if (state.mode !== 'INTERVAL') {
+                // Allow if PAUSED (from Interval) OR directly in INTERVAL
+                if (!((state.mode === 'PAUSED' && state.prevMode === 'INTERVAL') || state.mode === 'INTERVAL')) {
                     log("Pausa tecnica possibile solo durante l'intervallo!");
                     return;
                 }
+
                 // Valid only if > 10s remaining
                 if (state.timer <= 10) {
-                    log(`REMOTO: TENTATIVO PAUSA TECNICA RIFIUTATO (${formatTimeMs(state.timer)} < 10s)`);
+                    log(`TENTATIVO PAUSA TECNICA ${state.teams[teamId].name} (RIFIUTATO: ${formatTimeMs(state.timer)} < 10s)`);
+                    showSmartAlert(`RIFIUTATO: < 10s`, 'danger');
                     return;
                 }
 
@@ -2540,13 +2688,17 @@
                 updateTimerDisplay();
                 speak("Pausa Tecnica", "Technical Pause");
                 log(`PAUSA TECNICA RICHIESTA: ${team.name} (+60s)`);
+                showSmartAlert(`TECH: ${team.name}`, 'tech');
+                if (state.tournament.active) saveMatchState(state.tournament.currentIndex, false, false);
                 render();
             }
             function startInter(type = 'point') {
                 if (typeof type !== 'string') type = 'point'; // Safety check for event objects
                 state.mode = 'INTERVAL';
                 state.timerMode = 'INTERVAL';
-                state.timer = (type === 'slot') ? CONFIG.slotInterTime : CONFIG.pointInterTime;
+                if (type === 'slot') state.timer = CONFIG.slotInterTime;
+                else if (type === 'single_slot') state.timer = CONFIG.singleSlotInterTime;
+                else state.timer = CONFIG.pointInterTime;
                 state.flags = { warn60: false, warn30: false, warn20: false, warn10: false };
                 speak("Intervallo", "Interval");
                 log(`START INTERVALLO ${type.toUpperCase()}`);
@@ -2596,46 +2748,8 @@
             }
             function techPause(side) {
                 try {
-                    // Allow if PAUSED (from Interval) OR directly in INTERVAL
-                    if ((state.mode === 'PAUSED' && state.prevMode === 'INTERVAL') || state.mode === 'INTERVAL') {
-                        // Determine Team
-                        let teamId = !state.basesSwapped ? (side === 'left' ? 'A' : 'B') : (side === 'left' ? 'B' : 'A');
-
-                        if (!state.teams[teamId]) {
-                            log(`ERRORE TECH: Team ${teamId} non trovato.`);
-                            return;
-                        }
-
-                        // Valid only if > 10s remaining
-                        if (state.timer <= 10) {
-                            // Log Late Attempt
-                            log(`TENTATIVO PAUSA TECNICA ${state.teams[teamId].name} (RIFIUTATO: ${formatTimeMs(state.timer)} < 10s)`);
-                            return;
-                        }
-
-                        if (state.teams[teamId].techUsed) {
-                            log(`TECH GIÀ USATO per ${state.teams[teamId].name}`);
-                            return;
-                        }
-
-                        state.teams[teamId].techUsed = true;
-                        if (typeof saveStateToHistory === 'function') saveStateToHistory();
-
-                        // Log remaining time before adding
-                        const remaining = state.timer;
-
-                        // Add 1 Minute to Timer
-                        state.timer += 60;
-                        updateTimerDisplay();
-
-                        // if (typeof speak === 'function') speak("Pausa Tecnica", "Technical Pause");
-                        log(`PAUSA TECNICA SCELTA DA ${state.teams[teamId].name} (+60s). Tempo rimanente: ${formatTimeMs(remaining)}`);
-
-                        if (state.tournament.active) {
-                            if (typeof saveMatchState === 'function') saveMatchState(state.tournament.currentIndex);
-                        }
-                        render();
-                    }
+                    let teamId = !state.basesSwapped ? (side === 'left' ? 'A' : 'B') : (side === 'left' ? 'B' : 'A');
+                    handleTechPause(teamId);
                 } catch (e) {
                     console.error("Critical TechPause Error:", e);
                     alert("ERRORE TECH PAUSE: " + e.message);
@@ -2654,6 +2768,7 @@
             }
 
             function handleTeamAction(side, action) {
+                log(`BUTTON PRESS: ${action.toUpperCase()} per lato ${side.toUpperCase()}`);
                 // Save state only for actions that change state immediately or start a process?
                 // Point request just opens modal, no state change yet (except modal open, which we don't undo usually).
                 // Timeout DOES change state immediately.
@@ -2661,20 +2776,16 @@
                 let teamId = !state.basesSwapped ? (side === 'left' ? 'A' : 'B') : (side === 'left' ? 'B' : 'A');
                 const team = state.teams[teamId]; const opponentId = teamId === 'A' ? 'B' : 'A';
                 if (state.mode === 'INTERVAL') {
-                    if (action === 'action') { // This is for TIMEOUT
-                        if (team.timeouts > 0) {
-                            saveStateToHistory(); // Hook
-                            team.timeouts--;
-                            state.timer += 60;
-                            updateTimerDisplay();
-                            speak("Timeout", "Timeout");
-                            log(`TIMEOUT CHIAMATO: ${team.name}`);
-                            render();
-                        }
-                    }
+                    // Technical pauses are now handled exclusively by handleTechPause / handleSmartAction
                 }
                 else if (state.mode === 'POINT' || state.mode === 'OVERTIME' || state.mode === 'IDLE' || state.mode === 'PAUSED') {
                     if (action === 'point') {
+                        // Guard: Only one point request at a time
+                        if (pendingPointSide) {
+                            log(`RICHIESTA PUNTO IGNORATA: Una verifica è già in corso per ${pendingPointSide === 'left' ? 'Sinistra' : 'Destra'}`);
+                            return;
+                        }
+
                         // New Verification Flow
                         pendingPointSide = side;
 
@@ -2706,8 +2817,6 @@
                 const team = state.teams[teamId];
                 const opponentId = teamId === 'A' ? 'B' : 'A';
                 const opponent = state.teams[opponentId];
-
-                document.getElementById('point-verify-modal').style.display = 'none';
 
                 document.getElementById('point-verify-modal').style.display = 'none';
 
@@ -2759,6 +2868,10 @@
                         state.mode = state.prevMode;
                         state.timer = state.gameTimeRemaining;
                         startTimerLoop();
+                        log("TIMER RIPRISTINATO");
+                    } else if (state.mode === 'PAUSED' && state.prevMode) {
+                        // If it was already paused, stay paused but ensure mode is set correctly
+                        state.mode = 'PAUSED';
                     }
                     render();
                 } else if (decision === 'NO_POINT') {
@@ -2794,13 +2907,35 @@
 
                 playPointSound();
                 speak("Towel. Towel. Towel.", "Towel. Towel. Towel."); // Announce 3 times
-                log(`TOWEL CHIAMATO da ${state.teams[teamId].name}. Punto a ${state.teams[opponentId].name}.`);
+                log(`TOWEL CHIAMATO da ${state.teams[teamId].name}. Punto a ${state.teams[opponentId].name}.`, 'red');
+                showSmartAlert(`TOWEL: ${state.teams[teamId].name}`, 'towel');
                 stopTimerLoop();
                 state.gameTimeRemaining = state.timer;
                 state.mode = 'IDLE';
                 // Mercy checked inside rotateMatch
                 render();
                 rotateMatch(); // Towel ends the point
+            }
+
+            function handleSmartAction(side) {
+                // Determine phase
+                if (state.mode === 'POINT' || state.mode === 'OVERTIME') {
+                    const teamId = !state.basesSwapped ? (side === 'left' ? 'A' : 'B') : (side === 'left' ? 'B' : 'A');
+                    const teamName = state.teams[teamId].name;
+
+                    // Game phase -> TOWEL
+                    if (state.settings.confirmTowel) {
+                        if (!confirm(`TOWEL: Sei sicuro di voler dare il punto alla squadra avversaria per ${teamName}?`)) return;
+                    }
+
+                    const opponentId = teamId === 'A' ? 'B' : 'A';
+                    executeTowel(teamId, opponentId);
+                } else if ((state.mode === 'PAUSED' && state.prevMode === 'INTERVAL') || state.mode === 'INTERVAL') {
+                    // Interval phase -> TECH PAUSE
+                    techPause(side);
+                } else {
+                    log(`AZIONE SMART: Nessuna azione disponibile in modalità ${state.mode}`);
+                }
             }
             function addPenalty(side, lvl) {
                 // Penalties can only be added during active game play
@@ -3045,7 +3180,7 @@
                     rotateMatch(false); // false = NO swap side
                 } else {
                     // Manual mode: just start a new interval
-                    startInter('point');
+                    startInter('single_slot');
                 }
             }
 
@@ -3083,12 +3218,13 @@
                     .replace(/Semifinali\s*\w*/gi, '')
                     .replace(/Finale\s*\w*/gi, '')
                     .replace(/Pool\s*\w*/gi, '')
+                    .replace(/Playout\s*\w*/gi, '')
                     .replace(/^[-\s\.,]+/, '')
                     .replace(/[-\s\.,]+$/, '')
                     .trim();
 
                 let currentPhase = "GIRONI";
-                const knockoutPhases = ["OTTAVI", "QUARTI", "SEMIFINALI", "FINALE"];
+                const knockoutPhases = ["OTTAVI", "QUARTI", "SEMIFINALI", "FINALE", "PLAYOUT"];
                 const result = [];
 
                 text.split('\n').forEach(l => {
@@ -3097,6 +3233,7 @@
                     else if (lLower.includes("quarti")) currentPhase = "QUARTI";
                     else if (lLower.includes("semifinali")) currentPhase = "SEMIFINALI";
                     else if (lLower.includes("finale")) currentPhase = "FINALE";
+                    else if (lLower.includes("playout")) currentPhase = "PLAYOUT";
                     else if (lLower.includes("girone") || lLower.includes("pool")) currentPhase = "GIRONI";
 
                     if (!l.includes(',')) return;
@@ -3173,7 +3310,6 @@
                     basesSwapped: state.basesSwapped,
                     currentMatchEvents: state.currentMatchEvents
                 }));
-                log("TORNEO SALVATO IN LOCAL STORAGE");
             }
 
             function loadTournamentState() {
@@ -3453,7 +3589,7 @@
                         // Peer is done. We become Single Slot.
                         log("PEER MATCH TERMINATO -> STANDARD ROTATION (Single Mode)");
                         if (swapSide) state.basesSwapped = !state.basesSwapped;
-                        startInter('point');
+                        startInter('single_slot');
                     } else {
                         log(`ROTAZIONE SLOT: Match ${currIdx + 1} -> Match ${nextSlotIdx + 1}`);
                         loadMatch(nextSlotIdx, true);
@@ -3466,7 +3602,7 @@
                     } else {
                         log("ROTAZIONE NO-POINT -> MANTENIMENTO LATI");
                     }
-                    startInter('point');
+                    startInter('single_slot');
                 }
             }
 
@@ -3609,24 +3745,13 @@
 
                 // PENALTY FLASH LOGIC
                 updatePenaltyFlashes();
-                // Tech Pause UI Control
+                // Tech Pause UI Control (Simplified for Smart Button)
                 document.getElementById('tech-used-left').style.display = lT.techUsed ? 'block' : 'none';
                 document.getElementById('tech-used-right').style.display = rT.techUsed ? 'block' : 'none';
 
-                // Only show Tech Button if: Mode is PAUSED AND Not Used AND Not Break/MatchOver
-                // Restriction: paused from INTERVAL (prevMode) OR in INTERVAL. (Time limit is handled in logic now, button always active to log attempt)
-                const canTech = ((state.mode === 'PAUSED' && state.prevMode === 'INTERVAL') || state.mode === 'INTERVAL');
-
-                // Logic: Visible always, but Disabled if used
-                document.getElementById('btn-tech-left').style.display = 'block';
-                document.getElementById('btn-tech-right').style.display = 'block';
-
-                document.getElementById('btn-tech-left').disabled = !canTech || lT.techUsed;
-                document.getElementById('btn-tech-right').disabled = !canTech || rT.techUsed;
-
-                // Visual feedback for used state
-                if (lT.techUsed) { document.getElementById('btn-tech-left').innerText = "USED"; } else { document.getElementById('btn-tech-left').innerText = "TECH"; }
-                if (rT.techUsed) { document.getElementById('btn-tech-right').innerText = "USED"; } else { document.getElementById('btn-tech-right').innerText = "TECH"; }
+                // Separate Tech Buttons hidden
+                document.getElementById('btn-tech-left').style.display = 'none';
+                document.getElementById('btn-tech-right').style.display = 'none';
 
                 // Safety Reopen Button Visibility
                 const reopenBtn = document.getElementById('btn-reopen-phase');
@@ -3635,28 +3760,46 @@
                     reopenBtn.style.display = transInfo ? 'block' : 'none';
                 }
 
-                // Btn Logic check...
-                // Btn Logic check...
+                // Smart Action Button UI Logic
                 const lBtn = document.getElementById('btn-action-left');
                 const rBtn = document.getElementById('btn-action-right');
+                const isIntervalAction = ((state.mode === 'PAUSED' && state.prevMode === 'INTERVAL') || state.mode === 'INTERVAL');
+                const isPointAction = (state.mode === 'POINT' || state.mode === 'OVERTIME');
 
-                // Default State: TOWEL, Danger Style
-                lBtn.innerText = "TOWEL"; lBtn.classList.add('btn-danger');
-                rBtn.innerText = "TOWEL"; rBtn.classList.add('btn-danger');
-
-                if (state.mode === 'POINT' || state.mode === 'OVERTIME') {
-                    document.getElementById('btn-point-left').disabled = false;
+                if (isPointAction) {
+                    lBtn.innerText = "TOWEL";
+                    lBtn.classList.remove('btn-tech');
+                    lBtn.classList.add('btn-danger');
                     lBtn.disabled = false;
+                    document.getElementById('btn-point-left').disabled = false;
 
-                    document.getElementById('btn-point-right').disabled = false;
+                    rBtn.innerText = "TOWEL";
+                    rBtn.classList.remove('btn-tech');
+                    rBtn.classList.add('btn-danger');
                     rBtn.disabled = false;
-                } else {
-                    // Disabled during Interval, Pause, etc.
+                    document.getElementById('btn-point-right').disabled = false;
+                } else if (isIntervalAction) {
+                    lBtn.innerText = lT.techUsed ? "TECH USED" : "TECH";
+                    lBtn.classList.remove('btn-danger');
+                    lBtn.classList.add('btn-tech');
+                    lBtn.disabled = lT.techUsed;
                     document.getElementById('btn-point-left').disabled = true;
-                    lBtn.disabled = true;
 
+                    rBtn.innerText = rT.techUsed ? "TECH USED" : "TECH";
+                    rBtn.classList.remove('btn-danger');
+                    rBtn.classList.add('btn-tech');
+                    rBtn.disabled = rT.techUsed;
                     document.getElementById('btn-point-right').disabled = true;
+                } else {
+                    lBtn.innerText = "ACTION";
+                    lBtn.classList.remove('btn-tech', 'btn-danger');
+                    lBtn.disabled = true;
+                    document.getElementById('btn-point-left').disabled = true;
+
+                    rBtn.innerText = "ACTION";
+                    rBtn.classList.remove('btn-tech', 'btn-danger');
                     rBtn.disabled = true;
+                    document.getElementById('btn-point-right').disabled = true;
                 }
 
                 // Main Game Controls Safety
@@ -3727,6 +3870,11 @@
                                 <div class="si-teams">${m.teamA} vs ${m.teamB}</div>
                                 <div class="si-info">${m.field || 'Campo 1'}</div>
                             `;
+                            // Explicit click listener to load match and PREVENT bubbling to timer
+                            item.onclick = (e) => {
+                                e.stopPropagation();
+                                loadMatch(idx);
+                            };
                             list.appendChild(item);
                         });
 
@@ -3750,9 +3898,20 @@
 
                 broadcastState();
             }
-            function log(msg) {
-                const d = document.createElement('div'); d.className = 'log-entry'; d.innerHTML = `<span class="log-time">${new Date().toLocaleTimeString()}</span> <span class="log-msg">${msg}</span>`;
+            function log(msg, className = '') {
+                const d = document.createElement('div'); d.className = 'log-entry ' + className; d.innerHTML = `<span class="log-time">${new Date().toLocaleTimeString()}</span> <span class="log-msg">${msg}</span>`;
                 document.getElementById('event-log').prepend(d);
+            }
+
+            function showSmartAlert(msg, type = 'towel') {
+                const el = document.createElement('div');
+                el.className = `smart-alert ${type}`;
+                el.innerText = msg;
+                document.getElementById('scaler').appendChild(el);
+                setTimeout(() => {
+                    el.style.opacity = '0';
+                    setTimeout(() => el.remove(), 500);
+                }, 2000);
             }
             function formatTimeSeconds(seconds) {
                 const minutes = Math.floor(seconds / 60);
@@ -3872,45 +4031,167 @@
 
             // --- SOUND DATABASE & CUSTOM AUDIO ---
             const soundLibrary = [
-                { name: "Default Electronic Horn", url: "" }, // Empty URL uses oscillator beeps
-                { name: "Stadium Air Horn (Pro)", url: "https://www.myinstants.com/media/sounds/air-horn.mp3" },
-                { name: "NBA Buzzer (Official)", url: "https://www.myinstants.com/media/sounds/nba-buzzer.mp3" },
-                { name: "NHL Goal Horn (Loud)", url: "https://www.myinstants.com/media/sounds/nhl-horn.mp3" },
-                { name: "Boxing Bell", url: "https://www.myinstants.com/media/sounds/boxing-bell_1.mp3" },
-                { name: "Referee Whistle (Short)", url: "https://www.myinstants.com/media/sounds/referee-whistle.mp3" },
-                { name: "Referee Whistle (Long)", url: "https://www.myinstants.com/media/sounds/whistle-ref.mp3" },
-                { name: "High Frequency Siren", url: "https://www.myinstants.com/media/sounds/police-siren.mp3" },
-                { name: "Deep Ship Horn", url: "https://www.myinstants.com/media/sounds/titanic-horn.mp3" },
-                { name: "Electric Buzzer 1", url: "https://www.myinstants.com/media/sounds/buzzer_1.mp3" },
-                { name: "Electric Buzzer 2", url: "https://www.myinstants.com/media/sounds/game-show-buzzer.mp3" },
-                { name: "Synth Beep Low", url: "https://www.myinstants.com/media/sounds/low-beep.mp3" },
-                { name: "Synth Beep High", url: "https://www.myinstants.com/media/sounds/high-beep.mp3" },
-                { name: "Ding Dong (Bell)", url: "https://www.myinstants.com/media/sounds/ding-dong.mp3" },
-                { name: "UFC Gong", url: "https://www.myinstants.com/media/sounds/ufc-gong.mp3" },
-                { name: "Arcade Start", url: "https://www.myinstants.com/media/sounds/arcade-start.mp3" },
-                { name: "Crowd Cheer (Short)", url: "https://www.myinstants.com/media/sounds/crowd-cheer.mp3" },
-                { name: "Stadium Chant", url: "https://www.myinstants.com/media/sounds/stadium-applause.mp3" },
-                { name: "Shot Clock (Old School)", url: "https://www.myinstants.com/media/sounds/shot-clock-buzzer.mp3" },
-                { name: "Digital Alarm", url: "https://www.myinstants.com/media/sounds/digital-alarm.mp3" },
-                { name: "Power Up", url: "https://www.myinstants.com/media/sounds/power-up.mp3" },
-                { name: "Classic Bike Horn", url: "https://www.myinstants.com/media/sounds/clown-horn.mp3" },
-                // ... more sounds will be populated via logic for variety, using stable URLs
+                { name: "Default Electronic Horn", url: "" },
+                { name: "PRO Authentic NXL Horn", url: "synth:nxl" },
+                { name: "PRO Authentic NXL Short", url: "synth:nxlShort" },
+                { name: "PRO Authentic Arena Claxon", url: "synth:claxon" },
+                { name: "PRO Authentic Power Buzzer", url: "synth:buzzer" },
+                { name: "PRO Authentic Ref Whistle", url: "synth:whistle" },
+                { name: "PRO Authentic Point Signal", url: "synth:point" },
             ];
 
-            // Populate more generic variety for professional use
-            const categories = ["Stadium Horn", "Pro Buzzer", "Synth Beep", "Short Whistle", "Bell Ding"];
-            for (let i = 1; i <= 30; i++) {
-                soundLibrary.push({
-                    name: `${categories[i % categories.length]} Variat. ${i}`,
-                    url: `https://actions.google.com/sounds/v1/sports/sports_whistle_${(i % 3) + 1}.ogg` // Example reliable source
-                });
-            }
+            // Variety populator removed to keep it clean and working
 
             const activeSounds = {
                 start: null,
                 end: null,
                 point: null
             };
+
+            function setupActiveSound(type, url) {
+                if (!url) {
+                    activeSounds[type] = null;
+                    return;
+                }
+
+                if (url.startsWith('synth:')) {
+                    activeSounds[type] = { synth: url.split(':')[1] };
+                    return;
+                }
+
+                const audio = new Audio();
+                audio.crossOrigin = "anonymous";
+                audio.src = url;
+                // Pre-load and catch errors early
+                audio.addEventListener('error', (e) => {
+                    log(`ERRORE CARICAMENTO (${type}): File non disponibile.`, 'red');
+                });
+                activeSounds[type] = audio;
+                activeSounds[type].load();
+            }
+
+            const synthAudio = {
+                _shaper: null,
+                _getShaper: function () {
+                    if (!this._shaper) {
+                        const n_samples = 44100, curve = new Float32Array(n_samples), deg = Math.PI / 180;
+                        for (let i = 0; i < n_samples; ++i) {
+                            let x = (i * 2) / n_samples - 1;
+                            curve[i] = (3 + 20) * x * 20 * deg / (Math.PI + 20 * Math.abs(x));
+                        }
+                        this._shaper = curve;
+                    }
+                    return this._shaper;
+                },
+                nxl: (duration = 1.0) => {
+                    if (audioCtx.state === 'suspended') audioCtx.resume();
+                    const now = audioCtx.currentTime;
+                    const carrier = audioCtx.createOscillator();
+                    const mod = audioCtx.createOscillator();
+                    const modGain = audioCtx.createGain();
+                    const shaper = audioCtx.createWaveShaper();
+                    const mainGain = audioCtx.createGain();
+
+                    carrier.type = 'sine';
+                    carrier.frequency.setValueAtTime(950, now);
+                    mod.type = 'square';
+                    mod.frequency.setValueAtTime(320, now);
+                    modGain.gain.setValueAtTime(1200, now);
+
+                    shaper.curve = synthAudio._getShaper();
+                    shaper.oversample = '4x';
+
+                    mod.connect(modGain);
+                    modGain.connect(carrier.frequency);
+                    carrier.connect(shaper);
+                    shaper.connect(mainGain);
+                    mainGain.connect(audioCtx.destination);
+
+                    mainGain.gain.setValueAtTime(0, now);
+                    mainGain.gain.linearRampToValueAtTime(0.5, now + 0.01);
+                    mainGain.gain.setValueAtTime(0.5, now + duration - 0.05);
+                    mainGain.gain.linearRampToValueAtTime(0, now + duration);
+
+                    mod.start(now); carrier.start(now);
+                    mod.stop(now + duration); carrier.stop(now + duration);
+                },
+                nxlShort: () => synthAudio.nxl(0.35),
+                claxon: (duration = 1.3) => {
+                    if (audioCtx.state === 'suspended') audioCtx.resume();
+                    const now = audioCtx.currentTime;
+                    const c = audioCtx.createOscillator();
+                    const m = audioCtx.createOscillator();
+                    const mg = audioCtx.createGain();
+                    const g = audioCtx.createGain();
+                    c.type = 'sawtooth'; c.frequency.value = 180;
+                    m.type = 'sine'; m.frequency.value = 55; mg.gain.value = 60;
+                    m.connect(mg); mg.connect(c.frequency);
+                    g.gain.setValueAtTime(0, now);
+                    g.gain.linearRampToValueAtTime(0.4, now + 0.05);
+                    g.gain.exponentialRampToValueAtTime(0.01, now + duration);
+                    c.connect(g); g.connect(audioCtx.destination);
+                    m.start(now); c.start(now);
+                    m.stop(now + duration); c.stop(now + duration);
+                },
+                buzzer: (duration = 1.0) => {
+                    if (audioCtx.state === 'suspended') audioCtx.resume();
+                    const now = audioCtx.currentTime;
+                    const osc = audioCtx.createOscillator();
+                    osc.type = 'square'; osc.frequency.value = 110;
+                    const g = audioCtx.createGain();
+                    g.gain.setValueAtTime(0, now);
+                    g.gain.linearRampToValueAtTime(0.3, now + 0.01);
+                    g.gain.setValueAtTime(0.3, now + duration - 0.05);
+                    g.gain.linearRampToValueAtTime(0, now + duration);
+                    osc.connect(g); g.connect(audioCtx.destination);
+                    osc.start(now); osc.stop(now + duration);
+                },
+                whistle: () => {
+                    if (audioCtx.state === 'suspended') audioCtx.resume();
+                    const now = audioCtx.currentTime;
+                    const osc = audioCtx.createOscillator();
+                    const m = audioCtx.createOscillator();
+                    const mg = audioCtx.createGain();
+                    const g = audioCtx.createGain();
+                    osc.frequency.value = 2600; m.frequency.value = 40; mg.gain.value = 50;
+                    m.connect(mg); mg.connect(osc.frequency);
+                    g.gain.setValueAtTime(0, now);
+                    g.gain.linearRampToValueAtTime(0.3, now + 0.02);
+                    g.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                    osc.connect(g); g.connect(audioCtx.destination);
+                    m.start(now); osc.start(now);
+                    m.stop(now + 0.5); osc.stop(now + 0.5);
+                },
+                point: () => playPointSound()
+            };
+
+            function previewSound(type) {
+                const sound = activeSounds[type];
+                if (sound) {
+                    if (sound.synth) {
+                        log(`Test suono sintetizzato: ${sound.synth.toUpperCase()}...`);
+                        synthAudio[sound.synth]();
+                        return;
+                    }
+
+                    // Check if there was a loading error
+                    if (sound.error) {
+                        log(`ERRORE: Codice ${sound.error.code} per ${type.toUpperCase()}. Fallback Beep.`, 'red');
+                        playTone(440, 'square', 0.2, 0.5);
+                        return;
+                    }
+
+                    log(`Test suono: ${type.toUpperCase()}...`);
+                    sound.currentTime = 0;
+                    sound.play().catch(e => {
+                        log(`ERRORE RIPRODUZIONE: ${e.message}`, 'red');
+                        playTone(330, 'square', 0.2, 0.5); // Different pitch for play error
+                    });
+                } else {
+                    log("Segnale acustico predefinito attivo.");
+                    playTone(440, 'square', 0.2, 0.5);
+                }
+            }
 
             function initSoundLibrary() {
                 const selects = {
@@ -3930,8 +4211,10 @@
                     // Load preference
                     const saved = localStorage.getItem(`pm_sound_${key}`);
                     if (saved !== null) {
-                        selects[key].value = saved;
-                        setupActiveSound(key, soundLibrary[saved].url);
+                        if (saved < soundLibrary.length) {
+                            selects[key].value = saved;
+                            setupActiveSound(key, soundLibrary[saved].url);
+                        }
                     }
 
                     selects[key].addEventListener('change', (e) => {
@@ -3940,26 +4223,6 @@
                         setupActiveSound(key, soundLibrary[idx].url);
                     });
                 });
-            }
-
-            function setupActiveSound(type, url) {
-                if (!url) {
-                    activeSounds[type] = null;
-                    return;
-                }
-                activeSounds[type] = new Audio(url);
-                activeSounds[type].load();
-            }
-
-            function previewSound(type) {
-                const sound = activeSounds[type];
-                if (sound) {
-                    sound.currentTime = 0;
-                    sound.play().catch(e => alert("Errore anteprima: " + e.message));
-                } else {
-                    // Fallback to oscillator for visual confirmation
-                    playOscBeep(440, 0.2, 0.5, 'square');
-                }
             }
 
             const customAudio = {
@@ -3988,10 +4251,14 @@
 
             // Consolidated playHorn override
             playHorn = function (duration = 2.3) {
-                // Priority: 1. Library Sound, 2. Custom Upload, 3. Original Oscillator
+                // Priority: 1. Library Sound (Synth or File), 2. Custom Upload, 3. Original Oscillator
                 if (activeSounds.start) {
-                    activeSounds.start.currentTime = 0;
-                    activeSounds.start.play().catch(e => originalPlayHorn(duration));
+                    if (activeSounds.start.synth) {
+                        synthAudio[activeSounds.start.synth](duration);
+                    } else {
+                        activeSounds.start.currentTime = 0;
+                        activeSounds.start.play().catch(e => originalPlayHorn(duration));
+                    }
                 } else if (customAudio.horn) {
                     customAudio.horn.currentTime = 0;
                     customAudio.horn.play().catch(e => originalPlayHorn(duration));
@@ -4004,11 +4271,19 @@
             if (originalNotifyRoundEvent) {
                 notifyRoundEvent = function (type) {
                     if (type === 'warn' && activeSounds.end) {
-                        activeSounds.end.currentTime = 0;
-                        activeSounds.end.play().catch(e => originalNotifyRoundEvent(type));
+                        if (activeSounds.end.synth) {
+                            synthAudio[activeSounds.end.synth]();
+                        } else {
+                            activeSounds.end.currentTime = 0;
+                            activeSounds.end.play().catch(e => originalNotifyRoundEvent(type));
+                        }
                     } else if (type === 'point' && activeSounds.point) {
-                        activeSounds.point.currentTime = 0;
-                        activeSounds.point.play().catch(e => originalNotifyRoundEvent(type));
+                        if (activeSounds.point.synth) {
+                            synthAudio[activeSounds.point.synth]();
+                        } else {
+                            activeSounds.point.currentTime = 0;
+                            activeSounds.point.play().catch(e => originalNotifyRoundEvent(type));
+                        }
                     } else {
                         originalNotifyRoundEvent(type);
                     }
@@ -4019,8 +4294,12 @@
             if (originalGrantPoint) {
                 grantPoint = function (side) {
                     if (activeSounds.point) {
-                        activeSounds.point.currentTime = 0;
-                        activeSounds.point.play().catch(e => originalGrantPoint(side));
+                        if (activeSounds.point.synth) {
+                            synthAudio[activeSounds.point.synth]();
+                        } else {
+                            activeSounds.point.currentTime = 0;
+                            activeSounds.point.play().catch(e => originalGrantPoint(side));
+                        }
                     } else {
                         originalGrantPoint(side);
                     }
@@ -4146,7 +4425,7 @@
             document.getElementById('btn-no-point').addEventListener('click', handleNoPoint);
             document.getElementById('btn-undo').addEventListener('click', undoLastAction);
             document.getElementById('btn-manual-swap').addEventListener('click', manualSwapSides);
-            document.getElementById('btn-action-left').addEventListener('click', () => handleTeamAction('left', 'action')); document.getElementById('btn-action-right').addEventListener('click', () => handleTeamAction('right', 'action'));
+            document.getElementById('btn-action-left').addEventListener('click', () => handleSmartAction('left')); document.getElementById('btn-action-right').addEventListener('click', () => handleSmartAction('right'));
             document.getElementById('btn-point-left').addEventListener('click', () => handleTeamAction('left', 'point')); document.getElementById('btn-point-right').addEventListener('click', () => handleTeamAction('right', 'point'));
             const tm = document.getElementById('timer-edit-modal');
             document.getElementById('game-timer').addEventListener('dblclick', () => { tm.style.display = 'flex'; document.getElementById('edit-min').value = Math.floor(state.timer / 60); document.getElementById('edit-sec').value = (state.timer % 60).toString().padStart(2, '0'); });
@@ -4169,6 +4448,7 @@
                 document.getElementById('break-duration').value = parseInt(state.settings.breakDuration) || 0;
                 document.getElementById('point-interval-duration').value = parseInt(state.settings.pointIntervalDuration) || 30;
                 document.getElementById('slot-interval-duration').value = parseInt(state.settings.slotIntervalDuration) || 120;
+                document.getElementById('single-slot-interval-duration').value = parseInt(state.settings.singleSlotIntervalDuration) || 120;
                 document.getElementById('log-password-input').value = state.settings.logPassword || "";
                 document.getElementById('opt-confirm-towel').checked = state.settings.confirmTowel;
                 document.getElementById('opt-confirm-skip').checked = state.settings.confirmSkipSlot !== false; // Default true
@@ -4236,8 +4516,10 @@
                     // Update Intervals
                     state.settings.pointIntervalDuration = parseInt(document.getElementById('point-interval-duration').value) || 30;
                     state.settings.slotIntervalDuration = parseInt(document.getElementById('slot-interval-duration').value) || 120;
+                    state.settings.singleSlotIntervalDuration = parseInt(document.getElementById('single-slot-interval-duration').value) || 120;
                     CONFIG.pointInterTime = state.settings.pointIntervalDuration;
                     CONFIG.slotInterTime = state.settings.slotIntervalDuration;
+                    CONFIG.singleSlotInterTime = state.settings.singleSlotIntervalDuration;
 
                     log(`Impostazioni salvate.`);
                     localStorage.setItem('pm_settings', JSON.stringify(state.settings));
@@ -4336,9 +4618,62 @@
                     console.error("Errore lettura seriale buzzer:", err);
                     log("BUZZER: Errore di lettura dal dispositivo.");
                 } finally {
-                    buzzerReader.releaseLock();
+                    if (buzzerReader) buzzerReader.releaseLock();
                 }
             }
+
+            // GAMEPAD API BUZZER LOGIC (NEW)
+            let gamepadStates = {}; // Track button states for edge detection
+
+            window.addEventListener("gamepadconnected", (e) => {
+                log(`GAMEPAD: Connesso - ${e.gamepad.id} (Index: ${e.gamepad.index})`);
+                console.log("Gamepad connected:", e.gamepad);
+            });
+
+            window.addEventListener("gamepaddisconnected", (e) => {
+                log(`GAMEPAD: Disconnesso - ${e.gamepad.id}`);
+                delete gamepadStates[e.gamepad.index];
+            });
+
+            function pollGamepads() {
+                const gamepads = navigator.getGamepads ? navigator.getGamepads() : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads() : []);
+
+                for (let i = 0; i < gamepads.length; i++) {
+                    const gp = gamepads[i];
+                    if (!gp) continue;
+
+                    if (!gamepadStates[gp.index]) {
+                        gamepadStates[gp.index] = { buttons: new Array(gp.buttons.length).fill(false) };
+                    }
+
+                    const prevState = gamepadStates[gp.index];
+
+                    gp.buttons.forEach((btn, bIdx) => {
+                        const isPressed = btn.pressed || btn.value > 0.5;
+                        const wasPressed = prevState.buttons[bIdx];
+
+                        if (isPressed && !wasPressed) {
+                            // Button PUSHED
+                            const buzzerId = `GP${gp.index}_B${bIdx}`;
+                            // log removed here as it's now handled inside executeBuzzerGameAction
+
+                            // Check version without GP prefix for backward compatibility if user manually typed just the number
+                            const action = state.settings.buzzerMapping[buzzerId] || state.settings.buzzerMapping[bIdx.toString()];
+
+                            if (action) {
+                                executeBuzzerGameAction(action, buzzerId);
+                            }
+                        }
+
+                        prevState.buttons[bIdx] = isPressed;
+                    });
+                }
+
+                requestAnimationFrame(pollGamepads);
+            }
+
+            // Start Gamepad Polling
+            requestAnimationFrame(pollGamepads);
 
             function processBuzzerRawInput(line) {
                 if (!line) return;
@@ -4347,52 +4682,76 @@
                 if (!match) return;
 
                 const id = match[1];
-                log(`BUZZER: Pulsante premuto - ID ${id}`);
+                // log removed here as it's now handled inside executeBuzzerGameAction for better priority reporting
 
                 const action = state.settings.buzzerMapping[id];
                 if (action) {
-                    executeBuzzerGameAction(action);
+                    executeBuzzerGameAction(action, id);
                 }
             }
 
-            function executeBuzzerGameAction(action) {
-                switch (action) {
-                    case 'POINT_A':
-                        handleTeamAction('left', 'point');
-                        break;
-                    case 'POINT_B':
-                        handleTeamAction('right', 'point');
-                        break;
-                    case 'PAUSE':
-                        pause();
-                        break;
-                    case 'START':
-                        startPoint();
-                        break;
-                    case 'TOWEL_A':
-                        handleTowel('left');
-                        break;
-                    case 'TOWEL_B':
-                        handleTowel('right');
-                        break;
-                    case 'TECH_A':
-                        techPause('left');
-                        break;
-                    case 'TECH_B':
-                        techPause('right');
-                        break;
-                    case 'NO_POINT':
-                        handleNoPoint();
-                        break;
-                    case 'VERIFY_APPROVE':
-                        confirmPoint('APPROVED');
-                        break;
-                    case 'VERIFY_REVERSE':
-                        confirmPoint('REVERSE');
-                        break;
-                    case 'VERIFY_REJECT':
-                        confirmPoint('REJECT');
-                        break;
+            // --- BUZZER PRIORITY LOGIC ---
+            let buzzerLockState = {
+                active: false,
+                firstPressTime: 0,
+                timeout: null
+            };
+
+            function executeBuzzerGameAction(action, id) {
+                const now = Date.now();
+                if (!buzzerLockState.active) {
+                    buzzerLockState.active = true;
+                    buzzerLockState.firstPressTime = now;
+                    log(`BUZZER [PRIORITÀ]: ID ${id || 'N/A'} -> ${action}`);
+
+                    // Reset lock after 1 second
+                    if (buzzerLockState.timeout) clearTimeout(buzzerLockState.timeout);
+                    buzzerLockState.timeout = setTimeout(() => {
+                        buzzerLockState.active = false;
+                    }, 1000);
+
+                    // Execute Original Logic
+                    switch (action) {
+                        case 'POINT_A':
+                            handleTeamAction('left', 'point');
+                            break;
+                        case 'POINT_B':
+                            handleTeamAction('right', 'point');
+                            break;
+                        case 'PAUSE':
+                            pause();
+                            break;
+                        case 'START':
+                            startPoint();
+                            break;
+                        case 'TOWEL_A':
+                            handleSmartAction('left');
+                            break;
+                        case 'TOWEL_B':
+                            handleSmartAction('right');
+                            break;
+                        case 'TECH_A':
+                            applyTech('A');
+                            break;
+                        case 'TECH_B':
+                            applyTech('B');
+                            break;
+                        case 'NO_POINT':
+                            handleNoPoint();
+                            break;
+                        case 'VERIFY_APPROVE':
+                            confirmPoint('APPROVED');
+                            break;
+                        case 'VERIFY_REVERSE':
+                            confirmPoint('REVERSE');
+                            break;
+                        case 'VERIFY_REJECT':
+                            confirmPoint('REJECT');
+                            break;
+                    }
+                } else {
+                    const diff = (now - buzzerLockState.firstPressTime) / 1000;
+                    log(`BUZZER [LOG]: ID ${id || 'N/A'} -> ${action} (+${diff.toFixed(2)}s)`);
                 }
             }
 
@@ -4846,7 +5205,7 @@
                     // If phase name literally changed (aside from whitespace/case)
                     if (nextPhase !== currPhase) {
                         // Check if it's a significant transition (e.g. into Knockout)
-                        const isKnockout = ["OTTAVI", "QUARTI", "SEMIFINALI", "FINALE"].some(p => nextPhase.includes(p));
+                        const isKnockout = ["OTTAVI", "QUARTI", "SEMIFINALI", "FINALE", "PLAYOUT"].some(p => nextPhase.includes(p));
                         const wasGirone = currPhase.includes("GIRONE") || currPhase === "GIRONI" || currPhase.includes("POOL");
 
                         // We trigger the modal if we enter Knockout from Groups, 
@@ -5359,6 +5718,74 @@
 
             window.addEventListener('load', requestWakeLock);
 
+            // --- QR CODE VIEWER ---
+            function showViewQR(page, title, icon) {
+                const port = location.port ? ":" + location.port : "";
+                const baseUrl = `${location.protocol}//${location.hostname}${port}${location.pathname.substring(0, location.pathname.lastIndexOf('/'))}`;
+                // Construct URL with Match ID if present
+                const matchIdParam = state.settings.matchId ? `?matchId=${state.settings.matchId}` : "";
+                const targetUrl = `${baseUrl}/${page}${matchIdParam}`;
+
+                document.getElementById('qr-title').innerHTML = `${icon} ${title}`;
+                document.getElementById('qr-url').innerText = targetUrl;
+
+                const container = document.getElementById('qrcode-container');
+                container.innerHTML = "";
+
+                try {
+                    new QRCode(container, {
+                        text: targetUrl,
+                        width: 200,
+                        height: 200,
+                        colorDark: "#000000",
+                        colorLight: "#ffffff",
+                        correctLevel: QRCode.CorrectLevel.H
+                    });
+                } catch (e) {
+                    console.error("QR Error", e);
+                    container.innerText = "Errore generazione QR Code. Verifica connessione.";
+                }
+
+                // Check if local
+                if (location.protocol === 'file:') {
+                    document.getElementById('qr-file-warning').style.display = 'block';
+                } else {
+                    document.getElementById('qr-file-warning').style.display = 'none';
+                }
+
+                document.getElementById('qr-modal').style.display = 'flex';
+            }
+
+            // --- OPEN VIEW HELPER ---
+            function openView(page) {
+                let mId = state.settings.matchId;
+
+                // Fallback: Check LocalStorage directly
+                if (!mId) {
+                    try {
+                        const saved = localStorage.getItem('pm_settings');
+                        if (saved) {
+                            const parsed = JSON.parse(saved);
+                            if (parsed.matchId) mId = parsed.matchId;
+                        }
+                    } catch (e) { console.error("LS Error", e); }
+                }
+
+                // Default if still missing
+                if (!mId) {
+                    mId = "IPBA-1674";
+                    if (state && state.settings) {
+                        state.settings.matchId = mId;
+                        localStorage.setItem('pm_settings', JSON.stringify(state.settings));
+                    }
+                }
+
+                const matchIdParam = `?matchId=${mId}`;
+                window.open(`${page}${matchIdParam}`, '_blank');
+            }
+
+            // Initialize Peer on Load
+            initPeer();
 
         </script>
     </div> <!-- End Scaler -->

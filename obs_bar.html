@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OBS Score Bar (Overlay)</title>
+    <!-- PeerJS CDN -->
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Roboto:wght@400;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg-overlay: rgba(15, 23, 42, 0.85);
+            /* Deep Blue/Slate transparent */
+            --accent-color: #22d3ee;
+            /* Cyan */
+            --text-color: #f1f5f9;
+            --score-color: #fbbf24;
+            /* Amber */
+            --font-main: 'Oswald', sans-serif;
+            --font-nums: 'Roboto', sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: transparent;
+            overflow: hidden;
+            font-family: var(--font-main);
+            width: 1920px;
+            height: 1080px;
+        }
+
+        #score-bar {
+            width: 100%;
+            height: 80px;
+            /* Reduced Height (Stretta) */
+            background: linear-gradient(180deg, rgba(0, 0, 0, 0.9) 0%, rgba(15, 23, 42, 0.8) 100%);
+            display: flex;
+            justify-content: center;
+            /* Center everything */
+            align-items: center;
+            border-bottom: 3px solid var(--accent-color);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+            position: absolute;
+            top: 0;
+            left: 0;
+            padding: 0;
+            box-sizing: border-box;
+            backdrop-filter: blur(5px);
+        }
+
+        /* TEAM CONTAINERS */
+        .team-container {
+            display: flex;
+            flex-direction: row;
+            /* Side-by-side */
+            align-items: center;
+            /* Vertically centered */
+            width: 650px;
+            height: 100%;
+            gap: 15px;
+            /* tighter gap */
+            position: relative;
+        }
+
+        .team-left {
+            justify-content: flex-end;
+            padding-right: 10px;
+        }
+
+        .team-right {
+            justify-content: flex-end;
+            /* Align right within container, but we will reverse order */
+            flex-direction: row-reverse;
+            /* Score | Name */
+            padding-left: 10px;
+        }
+
+        .team-name {
+            font-size: 45px;
+            /* Adjusted for 80px height */
+            color: #f1f5f9;
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 450px;
+            /* Adjusted width */
+            margin-bottom: 0;
+            text-shadow: 0 2px 5px rgba(0, 0, 0, 0.6);
+            line-height: 1;
+            /* Tighten line height */
+        }
+
+        .team-score {
+            font-size: 75px;
+            /* Adjusted Score */
+            font-weight: 900;
+            color: var(--score-color);
+            font-family: var(--font-nums);
+            line-height: 1;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+            min-width: 80px;
+            text-align: center;
+        }
+
+        /* CENTER TIMER */
+        #timer-container {
+            flex: 0 0 200px;
+            /* Fixed narrowing width */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            /* Subtle highlight center */
+            margin: 0 5px;
+            /* reduced margin */
+            transform: skewX(-15deg);
+            /* Dynamic angle */
+            border-left: 1px solid rgba(255, 255, 255, 0.1);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #timer {
+            font-size: 65px;
+            /* Slightly smaller to fit narrow slot */
+            color: white;
+            font-weight: 900;
+            font-family: var(--font-nums);
+            text-shadow: 0 0 15px rgba(0, 0, 0, 0.8);
+            line-height: 1;
+            transform: skewX(15deg);
+            /* Un-skew text */
+            min-width: 100%;
+            /* Fill container */
+            text-align: center;
+        }
+
+        /* Penalty Label Positioning */
+        .penalty-label {
+            position: absolute;
+            top: 75px;
+            /* Just below the bar */
+            font-size: 32px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            display: none;
+            z-index: 5;
+            white-space: nowrap;
+        }
+
+        .team-left .penalty-label {
+            right: 15px;
+            /* Align near the score/timer */
+        }
+
+        .team-right .penalty-label {
+            left: 15px;
+            /* Align near the score/timer */
+        }
+
+        /* Status Colors */
+        .status-active {
+            color: #4ade80 !important;
+            text-shadow: 0 0 20px rgba(74, 222, 128, 0.6) !important;
+        }
+
+        .status-paused {
+            color: #facc15 !important;
+            text-shadow: 0 0 20px rgba(250, 204, 21, 0.6) !important;
+        }
+
+        .status-interval {
+            color: #60a5fa !important;
+        }
+
+        .status-break {
+            color: #f87171 !important;
+        }
+
+        /* Connection Dot */
+        #conn-status {
+            display: none;
+            /* Hidden as requested */
+            position: absolute;
+            bottom: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #ef4444;
+            opacity: 0.5;
+            z-index: 10;
+        }
+
+        #conn-status.connected {
+            background-color: #4ade80;
+            box-shadow: 0 0 5px #4ade80;
+        }
+
+        /* LOGO STYLES - POP OUT EFFECT (BOTTOM ONLY) */
+        .team-logo {
+            height: 90px;
+            /* 10px larger than bar (80px) */
+            width: auto;
+            object-fit: contain;
+            display: none;
+            filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5));
+            z-index: 10;
+            position: relative;
+            align-self: flex-start;
+            /* Align to top */
+        }
+
+        /* Adjust margins for logos to center them vertically relative to bar */
+        .team-left .team-logo {
+            margin-right: 20px;
+            order: -1;
+        }
+
+        .team-right .team-logo {
+            margin-left: 20px;
+            order: -1;
+            /* No extra margin top needed if align-self works */
+        }
+
+        /* SCORE POP ANIMATION */
+        .score-pop {
+            animation: score-pop-anim 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes score-pop-anim {
+            0% {
+                transform: scale(1);
+                filter: brightness(1);
+            }
+
+            50% {
+                transform: scale(1.5);
+                filter: brightness(1.5) drop-shadow(0 0 10px var(--score-color));
+            }
+
+            100% {
+                transform: scale(1);
+                filter: brightness(1);
+            }
+        }
+
+        /* PENALTY FLASHING - TEXT ONLY */
+        .flash-minor {
+            animation: text-glow-yellow 0.8s ease-in-out infinite alternate;
+        }
+
+        .flash-major {
+            animation: text-glow-red 0.8s ease-in-out infinite alternate;
+        }
+
+        @keyframes text-glow-yellow {
+            from {
+                color: #f1f5f9;
+                /* Normal White */
+                text-shadow: 0 0 5px rgba(250, 204, 21, 0.5);
+            }
+
+            to {
+                color: #facc15;
+                /* Yellow */
+                text-shadow: 0 0 20px #facc15, 0 0 10px #facc15;
+                /* Focused Glow */
+            }
+        }
+
+        @keyframes text-glow-red {
+            from {
+                color: #f1f5f9;
+                text-shadow: 0 0 5px rgba(239, 68, 68, 0.5);
+            }
+
+            to {
+                color: #ef4444;
+                text-shadow: 0 0 20px #ef4444, 0 0 10px #ef4444;
+            }
+        }
+
+        /* TECH INDICATOR STYLE (Square with Checkmark) */
+        .tech-indicator {
+            width: 30px;
+            height: 30px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.3s ease;
+            margin: 0 10px;
+            flex-shrink: 0;
+        }
+
+        .tech-indicator.active {
+            border-color: #22c55e;
+            background: rgba(34, 197, 94, 0.2);
+            box-shadow: 0 0 10px rgba(34, 197, 94, 0.4);
+        }
+
+        .tech-indicator .checkmark {
+            font-size: 24px;
+            color: #22c55e;
+            display: none;
+            line-height: 1;
+        }
+
+        .tech-indicator.active .checkmark {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="score-bar">
+        <!-- TEAM A (LEFT) -->
+        <div class="team-container team-left">
+            <img id="logo-a" class="team-logo" src="" alt="">
+            <div id="name-a" class="team-name">TEAM A</div>
+            <div id="score-a" class="team-score">0</div>
+            <div id="tech-a" class="tech-indicator"><span class="checkmark">✓</span></div>
+            <div id="penalty-a" class="penalty-label">MINOR PENALTY</div>
+        </div>
+
+        <!-- TIMER (CENTER) -->
+        <div id="timer-container">
+            <div id="timer">10:00</div>
+        </div>
+
+        <!-- TEAM B (RIGHT) -->
+        <div class="team-container team-right">
+            <img id="logo-b" class="team-logo" src="" alt="">
+            <div id="name-b" class="team-name">TEAM B</div>
+            <div id="score-b" class="team-score">0</div>
+            <div id="tech-b" class="tech-indicator"><span class="checkmark">✓</span></div>
+            <div id="penalty-b" class="penalty-label">MINOR PENALTY</div>
+        </div>
+
+        <div id="conn-status"></div>
+    </div>
+
+    <script>
+        // --- PeerJS Setup ---
+        const peer = new Peer(); // Auto-generate ID (we only act as receiver)
+        let conn = null;
+        let clanConfig = [];
+
+        // Load Clan Config from LocalStorage
+        try {
+            const savedClans = localStorage.getItem('pm_stream_clans');
+            if (savedClans) {
+                clanConfig = JSON.parse(savedClans);
+            }
+        } catch (e) {
+            console.error("Error loading clan config:", e);
+        }
+
+        // Listen for storage changes
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'pm_stream_clans' && e.newValue) {
+                try { clanConfig = JSON.parse(e.newValue); } catch (ex) { }
+            }
+        });
+
+        // Get Match ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const matchId = urlParams.get('matchId');
+
+        if (!matchId) {
+            console.error("No Match ID provided in URL!");
+            document.body.innerHTML += '<div style="color:white; background:red; padding:10px; position:absolute; top:110px;">ERRORE: Match ID mancante nell\'URL!</div>';
+        }
+
+        peer.on('open', (id) => {
+            console.log('My peer ID is: ' + id);
+            if (matchId) {
+                // Determine target peer ID (Host is typically matchId)
+                const hostId = matchId;
+                connectToHost(hostId);
+            }
+        });
+
+        function connectToHost(hostId) {
+            console.log("Connecting to host:", hostId);
+            conn = peer.connect(hostId);
+
+            conn.on('open', () => {
+                console.log("Connected to Host:", hostId);
+                document.getElementById('conn-status').classList.add('connected');
+                // Request immediate state
+                conn.send({ type: 'requestState' });
+            });
+
+            conn.on('data', (data) => {
+                handleData(data);
+            });
+
+            conn.on('close', () => {
+                console.warn("Connection closed");
+                document.getElementById('conn-status').classList.remove('connected');
+                // Retry?
+                setTimeout(() => connectToHost(hostId), 3000);
+            });
+
+            conn.on('error', (err) => {
+                console.error("Connection Error:", err);
+                // Retry?
+                setTimeout(() => connectToHost(hostId), 3000);
+            });
+        }
+
+        peer.on('error', (err) => {
+            console.error("Peer error:", err);
+        });
+
+        // --- Data Handling ---
+        function handleData(data) {
+            // Index.html sends the state object directly, not wrapped in { type: 'stateUpdate', state: ... }
+            if (data && data.timer) {
+                updateUI(data);
+            }
+        }
+
+        function formatTime(seconds) {
+            // Incoming data.timer is already formatted "MM:SS" string from index.html usually,
+            // BUT `formatTimeSeconds` in index returns formatted string.
+            // Let's check: index.html says `timer: formatTimeSeconds(state.timer)` -> "10:00" string.
+            // So we don't need to format it again if it's a string!
+            return data.timer;
+        }
+
+        function updateUI(state) {
+            if (!state) return;
+
+            // Update Text
+            // Use teamLeft and teamRight to match controller layout and swaps
+            const tLeft = state.teamLeft || { name: "TEAM A", score: 0 };
+            const tRight = state.teamRight || { name: "TEAM B", score: 0 };
+
+            const nameA = document.getElementById('name-a');
+            const scoreA = document.getElementById('score-a');
+            const nameB = document.getElementById('name-b');
+            const scoreB = document.getElementById('score-b');
+
+            nameA.innerText = tLeft.name;
+
+            // Score Animation A
+            if (scoreA.innerText !== String(tLeft.score)) {
+                scoreA.innerText = tLeft.score;
+                triggerScorePop(scoreA);
+            }
+
+            nameB.innerText = tRight.name;
+
+            // Score Animation B
+            if (scoreB.innerText !== String(tRight.score)) {
+                scoreB.innerText = tRight.score;
+                triggerScorePop(scoreB);
+            }
+
+            updateLogo('a', tLeft.name);
+            updateLogo('b', tRight.name);
+
+            // Update Technical Timeout Indicators
+            const techA = document.getElementById('tech-a');
+            const techB = document.getElementById('tech-b');
+            if (tLeft.techUsed) techA.classList.add('active');
+            else techA.classList.remove('active');
+            if (tRight.techUsed) techB.classList.add('active');
+            else techB.classList.remove('active');
+
+            // Timer comes as string "MM:SS.ms" from index.html
+            // User requested only MM:SS
+            let timeStr = state.timer;
+            if (timeStr && timeStr.includes('.')) {
+                timeStr = timeStr.split('.')[0];
+            }
+            document.getElementById('timer').innerText = timeStr;
+
+            // Update Timer Color based on Mode
+            const timerEl = document.getElementById('timer');
+            timerEl.className = ''; // Reset classes
+
+            switch (state.mode) {
+                case 'POINT_ACTIVE':
+                case 'SUDDEN_DEATH':
+                    timerEl.classList.add('status-active');
+                    break;
+                case 'PAUSE':
+                case 'TECH_PAUSE':
+                    timerEl.classList.add('status-paused');
+                    break;
+                case 'INTERVAL_POINT':
+                case 'INTERVAL_SLOT':
+                case 'INTERVAL_SINGLE':
+                    timerEl.classList.add('status-interval');
+                    break;
+                case 'BREAK_MATCH':
+                case 'GOLDEN_BREAK':
+                    timerEl.classList.add('status-break');
+                    break;
+                default:
+                    // Default white
+                    break;
+            }
+
+            // Penalty Visuals
+            updatePenaltyVisuals(nameA, tLeft, 'penalty-a');
+            updatePenaltyVisuals(nameB, tRight, 'penalty-b');
+        }
+
+        function triggerScorePop(el) {
+            el.classList.remove('score-pop');
+            void el.offsetWidth; // Force reflow
+            el.classList.add('score-pop');
+        }
+
+        function updateLogo(side, teamName) {
+            const imgEl = document.getElementById('logo-' + side);
+            if (!imgEl) return;
+
+            if (!teamName) {
+                imgEl.style.display = 'none';
+                return;
+            }
+
+            const config = clanConfig.find(c => c.name.trim().toLowerCase() === teamName.trim().toLowerCase());
+            if (config && config.logoUrl) {
+                imgEl.src = config.logoUrl;
+                imgEl.style.display = 'block';
+            } else {
+                imgEl.style.display = 'none';
+            }
+        }
+
+        function updatePenaltyVisuals(el, teamData, penElId) {
+            el.classList.remove('flash-minor', 'flash-major');
+            const penEl = document.getElementById(penElId);
+            if (penEl) {
+                penEl.style.display = 'none';
+                penEl.classList.remove('flash-minor', 'flash-major');
+            }
+
+            if (teamData.lastPenalty && (Date.now() - teamData.lastPenalty.timestamp < 5000)) {
+                const type = (teamData.lastPenalty.type || 'MINOR').toUpperCase();
+                if (type === 'MINOR') {
+                    el.classList.add('flash-minor');
+                    if (penEl) {
+                        penEl.innerText = "MINOR PENALTY";
+                        penEl.classList.add('flash-minor');
+                        penEl.style.display = 'block';
+                    }
+                } else {
+                    el.classList.add('flash-major');
+                    if (penEl) {
+                        penEl.innerText = "MAJOR PENALTY";
+                        penEl.classList.add('flash-major');
+                        penEl.style.display = 'block';
+                    }
+                }
+            }
+        }
+
+
+    </script>
+</body>
+
+</html>

@@ -225,6 +225,36 @@
             text-transform: uppercase;
             font-weight: bold;
         }
+
+        .penalty-text {
+            font-family: var(--font-main);
+            font-size: 60px;
+            font-weight: bold;
+            margin-top: 10px;
+            text-transform: uppercase;
+            animation: flash 0.5s infinite alternate;
+            display: none;
+        }
+
+        .major-pen {
+            color: #ef4444;
+            text-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+        }
+
+        .minor-pen {
+            color: #ffff00;
+            text-shadow: 0 0 20px rgba(255, 255, 0, 0.6);
+        }
+
+        @keyframes flash {
+            from {
+                opacity: 1;
+            }
+
+            to {
+                opacity: 0.3;
+            }
+        }
     </style>
 </head>
 
@@ -250,11 +280,13 @@
                 <div class="team-box" id="panel-left">
                     <div class="team-name" id="name-left">TEAM A</div>
                     <div class="score" id="score-left">0</div>
+                    <div class="penalty-text" id="penalty-left">MINOR PENALTY</div>
                 </div>
 
                 <div class="team-box" id="panel-right">
                     <div class="team-name" id="name-right">TEAM B</div>
                     <div class="score" id="score-right">0</div>
+                    <div class="penalty-text" id="penalty-right">MINOR PENALTY</div>
                 </div>
             </div>
 
