@@ -321,6 +321,23 @@
         .tech-indicator.active .checkmark {
             display: block;
         }
+
+        /* DIAGNOSTICS OVERLAY */
+        #diag-overlay {
+            position: fixed;
+            top: 90px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid var(--accent-color);
+            padding: 10px;
+            color: #4ade80;
+            font-family: monospace;
+            font-size: 14px;
+            z-index: 9999;
+            display: none;
+            border-radius: 5px;
+            pointer-events: none;
+        }
     </style>
 </head>
 
@@ -353,11 +370,32 @@
         <div id="conn-status"></div>
     </div>
 
+    <!-- Debug Diagnostic Overlay -->
+    <div id="diag-overlay">
+        <div>STATUS: <span id="diag-status">WAITING...</span></div>
+        <div>PACKET: <span id="diag-type">---</span></div>
+        <div>TIME: <span id="diag-last-sync">---</span></div>
+        <div style="border-top:1px solid #334155; margin-top:5px; padding-top:5px;">
+            <div>LOGO A: <span id="diag-logo-a">MISSING</span></div>
+            <div>LOGO B: <span id="diag-logo-b">MISSING</span></div>
+        </div>
+        <div style="margin-top:10px;">
+            <button onclick="conn.send({ type: 'requestState' })"
+                style="background:#3b82f6; color:white; border:none; padding:5px 10px; cursor:pointer; font-size:10px; border-radius:3px; pointer-events:auto;">FORCE
+                FULL SYNC</button>
+        </div>
+        <div style="margin-top:5px; color:#94a3b8; font-size:10px;">Press 'D' to toggle</div>
+    </div>
+
     <script>
         // --- PeerJS Setup ---
         const peer = new Peer(); // Auto-generate ID (we only act as receiver)
         let conn = null;
+        // --- State ---
         let clanConfig = [];
+        let logoCache = {}; // Cache for logos: { "Team Name": "data:image..." }
+        let currentData = null;
+        let lastNames = { left: '', right: '' };
 
         // Load Clan Config from LocalStorage
         try {
@@ -378,18 +416,28 @@
 
         // Get Match ID from URL
         const urlParams = new URLSearchParams(window.location.search);
-        const matchId = urlParams.get('matchId');
+        const matchId = urlParams.get('matchId') || urlParams.get('id');
 
         if (!matchId) {
             console.error("No Match ID provided in URL!");
-            document.body.innerHTML += '<div style="color:white; background:red; padding:10px; position:absolute; top:110px;">ERRORE: Match ID mancante nell\'URL!</div>';
+            document.body.innerHTML += `
+                <div id="error-overlay" style="color:white; background:rgba(239, 68, 68, 0.9); padding:20px; position:absolute; top:110px; left:50%; transform:translateX(-50%); border-radius:10px; border:2px solid white; z-index:10000; text-align:center; font-family:sans-serif;">
+                    <h2 style="margin-top:0;">⚠️ CONNESSIONE MANCANTE</h2>
+                    <p>Inserisci il Match ID nell'URL della sorgente browser di OBS.</p>
+                    <code style="background:#000; padding:5px; display:block; margin:10px 0;">.../obs_bar.html?id=IL_TUO_ID</code>
+                </div>`;
+            updateDiag('status', 'ERROR: MISSING ID');
         }
 
         peer.on('open', (id) => {
             console.log('My peer ID is: ' + id);
             if (matchId) {
                 // Determine target peer ID (Host is typically matchId)
-                const hostId = matchId;
+                let hostId = matchId;
+                // Auto-prepend IPBA- if missing
+                if (!hostId.startsWith('IPBA-')) {
+                    hostId = 'IPBA-' + hostId;
+                }
                 connectToHost(hostId);
             }
         });
@@ -401,11 +449,16 @@
             conn.on('open', () => {
                 console.log("Connected to Host:", hostId);
                 document.getElementById('conn-status').classList.add('connected');
-                // Request immediate state
+                updateDiag('status', 'CONNECTED');
+                // Request immediate FULL state
                 conn.send({ type: 'requestState' });
             });
 
             conn.on('data', (data) => {
+                const now = new Date().toLocaleTimeString();
+                updateDiag('last-sync', now);
+                updateDiag('type', data.type || 'LEGACY');
+
                 handleData(data);
             });
 
@@ -429,18 +482,37 @@
 
         // --- Data Handling ---
         function handleData(data) {
-            // Index.html sends the state object directly, not wrapped in { type: 'stateUpdate', state: ... }
-            if (data && data.timer) {
+            if (!data) return;
+
+            // Handle Full Sync vs Partial Sync
+            if (data.type === 'FULL_SYNC' || data.clanConfig) {
+                if (data.clanConfig) clanConfig = data.clanConfig;
+            }
+
+            // Sync Main Display
+            if (data.timer !== undefined) {
                 updateUI(data);
             }
         }
 
+        function updateDiag(id, val) {
+            const el = document.getElementById('diag-' + id);
+            if (el) el.innerText = val;
+        }
+
+        // Toggle diagnostics with 'D' key
+        window.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'd') {
+                const diag = document.getElementById('diag-overlay');
+                diag.style.display = diag.style.display === 'block' ? 'none' : 'block';
+            }
+        });
+
         function formatTime(seconds) {
-            // Incoming data.timer is already formatted "MM:SS" string from index.html usually,
-            // BUT `formatTimeSeconds` in index returns formatted string.
-            // Let's check: index.html says `timer: formatTimeSeconds(state.timer)` -> "10:00" string.
-            // So we don't need to format it again if it's a string!
-            return data.timer;
+            if (typeof seconds === 'string') return seconds;
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = Math.floor(seconds % 60);
+            return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
         }
 
         function updateUI(state) {
@@ -472,8 +544,8 @@
                 triggerScorePop(scoreB);
             }
 
-            updateLogo('a', tLeft.name);
-            updateLogo('b', tRight.name);
+            updateLogo('a', tLeft.name, tLeft.logoUrl);
+            updateLogo('b', tRight.name, tRight.logoUrl);
 
             // Update Technical Timeout Indicators
             const techA = document.getElementById('tech-a');
@@ -485,37 +557,36 @@
 
             // Timer comes as string "MM:SS.ms" from index.html
             // User requested only MM:SS
-            let timeStr = state.timer;
-            if (timeStr && timeStr.includes('.')) {
+            let timeStr = String(state.timer || "00:00");
+            if (timeStr.includes('.')) {
                 timeStr = timeStr.split('.')[0];
             }
-            document.getElementById('timer').innerText = timeStr;
-
-            // Update Timer Color based on Mode
             const timerEl = document.getElementById('timer');
-            timerEl.className = ''; // Reset classes
+            if (timerEl) {
+                timerEl.innerText = timeStr;
+                timerEl.className = ''; // Reset classes
 
-            switch (state.mode) {
-                case 'POINT_ACTIVE':
-                case 'SUDDEN_DEATH':
-                    timerEl.classList.add('status-active');
-                    break;
-                case 'PAUSE':
-                case 'TECH_PAUSE':
-                    timerEl.classList.add('status-paused');
-                    break;
-                case 'INTERVAL_POINT':
-                case 'INTERVAL_SLOT':
-                case 'INTERVAL_SINGLE':
-                    timerEl.classList.add('status-interval');
-                    break;
-                case 'BREAK_MATCH':
-                case 'GOLDEN_BREAK':
-                    timerEl.classList.add('status-break');
-                    break;
-                default:
-                    // Default white
-                    break;
+                // Map modes from index.html to OBS styles
+                switch (state.mode) {
+                    case 'POINT':
+                    case 'OVERTIME':
+                        timerEl.classList.add('status-active');
+                        break;
+                    case 'PAUSED':
+                    case 'TECH_PAUSED':
+                        timerEl.classList.add('status-paused');
+                        break;
+                    case 'INTERVAL':
+                        timerEl.classList.add('status-interval');
+                        break;
+                    case 'BREAK_MATCH':
+                    case 'GOLDEN_BREAK':
+                        timerEl.classList.add('status-break');
+                        break;
+                    default:
+                        // IDLE or others - default color
+                        break;
+                }
             }
 
             // Penalty Visuals
@@ -529,7 +600,7 @@
             el.classList.add('score-pop');
         }
 
-        function updateLogo(side, teamName) {
+        function updateLogo(side, teamName, forceUrl) {
             const imgEl = document.getElementById('logo-' + side);
             if (!imgEl) return;
 
@@ -538,12 +609,39 @@
                 return;
             }
 
-            const config = clanConfig.find(c => c.name.trim().toLowerCase() === teamName.trim().toLowerCase());
-            if (config && config.logoUrl) {
-                imgEl.src = config.logoUrl;
+            // 1. If we have a forceUrl (newly received), CACHE it
+            if (forceUrl) {
+                logoCache[teamName.trim().toLowerCase()] = forceUrl;
+                updateDiag('logo-' + side, 'RECEIVED (' + Math.round(forceUrl.length / 1024) + 'KB)');
+            }
+
+            // 2. Try to get logo from Cache first, then clanConfig
+            let logoUrl = logoCache[teamName.trim().toLowerCase()];
+
+            if (!logoUrl) {
+                const config = clanConfig.find(c => c.name.trim().toLowerCase() === teamName.trim().toLowerCase());
+                if (config) {
+                    logoUrl = config.logoUrl;
+                    // Seed the cache
+                    if (logoUrl) {
+                        logoCache[teamName.trim().toLowerCase()] = logoUrl;
+                        updateDiag('logo-' + side, 'FROM CONFIG');
+                    }
+                }
+            }
+
+            if (logoUrl) {
+                if (imgEl.src !== logoUrl) {
+                    imgEl.src = logoUrl;
+                }
                 imgEl.style.display = 'block';
+                if (!forceUrl && !updateDiag.logoReported) {
+                    // Don't overwrite 'RECEIVED' status unless we haven't reported it yet
+                    updateDiag('logo-' + side, 'CACHED');
+                }
             } else {
                 imgEl.style.display = 'none';
+                updateDiag('logo-' + side, 'MISSING');
             }
         }
 
