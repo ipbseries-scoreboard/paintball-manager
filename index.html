@@ -1822,6 +1822,10 @@
                     matchId: savedSettings.matchId || "",
                     logPassword: savedSettings.logPassword || "",
                     buzzerMapping: savedSettings.buzzerMapping || {
+                        "GP0_B0": "POINT_A",
+                        "GP0_B1": "POINT_B",
+                        "GP0_B2": "TOWEL_A",
+                        "GP0_B3": "TOWEL_B",
                         "19": "POINT_A",
                         "18": "POINT_B",
                         "17": "PAUSE",
@@ -2299,9 +2303,13 @@
                     packet.clanConfig = state.clanConfig;
                     packet.tournament = state.tournament;
                     packet.standingsData = statsData;
-                    packet.fastestRound = statsData ? (statsData.records[0] || null) : null;
+                    // Cache the fastest round so we can send it on every sync without recalculating
+                    state.lastFastestRound = statsData ? (statsData.records[0] || null) : null;
                     lastFullSyncTime = now;
                 }
+
+                // Always send the cached fastest round so the top bar doesn't disappear on partial syncs
+                packet.fastestRound = state.lastFastestRound || null;
 
                 try {
                     connections.forEach(conn => {
