@@ -1458,9 +1458,19 @@
         window.addEventListener('resize', scaleBoard);
         scaleBoard();
 
-        // Load Stored ID
-        const lastId = localStorage.getItem('last_match_id');
-        if (lastId) input.value = lastId;
+        // Load Stored ID or URL Params
+        const urlParams = new URLSearchParams(window.location.search);
+        let targetId = urlParams.get('matchId') || urlParams.get('id');
+
+        if (targetId) {
+            // If from URL, update input and try to auto-start immediately
+            if (!targetId.startsWith("IPBA-")) targetId = "IPBA-" + targetId;
+            input.value = targetId.replace("IPBA-", "");
+            setTimeout(() => startClient(targetId), 500); // Small delay to let UI settle
+        } else {
+            const lastId = localStorage.getItem('last_match_id');
+            if (lastId) input.value = lastId;
+        }
 
         // Load Stored Clans
         const storedClans = localStorage.getItem('pm_stream_clans');
