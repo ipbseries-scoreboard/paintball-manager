@@ -438,7 +438,11 @@
         function updateUI(data) {
             // Timer
             const timerEl = document.getElementById('timer');
-            timerEl.innerText = data.timer;
+            let timerStr = data.timer || "00:00";
+            if (timerStr.includes('.')) {
+                timerStr = timerStr.split('.')[0];
+            }
+            timerEl.innerText = timerStr;
 
             // Timer Color/Warning
             const timeVal = parseTime(data.timer);

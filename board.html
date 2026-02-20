@@ -1608,6 +1608,7 @@
 
         // Load Stored Clans
         let clanConfig = [];
+        let logoCache = {}; // Cache for logos: { "Team Name": "data:image..." }
         const storedClans = localStorage.getItem('pm_stream_clans');
         if (storedClans) {
             try { clanConfig = JSON.parse(storedClans); } catch (e) { clanConfig = []; }
@@ -1745,14 +1746,29 @@
                     let oldData = null; // Declare oldData here
 
                     conn.on('data', (data) => {
-                        currentData = data;
+                        if (!data) return;
+
+                        // Handle Full Sync vs Partial Sync
+                        if (data.type === 'FULL_SYNC' || data.clanConfig || data.tournament) {
+                            if (data.clanConfig) clanConfig = data.clanConfig;
+                            // Update currentData with the full payload
+                            currentData = data;
+                        } else {
+                            // Partial Sync - Merge only volatile properties
+                            // We use currentData as base and update only what's in the packet
+                            if (currentData) {
+                                Object.assign(currentData, data);
+                            } else {
+                                currentData = data; // Fallback for first packet
+                            }
+                        }
 
                         // Impact Trigger (Points)
-                        if (oldData && (data.teamLeft.score > oldData.teamLeft.score)) triggerMascotImpact('left');
-                        if (oldData && (data.teamRight.score > oldData.teamRight.score)) triggerMascotImpact('right');
+                        if (oldData && (currentData.teamLeft.score > oldData.teamLeft.score)) triggerMascotImpact('left');
+                        if (oldData && (currentData.teamRight.score > oldData.teamRight.score)) triggerMascotImpact('right');
 
-                        oldData = JSON.parse(JSON.stringify(data));
-                        updateBoard(data);
+                        oldData = JSON.parse(JSON.stringify(currentData));
+                        updateBoard(currentData);
                     });
 
                     conn.on('close', () => {
@@ -2166,7 +2182,7 @@
             }
 
             // Left Logo
-            updateLogo('left', d.teamLeft.name);
+            updateLogo('left', d.teamLeft.name, d.teamLeft.logoUrl);
 
             // Right Team
             const rNameRaw = d.teamRight.name || "";
@@ -2185,13 +2201,7 @@
             }
 
             // Right Logo
-            const rLogo = document.getElementById('logo-right');
-            if (d.logoRight) {
-                rLogo.src = d.logoRight;
-                rLogo.style.display = 'block';
-            } else {
-                rLogo.style.display = 'none';
-            }
+            updateLogo('right', d.teamRight.name, d.teamRight.logoUrl);
 
             // Tech Pause Right
             const rTech = document.getElementById('tech-right');
@@ -2213,9 +2223,6 @@
             } else {
                 rPenActive.style.display = 'none';
             }
-
-            // Right Logo
-            updateLogo('right', d.teamRight.name);
 
             // Mercy
             if (d.mercy) board.style.border = "10px solid red"; // Warning border scaled
@@ -2354,7 +2361,7 @@
         }
 
         // Helper for team logos
-        function updateLogo(side, teamName) {
+        function updateLogo(side, teamName, forceUrl) {
             const imgEl = document.getElementById('logo-' + side);
             if (!imgEl) return;
 
@@ -2363,9 +2370,33 @@
                 return;
             }
 
-            const config = clanConfig.find(c => c.name.trim().toLowerCase() === teamName.trim().toLowerCase());
-            if (config && config.logoUrl) {
-                imgEl.src = config.logoUrl;
+            // 1. If we have a forceUrl (newly received), CACHE it
+            if (forceUrl) {
+                logoCache[teamName.trim().toLowerCase()] = forceUrl;
+            }
+
+            // 2. Try to get logo from Cache first, then clanConfig
+            let logoUrl = logoCache[teamName.trim().toLowerCase()];
+
+            if (!logoUrl) {
+                // Flexible matching in local clanConfig
+                const cleanTag = teamName.trim().toLowerCase().replace(/\s+/g, '');
+                const config = clanConfig.find(cl => {
+                    const target = cl.name.trim().toLowerCase().replace(/\s+/g, '');
+                    return target === cleanTag || target.includes(cleanTag) || cleanTag.includes(target);
+                });
+
+                if (config) {
+                    logoUrl = config.logoUrl;
+                    // Seed the cache
+                    if (logoUrl) logoCache[teamName.trim().toLowerCase()] = logoUrl;
+                }
+            }
+
+            if (logoUrl) {
+                if (imgEl.src !== logoUrl) {
+                    imgEl.src = logoUrl;
+                }
                 imgEl.style.display = 'block';
 
                 // Apply Mascot Animation

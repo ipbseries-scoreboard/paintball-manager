@@ -1847,6 +1847,7 @@
                 showSchedule: false, // NEW
                 currentMatchEvents: [],
                 outdoorMode: false, // NEW
+                clanConfig: JSON.parse(localStorage.getItem('pm_stream_clans') || "[]"), // Sync team logos
                 matchLog: [], intervalInstance: null, flags: { warn60: false, warn30: false, warn20: false, warn10: false }
             };
 
@@ -1864,6 +1865,13 @@
             };
             let pendingTowelSide = null;
             let pendingPointSide = null;
+
+            // --- Optimized Sync Tracking ---
+            let lastSyncNames = { A: '', B: '' };
+            let lastFullSyncTime = 0;
+            const FULL_SYNC_INTERVAL = 30000; // 30 seconds for full database sync
+            const LOGO_RESYNC_INTERVAL = 5000; // 5 seconds for active logos
+            let lastLogoSyncTime = 0;
 
             // PDF IMPORT LOGIC
             document.getElementById('pdf-upload').addEventListener('change', async (e) => {
@@ -2189,11 +2197,57 @@
                 return nextMatch;
             }
 
-            function broadcastState() {
+            function broadcastState(forceFullSync = false) {
                 const teamLeftId = state.basesSwapped ? 'B' : 'A';
                 const teamRightId = state.basesSwapped ? 'A' : 'B';
+
+                const nameA = state.teams.A.name;
+                const nameB = state.teams.B.name;
+
+                // Detect name change or manual trigger
+                let forceLogo = forceFullSync;
+                if (nameA !== lastSyncNames.A || nameB !== lastSyncNames.B) {
+                    forceLogo = true;
+                    lastSyncNames.A = nameA;
+                    lastSyncNames.B = nameB;
+                }
+
+                // Periodic resync of logos (every 5s) and full data (every 30s)
+                const now = Date.now();
+                if (now - lastLogoSyncTime > LOGO_RESYNC_INTERVAL) {
+                    forceLogo = true;
+                    lastLogoSyncTime = now;
+                }
+
+                let fullSync = (now - lastFullSyncTime > FULL_SYNC_INTERVAL) || forceFullSync;
+
                 const teamLeftData = { ...state.teams[teamLeftId], totalPenalties: getTotalPenalties(state.teams[teamLeftId].name) };
                 const teamRightData = { ...state.teams[teamRightId], totalPenalties: getTotalPenalties(state.teams[teamRightId].name) };
+
+                // Get Logos explicitly for the packet
+                const getLogo = (name) => {
+                    if (!name || !state.clanConfig || state.clanConfig.length === 0) return "";
+                    // Flexible matching
+                    const cleanName = name.trim().toLowerCase().replace(/\s+/g, '');
+                    const c = state.clanConfig.find(cl => {
+                        const target = cl.name.trim().toLowerCase().replace(/\s+/g, '');
+                        return target === cleanName || target.includes(cleanName) || cleanName.includes(target);
+                    });
+                    if (c && c.logoUrl) {
+                        return c.logoUrl;
+                    }
+                    return "";
+                };
+
+                // Attach active logos if name changed, periodic, or full sync
+                if (forceLogo || fullSync) {
+                    teamLeftData.logoUrl = getLogo(teamLeftData.name);
+                    teamRightData.logoUrl = getLogo(teamRightData.name);
+
+                    if (fullSync) {
+                        console.log(`[SYNC] Full Sync. ClanConfig size: ${state.clanConfig.length}. Logos found: Left=${!!teamLeftData.logoUrl}, Right=${!!teamRightData.logoUrl}`);
+                    }
+                }
 
                 const nm = getNextMatch();
                 let nextMatchInfo = null;
@@ -2217,8 +2271,10 @@
                     breakLabelText = `${nextMatchInfo.teamA} vs ${nextMatchInfo.teamB}`;
                 }
 
-                const statsData = calculateTournamentStats();
+                const statsData = fullSync ? calculateTournamentStats() : null;
+
                 const packet = {
+                    type: fullSync ? 'FULL_SYNC' : 'PARTIAL_SYNC',
                     timer: formatTimeSeconds(state.timer),
                     mode: state.mode,
                     phase: (state.tournament.active && state.tournament.currentIndex !== -1 && state.tournament.matches[state.tournament.currentIndex]) ? (state.tournament.matches[state.tournament.currentIndex].phase || "GIRONI") : "",
@@ -2233,19 +2289,17 @@
                     layoutUrl: state.tournament.layoutUrl,
                     showNextMatchOverlay: state.showNextMatchOverlay,
                     hapticReferee: state.settings.hapticReferee !== false,
-                    fastestRound: statsData.records[0] || null,
-                    teamStyle: TEAM_STYLE,
-                    tournament: state.tournament,
+                    teamStyle: TEAM_STYLE, // Team style is small enough
                     outdoorMode: state.outdoorMode,
-                    standingsData: statsData
                 };
 
-                if (statsData.standings.length === 0 && state.tournament.active && state.tournament.currentIndex !== -1) {
-                    console.log("DEBUG: Standings Data is EMPTY - forced save current match");
-                    saveMatchState(state.tournament.currentIndex, false, false);
-                    const refreshedStats = calculateTournamentStats();
-                    packet.standingsData = refreshedStats;
-                    packet.fastestRound = refreshedStats.records[0] || null;
+                // Attach heavy items ONLY for full sync
+                if (fullSync) {
+                    packet.clanConfig = state.clanConfig;
+                    packet.tournament = state.tournament;
+                    packet.standingsData = statsData;
+                    packet.fastestRound = statsData ? (statsData.records[0] || null) : null;
+                    lastFullSyncTime = now;
                 }
 
                 try {
@@ -2255,13 +2309,11 @@
                                 conn.send(packet);
                             } catch (err) {
                                 console.error("PeerJS Send Error:", err);
-                                alert("SYNC ERROR (SEND): " + err.message);
                             }
                         }
                     });
                 } catch (e) {
                     console.error("Broadcast State Error:", e);
-                    alert("SYNC ERROR (General): " + e.message);
                 }
             }
 
@@ -2308,7 +2360,7 @@
                         if (state.mode !== 'PAUSED' && state.mode !== 'TECH_PAUSED') pause();
                         break;
                     case 'requestState':
-                        broadcastState();
+                        broadcastState(true); // Full sync on request
                         break;
                     case 'UNDO':
                         undoLastAction();
@@ -2321,6 +2373,14 @@
                         let tId = !state.basesSwapped ? (cmd.side === 'left' ? 'A' : 'B') : (cmd.side === 'left' ? 'B' : 'A');
                         handleTechPause(tId);
                         break;
+                    case 'UPDATE_CLANS':
+                        if (cmd.clanConfig) {
+                            state.clanConfig = cmd.clanConfig;
+                            localStorage.setItem('pm_stream_clans', JSON.stringify(state.clanConfig));
+                            log(`[REMOTO] Lista Loghi aggiornata da Console Streaming`);
+                            broadcastState(true); // Full sync on clan update
+                        }
+                        break;
                     case 'UPDATE_SETTINGS':
                         if (cmd.settings) {
                             Object.assign(state.settings, cmd.settings);
@@ -2328,7 +2388,7 @@
                             CONFIG.slotInterTime = state.settings.slotIntervalDuration || CONFIG.slotInterTime;
                             log(`[REMOTO] Impostazioni aggiornate da Arbitro`);
                             localStorage.setItem('pm_settings', JSON.stringify(state.settings));
-                            broadcastState();
+                            broadcastState(true); // Full sync on settings update
                         }
                         break;
                 }

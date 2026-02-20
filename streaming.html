@@ -1442,6 +1442,7 @@
         let currentData = null;
         let oldData = null;
         let clanConfig = []; // [{ name, logoUrl, rosterUrl }]
+        let clientConn = null; // Global reference for sending commands
         let styleConfig = { fontSize: 80, fontFamily: "'Oswald', sans-serif", bold: false, scaleX: 1.0, scaleY: 2.1, limit: 11 };
 
         // Initial Load
@@ -1556,6 +1557,7 @@
                 peer.on('open', (id) => {
                     console.log("My Peer ID:", id);
                     const conn = peer.connect(hostId);
+                    clientConn = conn;
 
                     conn.on('error', (err) => {
                         console.error("Connection Error:", err);
@@ -2024,6 +2026,13 @@
         function saveClans() {
             try {
                 localStorage.setItem('pm_stream_clans', JSON.stringify(clanConfig));
+
+                // Sync with Host if connected
+                if (clientConn && clientConn.open) {
+                    clientConn.send({ type: 'UPDATE_CLANS', clanConfig: clanConfig });
+                    console.log("Clan config synced with host via saveClans");
+                }
+
                 alert("Salvato!");
                 closeSetupModal();
             } catch (e) {

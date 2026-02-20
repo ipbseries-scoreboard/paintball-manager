@@ -379,10 +379,14 @@
             <div>LOGO A: <span id="diag-logo-a">MISSING</span></div>
             <div>LOGO B: <span id="diag-logo-b">MISSING</span></div>
         </div>
-        <div style="margin-top:10px;">
+        <div style="border-top:1px solid #334155; margin-top:5px; padding-top:5px; font-size:9px; color:#64748b;">
+            <div>KEYS: <span id="diag-keys">---</span></div>
+        </div>
+        <div style="margin-top:10px; display:flex; gap:5px;">
             <button onclick="conn.send({ type: 'requestState' })"
-                style="background:#3b82f6; color:white; border:none; padding:5px 10px; cursor:pointer; font-size:10px; border-radius:3px; pointer-events:auto;">FORCE
-                FULL SYNC</button>
+                style="background:#3b82f6; color:white; border:none; padding:5px 10px; cursor:pointer; font-size:10px; border-radius:3px; pointer-events:auto; flex:1;">SYNC</button>
+            <button onclick="window.location.reload()"
+                style="background:#64748b; color:white; border:none; padding:5px 10px; cursor:pointer; font-size:10px; border-radius:3px; pointer-events:auto; flex:1;">REFRESH</button>
         </div>
         <div style="margin-top:5px; color:#94a3b8; font-size:10px;">Press 'D' to toggle</div>
     </div>
@@ -455,10 +459,6 @@
             });
 
             conn.on('data', (data) => {
-                const now = new Date().toLocaleTimeString();
-                updateDiag('last-sync', now);
-                updateDiag('type', data.type || 'LEGACY');
-
                 handleData(data);
             });
 
@@ -483,6 +483,12 @@
         // --- Data Handling ---
         function handleData(data) {
             if (!data) return;
+
+            // Debug Diagnostics
+            const now = new Date().toLocaleTimeString();
+            updateDiag('last-sync', now);
+            updateDiag('type', data.type || 'LEGACY');
+            updateDiag('keys', Object.keys(data).join(', '));
 
             // Handle Full Sync vs Partial Sync
             if (data.type === 'FULL_SYNC' || data.clanConfig) {
@@ -606,6 +612,7 @@
 
             if (!teamName) {
                 imgEl.style.display = 'none';
+                updateDiag('logo-' + side, 'EMPTY NAME');
                 return;
             }
 
@@ -619,14 +626,25 @@
             let logoUrl = logoCache[teamName.trim().toLowerCase()];
 
             if (!logoUrl) {
-                const config = clanConfig.find(c => c.name.trim().toLowerCase() === teamName.trim().toLowerCase());
+                // Flexible matching in local clanConfig
+                const cleanTag = teamName.trim().toLowerCase().replace(/\s+/g, '');
+                const config = clanConfig.find(cl => {
+                    const target = cl.name.trim().toLowerCase().replace(/\s+/g, '');
+                    return target === cleanTag || target.includes(cleanTag) || cleanTag.includes(target);
+                });
+
                 if (config) {
                     logoUrl = config.logoUrl;
                     // Seed the cache
                     if (logoUrl) {
                         logoCache[teamName.trim().toLowerCase()] = logoUrl;
                         updateDiag('logo-' + side, 'FROM CONFIG');
+                    } else {
+                        updateDiag('logo-' + side, 'CONFIG MATCH BUT NO DATA');
                     }
+                } else {
+                    // No match found anywhere
+                    if (!forceUrl) updateDiag('logo-' + side, 'NO MATCH (' + teamName + ')');
                 }
             }
 
@@ -635,13 +653,8 @@
                     imgEl.src = logoUrl;
                 }
                 imgEl.style.display = 'block';
-                if (!forceUrl && !updateDiag.logoReported) {
-                    // Don't overwrite 'RECEIVED' status unless we haven't reported it yet
-                    updateDiag('logo-' + side, 'CACHED');
-                }
             } else {
                 imgEl.style.display = 'none';
-                updateDiag('logo-' + side, 'MISSING');
             }
         }
 
