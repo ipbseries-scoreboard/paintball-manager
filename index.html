@@ -2092,6 +2092,7 @@
                 }
 
                 peer = new Peer(targetId);
+                console.log("[SYSTEM] Paintball Manager v1.8.1-Robust - INIZIALIZZAZIONE...");
 
                 peer.on('open', (id) => {
                     if (!id) {
@@ -2245,7 +2246,7 @@
                     teamRightData.logoUrl = getLogo(teamRightData.name);
 
                     if (fullSync) {
-                        console.log(`[SYNC] Full Sync. ClanConfig size: ${state.clanConfig.length}. Logos found: Left=${!!teamLeftData.logoUrl}, Right=${!!teamRightData.logoUrl}`);
+                        console.log(`[SYNC] Full Sync (v1.8.1). ClanConfig size: ${state.clanConfig.length}. Logos found: Left=${!!teamLeftData.logoUrl}, Right=${!!teamRightData.logoUrl}`);
                     }
                 }
 

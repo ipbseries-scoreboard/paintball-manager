@@ -1991,15 +1991,15 @@
                 const div = document.createElement('div');
                 div.className = 'clan-item';
 
-                // Logo preview or upload button
+                // Logo preview or URL input
                 let logoContent = '';
-                if (clan.logoUrl && clan.logoUrl.length > 50) {
-                    logoContent = `<div style="display:flex; flex-direction:column; gap:5px;">
-                        <img src="${clan.logoUrl}" style="width:40px; height:40px; object-fit:contain; border-radius:4px;">
-                        <button onclick="updateClan(${idx}, 'logoUrl', '')" style="font-size:0.7rem; padding:2px; background:#ef4444;">X</button>
+                if (clan.logoUrl && clan.logoUrl.length > 0) {
+                    logoContent = `<div style="display:flex; flex-direction:column; gap:5px; align-items:center;">
+                        <img src="${clan.logoUrl}" style="width:40px; height:40px; object-fit:contain; border-radius:4px;" onerror="this.style.display='none'">
+                        <input type="text" placeholder="URL Logo" value="${clan.logoUrl}" onchange="updateClan(${idx}, 'logoUrl', this.value)" style="font-size:0.8rem; width:130px;">
                      </div>`;
                 } else {
-                    logoContent = `<input type="file" accept="image/*" onchange="handleLogoUpload(this, ${idx})" style="font-size:0.8rem;">`;
+                    logoContent = `<input type="text" placeholder="URL Logo (Link Esterno)" onchange="updateClan(${idx}, 'logoUrl', this.value)" style="font-size:0.8rem; width:130px;">`;
                 }
 
                 div.innerHTML = `
@@ -2041,45 +2041,7 @@
             }
         }
 
-        // Handle Image Upload & Resize
-        function handleLogoUpload(input, idx) {
-            if (input.files && input.files[0]) {
-                const file = input.files[0];
-                const reader = new FileReader();
 
-                reader.onload = function (e) {
-                    const img = new Image();
-                    img.onload = function () {
-                        // Max dimensions for logo storage - Increased for better quality on large display
-                        const MAX_W = 400;
-                        const MAX_H = 400;
-
-                        let w = img.width;
-                        let h = img.height;
-
-                        // Calculate Aspect Ratio
-                        if (w > h) {
-                            if (w > MAX_W) { h *= MAX_W / w; w = MAX_W; }
-                        } else {
-                            if (h > MAX_H) { w *= MAX_H / h; h = MAX_H; }
-                        }
-
-                        const canvas = document.createElement('canvas');
-                        canvas.width = w;
-                        canvas.height = h;
-                        const ctx = canvas.getContext('2d');
-                        ctx.clearRect(0, 0, w, h); // Explicitly clear for transparency
-                        ctx.drawImage(img, 0, 0, w, h);
-
-                        // Output as PNG base64
-                        const dataUrl = canvas.toDataURL('image/png');
-                        updateClan(idx, 'logoUrl', dataUrl);
-                    }
-                    img.src = e.target.result;
-                }
-                reader.readAsDataURL(file);
-            }
-        }
 
         function syncTeamsFromHost() {
             if (!currentData || !currentData.tournament || !currentData.tournament.matches) {

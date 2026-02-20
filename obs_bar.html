@@ -372,6 +372,7 @@
 
     <!-- Debug Diagnostic Overlay -->
     <div id="diag-overlay">
+        <div style="font-size:9px; color:#94a3b8; margin-bottom:5px;">VERSION: v1.8.1-Robust</div>
         <div>STATUS: <span id="diag-status">WAITING...</span></div>
         <div>PACKET: <span id="diag-type">---</span></div>
         <div>TIME: <span id="diag-last-sync">---</span></div>
@@ -389,6 +390,18 @@
                 style="background:#64748b; color:white; border:none; padding:5px 10px; cursor:pointer; font-size:10px; border-radius:3px; pointer-events:auto; flex:1;">REFRESH</button>
         </div>
         <div style="margin-top:5px; color:#94a3b8; font-size:10px;">Press 'D' to toggle</div>
+    </div>
+
+    <!-- Outdated Version Warning (Hidden by default) -->
+    <div id="outdated-warning"
+        style="display:none; position:fixed; top:150px; left:50%; transform:translateX(-50%); background:rgba(239, 68, 68, 0.95); color:white; padding:15px; border-radius:10px; border:2px solid white; z-index:99999; text-align:center; font-weight:bold; width:300px; box-shadow:0 10px 25px rgba(0,0,0,0.5);">
+        ⚠️ VERSION CORRUZIONE RILEVATA<br>
+        <div style="font-size:12px; font-weight:normal; margin-top:5px;">
+            Il Pannello di Controllo sta inviando dati obsoleti.<br><br>
+            1. Vai su <b>index.html</b> (Regia)<br>
+            2. Premi <b>CTRL + F5</b> per forzare il refresh.<br>
+            3. Ricarica questa barra.
+        </div>
     </div>
 
     <script>
@@ -487,8 +500,20 @@
             // Debug Diagnostics
             const now = new Date().toLocaleTimeString();
             updateDiag('last-sync', now);
-            updateDiag('type', data.type || 'LEGACY');
+
+            const pType = data.type || 'LEGACY';
+            updateDiag('type', pType);
             updateDiag('keys', Object.keys(data).join(', '));
+
+            // Anti-Cache Warning
+            const warningEl = document.getElementById('outdated-warning');
+            if (warningEl) {
+                if (pType === 'LEGACY') {
+                    warningEl.style.display = 'block';
+                } else {
+                    warningEl.style.display = 'none';
+                }
+            }
 
             // Handle Full Sync vs Partial Sync
             if (data.type === 'FULL_SYNC' || data.clanConfig) {
