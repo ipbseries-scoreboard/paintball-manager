@@ -322,6 +322,48 @@
             display: block;
         }
 
+        /* NEXT MATCH BAR */
+        #next-match-bar {
+            position: absolute;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 23, 42, 0.9);
+            border: 2px solid var(--accent-color);
+            border-top: none;
+            border-radius: 0 0 10px 10px;
+            padding: 5px 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            color: #f1f5f9;
+            font-size: 22px;
+            font-weight: bold;
+            text-transform: uppercase;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+            z-index: 4;
+            transition: all 0.3s ease;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #next-match-bar.visible {
+            opacity: 1;
+        }
+
+        .nm-label {
+            color: var(--accent-color);
+        }
+
+        .nm-teams {
+            letter-spacing: 1px;
+        }
+
+        .nm-time-score {
+            color: var(--score-color);
+            font-family: var(--font-nums);
+        }
+
         /* DIAGNOSTICS OVERLAY */
         #diag-overlay {
             position: fixed;
@@ -368,6 +410,13 @@
         </div>
 
         <div id="conn-status"></div>
+    </div>
+
+    <!-- NEXT MATCH BAR -->
+    <div id="next-match-bar">
+        <span class="nm-label">NEXT:</span>
+        <span id="nm-teams" class="nm-teams">TBD vs TBD</span>
+        <span id="nm-time" class="nm-time-score"></span>
     </div>
 
     <!-- Debug Diagnostic Overlay -->
@@ -623,6 +672,28 @@
             // Penalty Visuals
             updatePenaltyVisuals(nameA, tLeft, 'penalty-a');
             updatePenaltyVisuals(nameB, tRight, 'penalty-b');
+
+            // Next Match Update
+            const nmBar = document.getElementById('next-match-bar');
+            if (state.nextMatch) {
+                const nmTeams = document.getElementById('nm-teams');
+                const nmTime = document.getElementById('nm-time');
+
+                let tA = state.nextMatch.teamA || 'TBD';
+                let tB = state.nextMatch.teamB || 'TBD';
+
+                nmTeams.innerText = `${tA} vs ${tB}`;
+
+                if (state.nextMatch.isStarted) {
+                    nmTime.innerText = `[ ${state.nextMatch.scoreA} - ${state.nextMatch.scoreB} ] ${state.nextMatch.timer || ""}`;
+                } else {
+                    nmTime.innerText = state.nextMatch.time || "";
+                }
+
+                nmBar.classList.add('visible');
+            } else {
+                nmBar.classList.remove('visible');
+            }
         }
 
         function triggerScorePop(el) {
