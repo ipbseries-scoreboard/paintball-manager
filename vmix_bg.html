@@ -39,10 +39,7 @@
             width: 100%;
             height: 100%;
             z-index: 1;
-            /* Update src in JS to use one of the two AI images */
-            background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=');
-            background-size: cover;
-            background-position: center;
+            background-color: transparent;
         }
 
         /* CUTOUTS PER LE TELECAMERE DI VMIX (Trasparenza) 
@@ -112,29 +109,70 @@
             }
         }
 
-        /* LOGO SPONSOR CORNER (Top Left o Bottom Left/Right) */
-        #sponsor-corner {
+        /* TEAM STATS OVERLAY */
+        .team-stats {
             position: absolute;
-            bottom: 80px;
-            right: 30px;
-            width: 400px;
-            height: 120px;
-            background: rgba(15, 23, 42, 0.7);
-            border: 2px solid rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
+            bottom: 70px;
+            /* Sopra al ticker */
+            width: 320px;
+            background: rgba(15, 23, 42, 0.85);
+            border: 2px solid var(--accent-color);
+            border-radius: 8px;
+            padding: 10px 15px;
+            color: var(--text-color);
             z-index: 10;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
             backdrop-filter: blur(5px);
-            opacity: 0.8;
-            font-size: 24px;
-            color: #94a3b8;
-            letter-spacing: 2px;
+            display: none;
+            /* Nascosto di default, mostrato da JS se c'è un match */
+            flex-direction: column;
         }
 
-        .sponsor-inner {
-            text-align: center;
+        #team-a-stats {
+            left: 30px;
+            border-left: 5px solid var(--accent-color);
+        }
+
+        #team-b-stats {
+            right: 30px;
+            /* Spostato a destra visto che non c'è più lo sponsor */
+            border-right: 5px solid #fbbf24;
+            /* Uso colore ambra per contrastare */
+        }
+
+        .ts-title {
+            font-size: 20px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .ts-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 16px;
+            font-family: var(--font-nums);
+            margin: 2px 0;
+            color: #94a3b8;
+        }
+
+        .ts-row span:last-child {
+            color: #fff;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .val-green {
+            color: #4ade80 !important;
+        }
+
+        .val-red {
+            color: #f87171 !important;
         }
     </style>
 </head>
@@ -144,12 +182,22 @@
     <!-- LAYER BACKGROUND -->
     <div id="bg-layer"></div>
 
-    <!-- SPONSOR OVERLAY -->
-    <div id="sponsor-corner">
-        <div class="sponsor-inner">
-            <span style="font-size:14px; opacity:0.6; display:block; margin-bottom:5px;">OFFICIAL SPONSOR</span>
-            <div id="sponsor-logo-placeholder">LOGO QUI</div>
-        </div>
+    <!-- STATS TEAM A -->
+    <div id="team-a-stats" class="team-stats">
+        <div class="ts-title" id="ts-name-a">TEAM A</div>
+        <div class="ts-row"><span>Giocate (P):</span> <span id="ts-p-a">0</span></div>
+        <div class="ts-row"><span>Vittorie (V):</span> <span id="ts-w-a" class="val-green">0</span></div>
+        <div class="ts-row"><span>Sconfitte (S):</span> <span id="ts-l-a" class="val-red">0</span></div>
+        <div class="ts-row"><span>Diff. Punti:</span> <span id="ts-diff-a">0</span></div>
+    </div>
+
+    <!-- STATS TEAM B -->
+    <div id="team-b-stats" class="team-stats">
+        <div class="ts-title" id="ts-name-b">TEAM B</div>
+        <div class="ts-row"><span>Giocate (P):</span> <span id="ts-p-b">0</span></div>
+        <div class="ts-row"><span>Vittorie (V):</span> <span id="ts-w-b" class="val-green">0</span></div>
+        <div class="ts-row"><span>Sconfitte (S):</span> <span id="ts-l-b" class="val-red">0</span></div>
+        <div class="ts-row"><span>Diff. Punti:</span> <span id="ts-diff-b">0</span></div>
     </div>
 
     <!-- TICKER INFORMATIVO -->
@@ -168,7 +216,7 @@
         document.getElementById('bg-layer').style.background = 'transparent';
 
         // ---------------------------------------------------------
-        // LOGICA CONNESSIONE ALLA REGIA PER AGGIORNARE IL TICKER (Opzionale)
+        // LOGICA CONNESSIONE ALLA REGIA PER AGGIORNARE IL TICKER E STATS
         // ---------------------------------------------------------
         const peer = new Peer();
         let conn = null;
@@ -197,31 +245,83 @@
         function handleData(data) {
             if (!data) return;
 
-            // LOGICA TICKER DINAMICO
+            // --- 1. POPOLAMENTO STATISTICHE SQUADRA CORRENTE ---
+            const statsBoxA = document.getElementById('team-a-stats');
+            const statsBoxB = document.getElementById('team-b-stats');
+
+            let currentMatch = null;
+            if (data.tournament && data.tournament.active && data.tournament.currentIndex >= 0 && data.tournament.matches) {
+                currentMatch = data.tournament.matches[data.tournament.currentIndex];
+            }
+
+            if (currentMatch && currentMatch.teamA && currentMatch.teamB && data.standingsData && data.standingsData.standings) {
+                const standings = data.standingsData.standings;
+                const teamAInfo = standings.find(s => s.name === currentMatch.teamA) || { played: 0, wins: 0, losses: 0, rw: 0, rl: 0 };
+                const teamBInfo = standings.find(s => s.name === currentMatch.teamB) || { played: 0, wins: 0, losses: 0, rw: 0, rl: 0 };
+
+                // Aggiorna Team A
+                document.getElementById('ts-name-a').innerText = currentMatch.teamA;
+                document.getElementById('ts-p-a').innerText = teamAInfo.played;
+                document.getElementById('ts-w-a').innerText = teamAInfo.wins;
+                document.getElementById('ts-l-a').innerText = teamAInfo.losses;
+                let diffA = (teamAInfo.rw || 0) - (teamAInfo.rl || 0);
+                document.getElementById('ts-diff-a').innerText = diffA > 0 ? '+' + diffA : diffA;
+                document.getElementById('ts-diff-a').className = diffA > 0 ? 'val-green' : (diffA < 0 ? 'val-red' : '');
+
+                // Aggiorna Team B
+                document.getElementById('ts-name-b').innerText = currentMatch.teamB;
+                document.getElementById('ts-p-b').innerText = teamBInfo.played;
+                document.getElementById('ts-w-b').innerText = teamBInfo.wins;
+                document.getElementById('ts-l-b').innerText = teamBInfo.losses;
+                let diffB = (teamBInfo.rw || 0) - (teamBInfo.rl || 0);
+                document.getElementById('ts-diff-b').innerText = diffB > 0 ? '+' + diffB : diffB;
+                document.getElementById('ts-diff-b').className = diffB > 0 ? 'val-green' : (diffB < 0 ? 'val-red' : '');
+
+                statsBoxA.style.display = 'flex';
+                statsBoxB.style.display = 'flex';
+            } else {
+                statsBoxA.style.display = 'none';
+                statsBoxB.style.display = 'none';
+            }
+
+            // --- 2. LOGICA TICKER DINAMICO ---
             const tickerEl = document.getElementById('ticker-text');
 
-            // 1. Dati dal Prossimo Match
             let nmString = "";
             let modeString = "";
 
             if (data.nextMatch) {
-                nmString = `PROSSIMO MATCH: ${data.nextMatch.teamA} vs ${data.nextMatch.teamB} `;
+                nmString = `PROSSIMO MATCH: <span style="color:var(--accent-color)">${data.nextMatch.teamA} vs ${data.nextMatch.teamB}</span>`;
             }
 
-            // 2. Classifica Veloce (se mandata dalla regia, ma possiamo usare mode per dare news)
             if (data.mode === 'BREAK_MATCH' || data.mode === 'INTERVAL') {
                 modeString = "PARTITA IN PAUSA - SIAMO QUASI PRONTI A RIPARTIRE! ";
             } else if (data.mode === 'MATCH_OVER') {
                 modeString = "PARTITA CONCLUSA! RISULTATO IN AGGIORNAMENTO... ";
             }
 
-            // Unisci i messaggi
             let finalScrollText = "";
             if (modeString) finalScrollText += modeString + "  &nbsp;&nbsp;&bull;&nbsp;&nbsp;  ";
             if (nmString) finalScrollText += nmString + "  &nbsp;&nbsp;&bull;&nbsp;&nbsp;  ";
 
-            // Aggiungi testo standard
-            finalScrollText += "SEGUI IL TORNEO ITALIAN PAINTBALL!";
+            // Aggiungi Storico Partite Giocate (Risultati)
+            if (data.tournament && data.tournament.matches) {
+                const pastMatches = data.tournament.matches.filter(m => m.savedState && m.savedState.finished);
+                if (pastMatches.length > 0) {
+                    finalScrollText += "RISULTATI RECENTI: &nbsp;&nbsp;";
+                    // Prendiamo le ultime 10 giocate (le piu recenti in fondo)
+                    const recentMatches = pastMatches.slice(-10);
+                    recentMatches.forEach(m => {
+                        let scoreA = m.savedState.scoreA || 0;
+                        let scoreB = m.savedState.scoreB || 0;
+                        finalScrollText += `<span style="color:#e2e8f0">${m.teamA}</span> <span style="color:var(--accent-color)">[${scoreA} - ${scoreB}]</span> <span style="color:#e2e8f0">${m.teamB}</span> &nbsp;&nbsp;&bull;&nbsp;&nbsp; `;
+                    });
+                } else {
+                    finalScrollText += "NESSUN RISULTATO ANCORA REGISTRATO...";
+                }
+            } else {
+                finalScrollText += "IN ATTESA DELL'INIZIO DEL TORNEO...";
+            }
 
             tickerEl.innerHTML = finalScrollText;
         }
