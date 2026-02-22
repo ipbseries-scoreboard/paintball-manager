@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPBA vMix Background & Ticker</title>
+    <!-- PeerJS CDN -->
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Roboto:wght@400;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --accent-color: #22d3ee;
+            --text-color: #f1f5f9;
+            --font-main: 'Oswald', sans-serif;
+            --font-nums: 'Roboto', sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: transparent;
+            /* vMix overlay */
+            overflow: hidden;
+            font-family: var(--font-main);
+            width: 1920px;
+            height: 1080px;
+            position: relative;
+        }
+
+        /* BACKGROUND IMAGE OR VIDEO LAYER */
+        #bg-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            /* Update src in JS to use one of the two AI images */
+            background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=');
+            background-size: cover;
+            background-position: center;
+        }
+
+        /* CUTOUTS PER LE TELECAMERE DI VMIX (Trasparenza) 
+           Così il fondo appare sopra i video se vMix mette i video dietro, 
+           oppure se vMix mette i video sopra, questi "buchi" non servono strettamente. 
+           E' meglio usare questo come VERO SFONDO in vMix, posto sul LAYER 1.
+        */
+
+        /* LOWER THIRD TICKER BAR */
+        #ticker-bar {
+            position: absolute;
+            bottom: 0px;
+            left: 0;
+            width: 100%;
+            height: 60px;
+            background: linear-gradient(90deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%);
+            border-top: 3px solid var(--accent-color);
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            overflow: hidden;
+            box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        #ticker-label {
+            background-color: var(--accent-color);
+            color: var(--bg-dark);
+            height: 100%;
+            padding: 0 30px;
+            font-size: 28px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            z-index: 2;
+            box-shadow: 5px 0 15px rgba(0, 0, 0, 0.5);
+            clip-path: polygon(0 0, 90% 0, 100% 100%, 0% 100%);
+            flex-shrink: 0;
+        }
+
+        #ticker-content-wrapper {
+            flex: 1;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #ticker-text {
+            position: absolute;
+            white-space: nowrap;
+            color: var(--text-color);
+            font-size: 26px;
+            line-height: 60px;
+            font-family: var(--font-nums);
+            /* Animazione da DESTRA verso SINISTRA */
+            animation: scroll-left 15s linear infinite;
+        }
+
+        @keyframes scroll-left {
+            0% {
+                transform: translateX(1920px);
+            }
+
+            100% {
+                transform: translateX(-100%);
+            }
+        }
+
+        /* LOGO SPONSOR CORNER (Top Left o Bottom Left/Right) */
+        #sponsor-corner {
+            position: absolute;
+            bottom: 80px;
+            right: 30px;
+            width: 400px;
+            height: 120px;
+            background: rgba(15, 23, 42, 0.7);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            z-index: 10;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(5px);
+            opacity: 0.8;
+            font-size: 24px;
+            color: #94a3b8;
+            letter-spacing: 2px;
+        }
+
+        .sponsor-inner {
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- LAYER BACKGROUND -->
+    <div id="bg-layer"></div>
+
+    <!-- SPONSOR OVERLAY -->
+    <div id="sponsor-corner">
+        <div class="sponsor-inner">
+            <span style="font-size:14px; opacity:0.6; display:block; margin-bottom:5px;">OFFICIAL SPONSOR</span>
+            <div id="sponsor-logo-placeholder">LOGO QUI</div>
+        </div>
+    </div>
+
+    <!-- TICKER INFORMATIVO -->
+    <div id="ticker-bar">
+        <div id="ticker-label">NEWS</div>
+        <div id="ticker-content-wrapper">
+            <div id="ticker-text">
+                BENVENUTI AL TORNEO! &nbsp;&nbsp;&bull;&nbsp;&nbsp; IN ATTESA DEL PROSSIMO MATCH...
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // Sfondo reso completamente trasparente come richiesto per vMix Overlay
+        document.getElementById('bg-layer').style.background = 'transparent';
+
+        // ---------------------------------------------------------
+        // LOGICA CONNESSIONE ALLA REGIA PER AGGIORNARE IL TICKER (Opzionale)
+        // ---------------------------------------------------------
+        const peer = new Peer();
+        let conn = null;
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const matchId = urlParams.get('id') || urlParams.get('matchId');
+
+        peer.on('open', (id) => {
+            console.log('Ticker Peer ID:', id);
+            if (matchId) {
+                let hostId = matchId.startsWith('IPBA-') ? matchId : 'IPBA-' + matchId;
+                connectToHost(hostId);
+            }
+        });
+
+        function connectToHost(hostId) {
+            conn = peer.connect(hostId);
+            conn.on('open', () => {
+                conn.send({ type: 'requestState' });
+            });
+            conn.on('data', handleData);
+            conn.on('close', () => setTimeout(() => connectToHost(hostId), 3000));
+            conn.on('error', () => setTimeout(() => connectToHost(hostId), 3000));
+        }
+
+        function handleData(data) {
+            if (!data) return;
+
+            // LOGICA TICKER DINAMICO
+            const tickerEl = document.getElementById('ticker-text');
+
+            // 1. Dati dal Prossimo Match
+            let nmString = "";
+            let modeString = "";
+
+            if (data.nextMatch) {
+                nmString = `PROSSIMO MATCH: ${data.nextMatch.teamA} vs ${data.nextMatch.teamB} `;
+            }
+
+            // 2. Classifica Veloce (se mandata dalla regia, ma possiamo usare mode per dare news)
+            if (data.mode === 'BREAK_MATCH' || data.mode === 'INTERVAL') {
+                modeString = "PARTITA IN PAUSA - SIAMO QUASI PRONTI A RIPARTIRE! ";
+            } else if (data.mode === 'MATCH_OVER') {
+                modeString = "PARTITA CONCLUSA! RISULTATO IN AGGIORNAMENTO... ";
+            }
+
+            // Unisci i messaggi
+            let finalScrollText = "";
+            if (modeString) finalScrollText += modeString + "  &nbsp;&nbsp;&bull;&nbsp;&nbsp;  ";
+            if (nmString) finalScrollText += nmString + "  &nbsp;&nbsp;&bull;&nbsp;&nbsp;  ";
+
+            // Aggiungi testo standard
+            finalScrollText += "SEGUI IL TORNEO ITALIAN PAINTBALL!";
+
+            tickerEl.innerHTML = finalScrollText;
+        }
+
+    </script>
+</body>
+
+</html>
