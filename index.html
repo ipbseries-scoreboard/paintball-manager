@@ -4332,6 +4332,12 @@
                     point: document.getElementById('select-audio-point')
                 };
 
+                const defaults = {
+                    start: 1, // PRO Authentic NXL Horn
+                    end: 1,   // PRO Authentic NXL Horn
+                    point: 0  // Default Electronic Horn
+                };
+
                 Object.keys(selects).forEach(key => {
                     soundLibrary.forEach((s, idx) => {
                         const opt = document.createElement('option');
@@ -4340,14 +4346,15 @@
                         selects[key].appendChild(opt);
                     });
 
-                    // Load preference
+                    // Load preference or use default
                     const saved = localStorage.getItem(`pm_sound_${key}`);
-                    if (saved !== null) {
-                        if (saved < soundLibrary.length) {
-                            selects[key].value = saved;
-                            setupActiveSound(key, soundLibrary[saved].url);
-                        }
+                    let activeIdx = defaults[key];
+                    if (saved !== null && saved < soundLibrary.length) {
+                        activeIdx = parseInt(saved);
                     }
+
+                    selects[key].value = activeIdx;
+                    setupActiveSound(key, soundLibrary[activeIdx].url);
 
                     selects[key].addEventListener('change', (e) => {
                         const idx = e.target.value;
