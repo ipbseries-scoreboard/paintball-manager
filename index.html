@@ -1369,6 +1369,14 @@
                     </div>
 
                     <div class="form-group" style="margin-top:10px;">
+                        <button class="btn"
+                            onclick="startWizard(); document.getElementById('tournament-modal').style.display = 'none';"
+                            style="width: 100%; padding: 10px; border-color: #3b82f6; color: #3b82f6; background: rgba(59, 130, 246, 0.1);">
+                            ✨ CREA GIRONE MANUALMENTE (WIZARD)
+                        </button>
+                    </div>
+
+                    <div class="form-group" style="margin-top:10px;">
                         <label>Oppure Incolla Lista Match (TeamA, TeamB)</label>
                         <textarea id="tournament-input" class="form-control" rows="4"
                             placeholder="TEAM A,TEAM B&#10;TEAM C,TEAM D">TEAM A,TEAM B&#10;TEAM C,TEAM D</textarea>
@@ -1550,7 +1558,13 @@
                             <!-- Right: Team Grid -->
                             <div
                                 style="display: flex; flex-direction: column; gap: 10px; border-left: 1px solid #334155; padding-left: 10px;">
-                                <div style="font-weight: bold; color: #94a3b8;">SQUADRE DISPONIBILI</div>
+                                <div
+                                    style="font-weight: bold; color: #94a3b8; display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                                    SQUADRE DISPONIBILI
+                                    <button class="btn" onclick="addManualWizardTeam()"
+                                        style="padding: 3px 10px; font-size: 0.8rem; background: #0ea5e9; border-color: #0284c7; color: white;">+
+                                        NUOVA</button>
+                                </div>
                                 <div id="wiz-team-grid"
                                     style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 5px; overflow-y: auto;">
                                     <!-- Teams -->
@@ -1797,6 +1811,15 @@
         <script>
             // Load Saved Settings
             const savedSettings = JSON.parse(localStorage.getItem('pm_settings') || "{}");
+
+            // Forzatura aggiornamento alla lingua inglese per vecchi utenti
+            if (savedSettings.lang === 'it-IT' && !savedSettings.upgradedToEnglishTTS) {
+                savedSettings.lang = 'en-US';
+                savedSettings.voiceURI = null; // Azzera la voce italiana salvata in precedenza
+                savedSettings.upgradedToEnglishTTS = true;
+                localStorage.setItem('pm_settings', JSON.stringify(savedSettings));
+            }
+
             const CONFIG = {
                 gameTime: (parseInt(savedSettings.gameDuration) || 10) * 60,
                 pointInterTime: (parseInt(savedSettings.pointIntervalDuration) || 30),
@@ -1812,9 +1835,11 @@
                 basesSwapped: false,
                 settings: {
                     voice: savedSettings.voice !== false,
-                    lang: savedSettings.lang || 'it-IT',
+                    lang: savedSettings.lang || 'en-US',
                     autoStart: savedSettings.autoStart !== false,
                     confirmTowel: !!savedSettings.confirmTowel,
+                    confirmTech: !!savedSettings.confirmTech,
+                    hapticReferee: savedSettings.hapticReferee !== false,
                     confirmSkipSlot: savedSettings.confirmSkipSlot !== false,
                     confirmNoPoint: savedSettings.confirmNoPoint !== false,
                     confirmUndo: savedSettings.confirmUndo !== false, // NEW
@@ -2425,18 +2450,17 @@
                 const vSelect = document.getElementById('voice-select');
                 vSelect.innerHTML = '';
 
-                // Prefer Italian voices
-                const itVoices = voices.filter(v => v.lang.includes('it'));
-                const otherVoices = voices.filter(v => !v.lang.includes('it'));
+                // Prefer English voices
+                const enVoices = voices.filter(v => v.lang.includes('en'));
+                const otherVoices = voices.filter(v => !v.lang.includes('en'));
 
-                const all = [...itVoices, ...otherVoices];
+                const all = [...enVoices, ...otherVoices];
 
-                // Priority: "Google italiano" > Any "it-IT" > Default Browser Voice
+                // Priority: Any "en-US" > Any "en" > Default Browser Voice
                 let targetVoice = null;
-                // Try to find Google italiano specifically
-                const googleIt = itVoices.find(v => v.name.includes('Google') && v.lang === 'it-IT');
-                if (googleIt) targetVoice = googleIt;
-                else if (itVoices.length > 0) targetVoice = itVoices[0];
+                const googleEn = enVoices.find(v => v.name.includes('Google') && v.lang === 'en-US');
+                if (googleEn) targetVoice = googleEn;
+                else if (enVoices.length > 0) targetVoice = enVoices[0];
 
                 all.forEach(v => {
                     const opt = document.createElement('option');
@@ -2562,6 +2586,7 @@
                     if (v) utter.voice = v;
                 }
 
+                synth.cancel(); // Clear any stuck utterances in the queue
                 synth.speak(utter);
             }
 
@@ -2775,11 +2800,12 @@
                 else if (type === 'single_slot') state.timer = CONFIG.singleSlotInterTime;
                 else state.timer = CONFIG.pointInterTime;
                 state.flags = { warn60: false, warn30: false, warn20: false, warn10: false };
-                speak("Intervallo", "Interval");
+
                 log(`START INTERVALLO ${type.toUpperCase()}`);
                 render();
                 saveTournamentState();
                 startTimerLoop();
+                broadcastState(true); // Sync istantaneo dei dati squadre
             }
             function startPoint() {
                 // If in Golden Break, "Start Point" should start the Golden Point instead!
@@ -2799,15 +2825,20 @@
                 render();
                 saveTournamentState();
                 startTimerLoop();
+                broadcastState(true); // Sync istantaneo dei dati squadre
             }
-            function pause() {
+            function pause(isAutoPause = false) {
                 if (state.mode === 'POINT' || state.mode === 'INTERVAL' || state.mode === 'OVERTIME') {
                     stopTimerLoop();
                     if (state.mode === 'POINT' || state.mode === 'OVERTIME') state.gameTimeRemaining = state.timer;
                     state.prevMode = state.mode;
                     state.mode = 'PAUSED';
                     playBeep('stop');
-                    speak("Pausa", "Pause");
+
+                    if (!isAutoPause) {
+                        speak("Timeout Tecnico. Timeout Tecnico.", "Technical Timeout. Technical Timeout.");
+                    }
+
                     log(`PAUSA (${state.prevMode})`);
                     saveTournamentState();
                     render();
@@ -2866,7 +2897,7 @@
 
                         // Auto-pause if running
                         if (state.mode === 'POINT' || state.mode === 'INTERVAL' || state.mode === 'OVERTIME') {
-                            pause();
+                            pause(true);
                         } else {
                             stopTimerLoop();
                             state.gameTimeRemaining = state.timer;
@@ -2896,6 +2927,7 @@
                 document.getElementById('point-verify-modal').style.display = 'none';
 
                 if (decision === 'APPROVED') {
+                    speak("Punto Assegnato", "Point Approved");
                     team.score++;
                     // Track Logic
                     state.currentMatchEvents.push({
@@ -2917,6 +2949,7 @@
                         log("MERCY RULE ATTIVA!");
                     }
                 } else if (decision === 'REVERSE') {
+                    speak("Punto Invertito. Punto Invertito.", "Reverse Point. Reverse Point.");
                     opponent.score++;
                     // Track Logic
                     state.currentMatchEvents.push({
@@ -2936,6 +2969,7 @@
                     }
                     render();
                 } else if (decision === 'REJECT') {
+                    speak("Punto Non Approvato. Punto Non Approvato.", "Point Not Approved. Point Not Approved.");
                     log(`PUNTO NON APPROVATO (${team.name}). Nessun punteggio assegnato.`);
                     // Resume logic restored as per user request:
                     // Must restore mode from prevMode so tick() doesn't exit early.
@@ -2950,6 +2984,7 @@
                     }
                     render();
                 } else if (decision === 'NO_POINT') {
+                    speak("Nessun Punto. Nessun Punto.", "No Point. No Point.");
                     log(`DECISIONE NO POINT (${team.name}). Salto slot senza cambio campo.`);
                     handleNoPoint();
                 }
@@ -3163,6 +3198,7 @@
                     }
                 }
                 render();
+                broadcastState(true); // Forza l'aggiornamento immediato delle statistiche in vMix e altri display
             }
 
             function startMatchBreak() {
@@ -3250,6 +3286,7 @@
 
             function handleNoPoint() {
                 // Remote command or local button: proceed with standard rotation WITHOUT swapping sides
+                speak("Nessun Punto. Nessun Punto.", "No Point. No Point.");
                 log("NO POINT: Nessun buzzer toccato. Rotazione slot senza cambio campo.");
                 if (state.tournament.active) {
                     rotateMatch(false); // false = NO swap side
@@ -3718,7 +3755,7 @@
                     // Ensure basic match state is saved immediately so it appears (as 0-0) in stats
                     saveMatchState(i, false, false);
 
-                    speak("Caricato", "Loaded");
+
                     log(`CARICATO MATCH ${i + 1}: ${m.teamA} vs ${m.teamB}`);
 
                     // Flow control
@@ -3734,6 +3771,7 @@
                     } else {
                         render(); // Fresh load waits for "Start Game/Point"
                     }
+                    broadcastState(true); // Forza l'aggiornamento immediato delle statistiche in vMix e altri display
                 }
             }
 
@@ -4107,7 +4145,7 @@
             // --- SOUND DATABASE & CUSTOM AUDIO ---
             const soundLibrary = [
                 { name: "Default Electronic Horn", url: "" },
-                { name: "PRO Authentic NXL Horn", url: "synth:nxl" },
+                { name: "PRO Authentic NXL Horn", url: "https://raw.githubusercontent.com/ipbseries-scoreboard/paintball-manager/main/screen-20260222-191238%20(mp3cut.net).mp3" },
                 { name: "PRO Authentic NXL Short", url: "synth:nxlShort" },
                 { name: "PRO Authentic Arena Claxon", url: "synth:claxon" },
                 { name: "PRO Authentic Power Buzzer", url: "synth:buzzer" },
@@ -4495,7 +4533,7 @@
 
 
             document.getElementById('btn-start-inter').addEventListener('click', startInter); document.getElementById('btn-start-point').addEventListener('click', startPoint);
-            document.getElementById('btn-pause').addEventListener('click', pause);
+            document.getElementById('btn-pause').addEventListener('click', () => pause(false));
             document.getElementById('btn-overtime').addEventListener('click', () => startOvertime());
             document.getElementById('btn-no-point').addEventListener('click', handleNoPoint);
             document.getElementById('btn-undo').addEventListener('click', undoLastAction);
@@ -5572,6 +5610,19 @@
                 return btn;
             }
 
+            function addManualWizardTeam() {
+                const name = prompt("Inserisci il nome della squadra da aggiungere:", "");
+                if (!name || name.trim() === '') return;
+                const cleanName = name.trim().toUpperCase();
+
+                if (!state.wizard.customTeams) state.wizard.customTeams = [];
+                if (!state.wizard.customTeams.includes(cleanName)) {
+                    state.wizard.customTeams.push(cleanName);
+                }
+                renderTeamGrid();
+                fillActiveSlot(cleanName);
+            }
+
             function renderTeamGrid() {
                 const grid = document.getElementById('wiz-team-grid');
                 grid.innerHTML = '';
@@ -5585,6 +5636,10 @@
                     if (m.teamA && !phaseRegex.test(m.teamA)) uniqueTeams.add(m.teamA);
                     if (m.teamB && !phaseRegex.test(m.teamB)) uniqueTeams.add(m.teamB);
                 });
+
+                if (state.wizard.customTeams) {
+                    state.wizard.customTeams.forEach(t => uniqueTeams.add(t));
+                }
 
                 uniqueTeams.forEach(tName => {
                     const btn = document.createElement('button');
@@ -5796,9 +5851,15 @@
             // --- QR CODE VIEWER ---
             function showViewQR(page, title, icon) {
                 const port = location.port ? ":" + location.port : "";
-                const baseUrl = `${location.protocol}//${location.hostname}${port}${location.pathname.substring(0, location.pathname.lastIndexOf('/'))}`;
+                let baseUrl = `${location.protocol}//${location.hostname}${port}${location.pathname.substring(0, location.pathname.lastIndexOf('/'))}`;
+
+                // Se aperto in locale (file://), forza il baseUrl a puntare su GitHub Pages
+                if (location.protocol === 'file:') {
+                    baseUrl = "https://italianpaintball.github.io/regia";
+                }
+
                 // Construct URL with Match ID if present
-                const matchIdParam = state.settings.matchId ? `?matchId=${state.settings.matchId}` : "";
+                const matchIdParam = state.settings.matchId ? `?matchId=${state.settings.matchId}` : "?matchId=1674";
                 const targetUrl = `${baseUrl}/${page}${matchIdParam}`;
 
                 document.getElementById('qr-title').innerHTML = `${icon} ${title}`;
@@ -5855,8 +5916,16 @@
                     }
                 }
 
+                let targetUrl = "";
                 const matchIdParam = `?matchId=${mId}`;
-                window.open(`${page}${matchIdParam}`, '_blank');
+
+                if (location.protocol === 'file:') {
+                    targetUrl = `https://italianpaintball.github.io/regia/${page}${matchIdParam}`;
+                } else {
+                    targetUrl = `${page}${matchIdParam}`;
+                }
+
+                window.open(targetUrl, '_blank');
             }
 
             // Initialize Peer on Load
