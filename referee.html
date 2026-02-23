@@ -876,6 +876,16 @@
                     lastPensRight = newPens;
                 }
 
+                // Update Main Button (Dynamic START/PAUSA)
+                const mainBtn = document.getElementById('pause-btn');
+                if (data.mode === 'POINT' || data.mode === 'OVERTIME') {
+                    mainBtn.innerText = "PAUSA";
+                    mainBtn.className = "btn-main bg-pause";
+                } else {
+                    mainBtn.innerText = "START";
+                    mainBtn.className = "btn-main bg-active";
+                }
+
                 // Update Next Match Panel
                 const nmPanel = document.getElementById('next-match-panel');
                 if (data.nextMatch) {
@@ -888,8 +898,14 @@
                     const tBTrunc = smartTruncate(data.nextMatch.teamB, nmLimit);
 
                     let teamsText = `${tATrunc} vs ${tBTrunc}`;
-                    if (data.nextMatch.isStarted) {
+
+                    // Show scores if available (either started or having non-zero scores)
+                    const hasScores = (data.nextMatch.scoreA > 0 || data.nextMatch.scoreB > 0 || data.nextMatch.isStarted);
+                    if (hasScores) {
                         teamsText += ` [ ${data.nextMatch.scoreA} - ${data.nextMatch.scoreB} ]`;
+                    }
+
+                    if (data.nextMatch.isStarted) {
                         nmTimer.innerText = data.nextMatch.timer || "";
                         nmTimer.style.color = "#fbbf24";
                     } else {
@@ -990,7 +1006,7 @@
         }
 
         function handlePauseToggle() {
-            if (currentMode === 'PAUSED' || currentMode === 'IDLE') {
+            if (currentMode === 'PAUSED' || currentMode === 'IDLE' || currentMode === 'INTERVAL' || currentMode === 'GOLDEN_BREAK') {
                 sendCommand('START_POINT');
             } else if (currentMode === 'BREAK_MATCH') {
                 sendCommand('START_INTER');

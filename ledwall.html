@@ -166,66 +166,6 @@
             color: var(--team-b-color);
         }
 
-        /* BOTTOM SECTION: STATUS */
-        .status-section {
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            /* Stacked for square aspect */
-            justify-content: center;
-            gap: 20px;
-            align-items: center;
-            flex: 0 0 auto;
-            padding-bottom: 40px;
-        }
-
-        #status-text {
-            font-size: 60px;
-            /* Reduced */
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 5px;
-            color: #64748b;
-            padding: 10px 30px;
-            border: 3px solid #64748b;
-            border-radius: 15px;
-        }
-
-        #status-text.state-active {
-            color: #22c55e;
-            border-color: #22c55e;
-            box-shadow: 0 0 30px rgba(34, 197, 94, 0.4);
-        }
-
-        #status-text.state-paused {
-            color: #f59e0b;
-            border-color: #f59e0b;
-            animation: pulse 1s infinite alternate;
-        }
-
-        #status-text.state-interval {
-            color: var(--team-a-color);
-            border-color: var(--team-a-color);
-        }
-
-        @keyframes pulse {
-            from {
-                opacity: 1;
-            }
-
-            to {
-                opacity: 0.5;
-            }
-        }
-
-        #match-phase {
-            font-size: 40px;
-            /* Reduced */
-            color: var(--accent-color);
-            text-transform: uppercase;
-            font-weight: bold;
-        }
-
         .penalty-text {
             font-family: var(--font-main);
             font-size: 60px;
@@ -290,12 +230,8 @@
                 </div>
             </div>
 
-            <!-- STATUS BOTTOM -->
-            <div class="status-section">
-                <div id="match-phase">GIRONI</div>
-                <div id="status-text">PRONTO</div>
-            </div>
         </div>
+    </div>
     </div>
 
     <script>
@@ -304,6 +240,56 @@
         const ui = document.getElementById('connect-ui');
         const sb = document.getElementById('scoreboard');
         const scaler = document.getElementById('scaler');
+
+        function cleanTeamName(name) {
+            if (!name) return "";
+            let cleaned = name.trim();
+
+            // Pattern: "PHASE PREFIX - Team Name" 
+            if (cleaned.includes(" - ")) {
+                const parts = cleaned.split(" - ");
+                const phaseRegex = /QUARTI|SEMIFINALI|FINALE|FINALI|OTTAVI|ROUND|PLAYOFF|POSTO|QUALIFICAZIONI/i;
+                if (phaseRegex.test(parts[0])) {
+                    cleaned = parts[1].trim();
+                }
+            }
+
+            return cleaned.replace(/^SQUADRA\s+[A-Z]$/i, "")
+                .replace(/^TEAM\s+[A-Z]$/i, "")
+                .trim() || name;
+        }
+
+        function smartTruncate(str, limit) {
+            if (!str) return "";
+            str = str.trim().toUpperCase();
+            if (str.length <= limit) return str;
+
+            const words = str.split(/\s+/).filter(w => w.length > 0);
+
+            if (words.length >= 3) {
+                // First 4 letters + 2nd word initial + Last word
+                const w1 = words[0].substring(0, 4);
+                const w2Initial = words[1].substring(0, 1) + ".";
+                const lastWord = words[words.length - 1];
+
+                const prefix = w1 + " " + w2Initial + " ";
+                const remaining = limit - prefix.length;
+
+                return (prefix + (remaining > 0 ? lastWord.substring(0, remaining) : "")).trim();
+            } else if (words.length === 2) {
+                // First 4 letters + Last word
+                const w1 = words[0].substring(0, 4);
+                const lastWord = words[1];
+
+                const prefix = w1 + " ";
+                const remaining = limit - prefix.length;
+
+                return (prefix + (remaining > 0 ? lastWord.substring(0, remaining) : "")).trim();
+            } else {
+                // Single word
+                return str.substring(0, limit);
+            }
+        }
 
         // SCALING (SQUARE 1:1)
         function scaleBoard() {
@@ -358,18 +344,17 @@
             document.getElementById('timer').innerText = timerStr;
 
             // Teams & Scores
-            document.getElementById('name-left').innerText = d.teamLeft.name.toUpperCase();
+            const styleLimit = (d.styleConfig && d.styleConfig.limit) || 11;
+
+            const lNameRaw = d.teamLeft.name || "TEAM A";
+            document.getElementById('name-left').innerText = smartTruncate(cleanTeamName(lNameRaw), styleLimit);
             document.getElementById('score-left').innerText = d.teamLeft.score;
-            document.getElementById('name-right').innerText = d.teamRight.name.toUpperCase();
+
+            const rNameRaw = d.teamRight.name || "TEAM B";
+            document.getElementById('name-right').innerText = smartTruncate(cleanTeamName(rNameRaw), styleLimit);
             document.getElementById('score-right').innerText = d.teamRight.score;
 
-            // Status
-            const st = document.getElementById('status-text');
-            st.innerText = d.statusText || "IDLE";
-            st.className = d.statusClass || "";
 
-            const phase = document.getElementById('match-phase');
-            phase.innerText = d.phase || "";
 
 
             // Auto Color Sync

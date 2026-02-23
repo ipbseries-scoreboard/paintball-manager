@@ -542,6 +542,56 @@
             console.error("Peer error:", err);
         });
 
+        function cleanTeamName(name) {
+            if (!name) return "";
+            let cleaned = name.trim();
+
+            // Pattern: "PHASE PREFIX - Team Name" 
+            if (cleaned.includes(" - ")) {
+                const parts = cleaned.split(" - ");
+                const phaseRegex = /QUARTI|SEMIFINALI|FINALE|FINALI|OTTAVI|ROUND|PLAYOFF|POSTO|QUALIFICAZIONI/i;
+                if (phaseRegex.test(parts[0])) {
+                    cleaned = parts[1].trim();
+                }
+            }
+
+            return cleaned.replace(/^SQUADRA\s+[A-Z]$/i, "")
+                .replace(/^TEAM\s+[A-Z]$/i, "")
+                .trim() || name;
+        }
+
+        function smartTruncate(str, limit) {
+            if (!str) return "";
+            str = str.trim().toUpperCase();
+            if (str.length <= limit) return str;
+
+            const words = str.split(/\s+/).filter(w => w.length > 0);
+
+            if (words.length >= 3) {
+                // First 4 letters + 2nd word initial + Last word
+                const w1 = words[0].substring(0, 4);
+                const w2Initial = words[1].substring(0, 1) + ".";
+                const lastWord = words[words.length - 1];
+
+                const prefix = w1 + " " + w2Initial + " ";
+                const remaining = limit - prefix.length;
+
+                return (prefix + (remaining > 0 ? lastWord.substring(0, remaining) : "")).trim();
+            } else if (words.length === 2) {
+                // First 4 letters + Last word
+                const w1 = words[0].substring(0, 4);
+                const lastWord = words[1];
+
+                const prefix = w1 + " ";
+                const remaining = limit - prefix.length;
+
+                return (prefix + (remaining > 0 ? lastWord.substring(0, remaining) : "")).trim();
+            } else {
+                // Single word
+                return str.substring(0, limit);
+            }
+        }
+
         // --- Data Handling ---
         function handleData(data) {
             if (!data) return;
@@ -608,7 +658,9 @@
             const nameB = document.getElementById('name-b');
             const scoreB = document.getElementById('score-b');
 
-            nameA.innerText = tLeft.name;
+            const styleLimit = (state.styleConfig && state.styleConfig.limit) || 11;
+
+            nameA.innerText = smartTruncate(cleanTeamName(tLeft.name), styleLimit);
 
             // Score Animation A
             if (scoreA.innerText !== String(tLeft.score)) {
@@ -616,7 +668,7 @@
                 triggerScorePop(scoreA);
             }
 
-            nameB.innerText = tRight.name;
+            nameB.innerText = smartTruncate(cleanTeamName(tRight.name), styleLimit);
 
             // Score Animation B
             if (scoreB.innerText !== String(tRight.score)) {
@@ -682,10 +734,18 @@
                 let tA = state.nextMatch.teamA || 'TBD';
                 let tB = state.nextMatch.teamB || 'TBD';
 
-                nmTeams.innerText = `${tA} vs ${tB}`;
+                const styleLimitNM = 11;
+                const tAClean = smartTruncate(cleanTeamName(tA), styleLimitNM);
+                const tBClean = smartTruncate(cleanTeamName(tB), styleLimitNM);
+
+                nmTeams.innerText = `${tAClean} vs ${tBClean}`;
 
                 if (state.nextMatch.isStarted) {
-                    nmTime.innerText = `[ ${state.nextMatch.scoreA} - ${state.nextMatch.scoreB} ] ${state.nextMatch.timer || ""}`;
+                    let nmTimerStr = String(state.nextMatch.timer || "00:00");
+                    if (nmTimerStr.includes('.')) {
+                        nmTimerStr = nmTimerStr.split('.')[0];
+                    }
+                    nmTime.innerText = `[ ${state.nextMatch.scoreA} - ${state.nextMatch.scoreB} ] ${nmTimerStr}`;
                 } else {
                     nmTime.innerText = state.nextMatch.time || "";
                 }

@@ -2147,7 +2147,7 @@
                     connections.push(conn);
                     // Send immediate state
                     conn.on('open', () => {
-                        broadcastState();
+                        broadcastState(true); // Force full sync for new client
                     });
                     conn.on('data', (data) => {
                         handleRemoteCommand(data);
@@ -2420,6 +2420,9 @@
                             log(`[REMOTO] Lista Loghi aggiornata da Console Streaming`);
                             broadcastState(true); // Full sync on clan update
                         }
+                        break;
+                    case 'FORCE_SYNC':
+                        broadcastState(true);
                         break;
                     case 'UPDATE_SETTINGS':
                         if (cmd.settings) {
@@ -3074,6 +3077,12 @@
                     timestamp: Date.now()
                 };
 
+                if (lvl === 1) {
+                    speak("Minor Penalty", "Minor Penalty");
+                } else {
+                    speak("Major Penalty", "Major Penalty");
+                }
+
                 log(`PENALITA': ${state.teams[teamId].name} (+${lvl}). Tot: ${state.teams[teamId].penalties}`);
                 if (state.tournament.active) saveMatchState(state.tournament.currentIndex);
 
@@ -3495,7 +3504,25 @@
                 if (!state.tournament || !state.tournament.matches) return { standings: [], records: [], averageTimes: [], mercyKillers: [], badBoys: [], matchHistory: [], techUsage: [] };
 
                 state.tournament.matches.forEach((m, mIdx) => {
-                    if (!m.savedState) return; // Any saved state counts
+                    // Pre-register all teams so they appear with 0 points even before playing
+                    const teamNames = [
+                        (m.teamA || `Team A (M${mIdx + 1})`).trim().toUpperCase(),
+                        (m.teamB || `Team B (M${mIdx + 1})`).trim().toUpperCase()
+                    ];
+
+                    teamNames.forEach(name => {
+                        const validName = name || "UNKNOWN";
+                        if (!stats[validName]) {
+                            stats[validName] = {
+                                name: m.teamA?.trim().toUpperCase() === name ? m.teamA : (m.teamB?.trim().toUpperCase() === name ? m.teamB : validName),
+                                played: 0, wins: 0, losses: 0, draws: 0,
+                                rw: 0, rl: 0, pen: 0, tech: 0,
+                                fastest: 9999, totalDuration: 0, totalPoints: 0, mercyWins: 0
+                            };
+                        }
+                    });
+
+                    if (!m.savedState) return; // Any saved state counts for actual scores
 
                     const teams = [
                         { id: 'A', name: m.teamA || `Team A (M${mIdx + 1})`, score: m.savedState.scoreA || 0, penalties: m.savedState.penaltiesA || 0, tech: m.savedState.techUsedA },
@@ -3504,14 +3531,6 @@
 
                     teams.forEach((t, i) => {
                         const name = (t.name || "").trim().toUpperCase() || "UNKNOWN";
-                        if (!stats[name]) {
-                            stats[name] = {
-                                name: t.name || "UNKNOWN",
-                                played: 0, wins: 0, losses: 0, draws: 0,
-                                rw: 0, rl: 0, pen: 0, tech: 0,
-                                fastest: 9999, totalDuration: 0, totalPoints: 0, mercyWins: 0
-                            };
-                        }
                         const s = stats[name];
                         const oppIdx = i === 0 ? 1 : 0;
                         const opp = teams[oppIdx];
@@ -5631,10 +5650,25 @@
                 uniqueTeams.add("TBD");
 
                 // Harvest history - Filter out placeholder phase names
-                const phaseRegex = /QUARTI|SEMIFINALI|FINALE|FINALI/i;
                 state.tournament.matches.forEach(m => {
-                    if (m.teamA && !phaseRegex.test(m.teamA)) uniqueTeams.add(m.teamA);
-                    if (m.teamB && !phaseRegex.test(m.teamB)) uniqueTeams.add(m.teamB);
+                    [m.teamA, m.teamB].forEach(rawName => {
+                        if (!rawName || rawName === "TBD") return;
+
+                        let teamName = rawName.trim();
+                        // Strip phase prefixes
+                        if (teamName.includes(" - ")) {
+                            const parts = teamName.split(" - ");
+                            const phaseRegex = /QUARTI|SEMIFINALI|FINALE|FINALI|OTTAVI|ROUND|PLAYOFF|POSTO|QUALIFICAZIONI/i;
+                            if (phaseRegex.test(parts[0])) {
+                                teamName = parts[1].trim();
+                            }
+                        }
+
+                        // Generic check for leftovers like TEAM A
+                        if (!/^SQUADRA\s+[A-Z]$/i.test(teamName) && !/^TEAM\s+[A-Z]$/i.test(teamName)) {
+                            uniqueTeams.add(teamName);
+                        }
+                    });
                 });
 
                 if (state.wizard.customTeams) {

@@ -1346,6 +1346,26 @@
             text-shadow: 0 0 25px rgba(251, 191, 36, 0.8);
             line-height: 1;
         }
+
+        .connect-loader {
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-left-color: var(--accent-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
     </style>
     <style id="dynamic-style-left"></style>
     <style id="dynamic-style-right"></style>
@@ -1394,6 +1414,15 @@
     <!-- Scaler Wrapper -->
     <div id="scaler">
         <div id="scoreboard" style="display: none;">
+
+            <!-- SYNC OVERLAY -->
+            <div id="sync-overlay"
+                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #0f172a; z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                <div class="connect-loader"></div>
+                <h2 style="color: var(--accent-color); margin-top: 20px; font-family: 'Oswald', sans-serif;">
+                    SINCRONIZZAZIONE IN CORSO...</h2>
+            </div>
+
             <!-- TOP BAR RECORD -->
             <div id="top-bar" style="white-space: nowrap; gap: 15px;">
                 ⚡ RECORD DEL GIORNO <span id="tb-record-val" class="tb-record-val" style="margin: 0;">00:00</span>
@@ -1514,10 +1543,9 @@
         </div>
 
         <div id="roster-overlay">
-            <div class="zoom-controls">
-                <button class="btn-zoom" style="background: #f59e0b; color: black;" onclick="reloadRosterFrame()">↻
-                    Ricarica</button>
-            </div>
+            <button class="close-overlay-btn" id="roster-back-btn" onclick="goBackToClans()"
+                style="position:absolute; top:10px; left:20px; right:auto; background: #3b82f6; display: none; width: auto; color: white; border: none; padding: 15px 40px; font-size: 30px; font-weight: bold; border-radius: 10px; cursor: pointer; z-index: 3200;">⬅
+                INDIETRO</button>
             <button id="close-roster-btn" class="close-btn" onclick="toggleRoster()"
                 style="position: absolute; top: 10px; right: 20px; background: var(--danger-color); color: white; border: none; padding: 15px 40px; font-size: 30px; font-weight: bold; border-radius: 10px; cursor: pointer; z-index: 3200;">Chiudi
                 X</button>
@@ -1720,12 +1748,15 @@
                 hostId = "IPBA-" + hostId;
             }
 
+            if (btn) btn.innerText = "CONNESSIONE...";
+
             try {
                 const peer = new Peer();
 
                 peer.on('error', (err) => {
                     console.error("PeerJS Error:", err);
                     alert("Errore PeerJS: " + err.type);
+                    if (btn) btn.innerText = "CONNETTI";
                 });
 
                 peer.on('open', (myId) => {
@@ -1794,6 +1825,11 @@
         function updateBoard(d) {
             console.log("DEBUG: Received board update data:", d);
             currentData = d;
+
+            // Hide Sync Overlay once real data is received
+            const syncOverlay = document.getElementById('sync-overlay');
+            if (syncOverlay) syncOverlay.style.display = 'none';
+
             renderBoardState(d);
             if (showSchedule) renderScheduleTable();
             if (showBracket && d.standingsData && d.standingsData.bracket) renderBracket(d.standingsData.bracket);
@@ -1820,6 +1856,12 @@
         function toggleBracket() {
             showBracket = !showBracket;
             document.getElementById('bracket-overlay').style.display = showBracket ? 'flex' : 'none';
+
+            // Request fresh bracket if opening
+            if (showBracket && typeof clientConn !== 'undefined' && clientConn && clientConn.open) {
+                clientConn.send({ type: 'FORCE_SYNC' });
+            }
+
             if (showBracket && currentData && currentData.standingsData) renderBracket(currentData.standingsData.bracket);
         }
 
@@ -1925,6 +1967,11 @@
             const isVisible = overlay.style.display === 'flex';
             overlay.style.display = isVisible ? 'none' : 'flex';
             console.log("DEBUG: stats-overlay display set to:", overlay.style.display);
+
+            // Request fresh stats if opening
+            if (!isVisible && typeof clientConn !== 'undefined' && clientConn && clientConn.open) {
+                clientConn.send({ type: 'FORCE_SYNC' });
+            }
 
             if (!isVisible && currentData && currentData.standingsData) {
                 console.log("DEBUG: Rendering standings table...");
@@ -2063,10 +2110,20 @@
 
         function cleanTeamName(name) {
             if (!name) return "";
-            return name.trim()
-                .replace(/^SQUADRA\s+[A-Z]$/i, "") // Rimuove "SQUADRA A", "SQUADRA B" generico
-                .replace(/^TEAM\s+[A-Z]$/i, "")    // Rimuove "TEAM A", "TEAM B" generico
-                .trim() || name;                   // Se rimane vuoto, usa il nome originale
+            let cleaned = name.trim();
+
+            // Pattern: "PHASE PREFIX - Team Name" 
+            if (cleaned.includes(" - ")) {
+                const parts = cleaned.split(" - ");
+                const phaseRegex = /QUARTI|SEMIFINALI|FINALE|FINALI|OTTAVI|ROUND|PLAYOFF|POSTO|QUALIFICAZIONI/i;
+                if (phaseRegex.test(parts[0])) {
+                    cleaned = parts[1].trim();
+                }
+            }
+
+            return cleaned.replace(/^SQUADRA\s+[A-Z]$/i, "")
+                .replace(/^TEAM\s+[A-Z]$/i, "")
+                .trim() || name;
         }
 
         function smartTruncate(str, limit) {
@@ -2481,14 +2538,19 @@
         let rosterBaseScale = 1.0;
         let rosterManualZoom = 0;
         let rosterPanX = 0;
+        let rosterOpenedFromClans = false;
 
-        function toggleRoster(url = "", teamName = "") {
+        function toggleRoster(url = "", teamName = "", fromClanList = false) {
             const over = document.getElementById('roster-overlay');
             const iframe = document.getElementById('roster-iframe');
             const teamSpan = document.getElementById('roster-team-name');
             const wrapper = document.getElementById('roster-scale-wrapper');
+            const backBtn = document.getElementById('roster-back-btn');
 
             if (!showRoster && url) {
+                rosterOpenedFromClans = fromClanList;
+                if (backBtn) backBtn.style.display = fromClanList ? 'inline-block' : 'none';
+
                 // Sanitize URL
                 if (!url.startsWith('http')) {
                     url = 'https://' + url;
@@ -2524,9 +2586,15 @@
             applyRosterScale();
         }
 
-        function reloadRosterFrame() {
-            const iframe = document.getElementById('roster-iframe');
-            iframe.src = iframe.src;
+
+
+        function goBackToClans() {
+            if (showRoster) {
+                toggleRoster(); // Close roster
+            }
+            if (rosterOpenedFromClans) {
+                openClanOverlay(); // Re-open clans
+            }
         }
 
         function resetRosterZoom() {
@@ -2548,7 +2616,7 @@
             const config = clanConfig.find(c => c.name.trim().toLowerCase() === cleanName);
 
             if (config && config.rosterUrl) {
-                toggleRoster(config.rosterUrl, teamName);
+                toggleRoster(config.rosterUrl, teamName, true);
             } else {
                 console.log("No roster URL found for " + teamName);
             }

@@ -1148,6 +1148,26 @@
             color: var(--accent-color);
             font-weight: bold;
         }
+
+        .connect-loader {
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-left-color: var(--accent-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
     </style>
     <style id="dynamic-style-left"></style>
     <style id="dynamic-style-right"></style>
@@ -1164,6 +1184,15 @@
     <!-- Scaler Wrapper -->
     <div id="scaler">
         <div id="scoreboard" style="display: none;">
+
+            <!-- SYNC OVERLAY -->
+            <div id="sync-overlay"
+                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #0f172a; z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                <div class="connect-loader"></div>
+                <h2 style="color: var(--accent-color); margin-top: 20px; font-family: 'Oswald', sans-serif;">
+                    SINCRONIZZAZIONE IN CORSO...</h2>
+            </div>
+
             <!-- TOP BAR RECORD -->
             <div id="top-bar" onclick="toggleSchedule()" title="Clicca per visualizzare il palinsesto"
                 style="white-space: nowrap; gap: 15px;">
@@ -1414,10 +1443,9 @@
 
             <!-- ROSTER OVERLAY -->
             <div id="roster-overlay">
-                <div class="zoom-controls">
-                    <button class="btn-zoom" style="background: #f59e0b; color: black;"
-                        onclick="reloadRosterFrame()">↻</button>
-                </div>
+                <button class="close-overlay-btn" id="roster-back-btn" onclick="goBackToClans()"
+                    style="position:absolute; top:10px; left:20px; right:auto; background: #3b82f6; display: none; width: auto;">⬅
+                    INDIETRO</button>
                 <button class="close-overlay-btn" onclick="toggleRoster()"
                     style="position:absolute; top:10px; right:20px;">CHIUDI X</button>
                 <div class="roster-title-container">
@@ -1442,6 +1470,21 @@
         let currentData = null;
         let oldData = null;
         let clanConfig = []; // [{ name, logoUrl, rosterUrl }]
+
+        function cleanTeamName(name) {
+            if (!name) return "";
+            let cleaned = name.trim();
+            if (cleaned.includes(" - ")) {
+                const parts = cleaned.split(" - ");
+                const phaseRegex = /QUARTI|SEMIFINALI|FINALE|FINALI|OTTAVI|ROUND|PLAYOFF|POSTO|QUALIFICAZIONI/i;
+                if (phaseRegex.test(parts[0])) {
+                    cleaned = parts[1].trim();
+                }
+            }
+            return cleaned.replace(/^SQUADRA\s+[A-Z]$/i, "")
+                .replace(/^TEAM\s+[A-Z]$/i, "")
+                .trim() || name;
+        }
         let clientConn = null; // Global reference for sending commands
         let styleConfig = { fontSize: 80, fontFamily: "'Oswald', sans-serif", bold: false, scaleX: 1.0, scaleY: 2.1, limit: 11 };
 
@@ -1556,12 +1599,16 @@
             if (!hostId) return alert("Inserisci ID");
             if (!hostId.startsWith("IPBA-")) hostId = "IPBA-" + hostId;
 
+            // Updated Button Text
+            if (btn) btn.innerText = "CONNESSIONE...";
+
             try {
                 const peer = new Peer();
 
                 peer.on('error', (err) => {
                     console.error("PeerJS Error:", err);
                     alert("Errore PeerJS: " + err.type);
+                    if (btn) btn.innerText = "CONNETTI";
                 });
 
                 peer.on('open', (id) => {
@@ -1598,7 +1645,18 @@
                             } catch (e) { console.error("Style Sync Error", e); }
                         }
 
-                        currentData = d;
+                        // Handle Full Sync vs Partial Sync
+                        if (d.type === 'FULL_SYNC' || d.clanConfig || d.tournament) {
+                            if (d.clanConfig) clanConfig = d.clanConfig;
+                            currentData = d;
+                        } else {
+                            // Partial Sync - Merge only volatile properties
+                            if (currentData) {
+                                Object.assign(currentData, d);
+                            } else {
+                                currentData = d;
+                            }
+                        }
 
                         // Impact Trigger (Points)
                         if (oldData && (d.teamLeft.score > oldData.teamLeft.score)) triggerMascotImpact('left');
@@ -1625,6 +1683,10 @@
                 console.warn("Incomplete data received:", d);
                 return;
             }
+
+            // Hide Sync Overlay once real data is received
+            const syncOverlay = document.getElementById('sync-overlay');
+            if (syncOverlay) syncOverlay.style.display = 'none';
             // Update Basic Fields
             document.getElementById('timer').innerText = d.timer || "00:00";
             // Status Bar removed as per layout change
@@ -1901,14 +1963,18 @@
         let rosterBaseScale = 1.0;
         let rosterManualZoom = 0;
         let rosterPanX = 0;
+        let rosterOpenedFromClans = false;
 
-        function toggleRoster(url = "", teamName = "") {
+        function toggleRoster(url = "", teamName = "", fromClanList = false) {
             const over = document.getElementById('roster-overlay');
             const iframe = document.getElementById('roster-iframe');
             const teamSpan = document.getElementById('roster-team-name');
             const wrapper = document.getElementById('roster-scale-wrapper');
+            const backBtn = document.getElementById('roster-back-btn');
 
             if (!showRoster && url) {
+                rosterOpenedFromClans = fromClanList;
+                if (backBtn) backBtn.style.display = fromClanList ? 'inline-block' : 'none';
                 // Sanitize URL
                 if (!url.startsWith('http')) {
                     url = 'https://' + url;
@@ -1944,10 +2010,7 @@
             applyRosterScale();
         }
 
-        function reloadRosterFrame() {
-            const iframe = document.getElementById('roster-iframe');
-            iframe.src = iframe.src;
-        }
+
 
         function resetRosterZoom() {
             rosterManualZoom = 0;
@@ -1962,6 +2025,33 @@
             iframe.style.transform = `scale(${scale}) translateX(${rosterPanX}px)`;
         }
 
+        function goBackToClans() {
+            if (showRoster) {
+                toggleRoster(); // Close roster
+            }
+            if (rosterOpenedFromClans) {
+                openClanOverlay(); // Re-open clans
+            }
+        }
+
+        function goBackToClans() {
+            if (showRoster) {
+                toggleRoster(); // Close roster
+            }
+            if (rosterOpenedFromClans) {
+                openClanOverlay(); // Re-open clans
+            }
+        }
+
+
+        function goBackToClans() {
+            if (showRoster) {
+                toggleRoster(); // Close roster
+            }
+            if (rosterOpenedFromClans) {
+                openClanOverlay(); // Re-open clans
+            }
+        }
 
         function openRoster(teamName) {
             if (!teamName) return;
@@ -2050,7 +2140,10 @@
             const hostTeams = Array.from(uniqueTeams).sort();
             let addedCount = 0;
 
-            hostTeams.forEach(teamName => {
+            hostTeams.forEach(rawName => {
+                const teamName = cleanTeamName(rawName);
+                if (!teamName || teamName === "TBD") return;
+
                 // Check if exists (case insensitive)
                 const exists = clanConfig.some(c => c.name.toLowerCase() === teamName.toLowerCase());
                 if (!exists) {
@@ -2134,7 +2227,12 @@
                 if (!clan.name) return;
                 const card = document.createElement('div');
                 card.className = 'clan-card';
-                card.onclick = () => { if (clan.rosterUrl) window.open(clan.rosterUrl, '_blank'); };
+                card.onclick = () => {
+                    if (clan.rosterUrl) {
+                        toggleRoster(clan.rosterUrl, clan.name, true);
+                        closeClanOverlay();
+                    }
+                };
                 const logo = clan.logoUrl ? `<img src="${clan.logoUrl}" class="clan-logo">` : `<div class="clan-logo" style="display:flex;justify-content:center;align-items:center;color:#64748b;font-size:50px;">?</div>`;
                 card.innerHTML = `${logo}<div class="clan-card-name">${clan.name}</div>${clan.rosterUrl ? '<div style="color:var(--accent-color); font-size:12px; margin-top:5px;">🔗 OPEN ROSTER</div>' : ''}`;
                 grid.appendChild(card);
@@ -2151,6 +2249,12 @@
             const overlay = document.getElementById('stats-overlay');
             const isVisible = overlay.style.display === 'flex';
             overlay.style.display = isVisible ? 'none' : 'flex';
+
+            // Request fresh stats if opening
+            if (!isVisible && typeof clientConn !== 'undefined' && clientConn && clientConn.open) {
+                clientConn.send({ type: 'FORCE_SYNC' });
+            }
+
             if (!isVisible && currentData && currentData.standingsData) {
                 renderStandingsTable(currentData.standingsData);
             }
@@ -2161,6 +2265,12 @@
         function toggleBracket() {
             showBracket = !showBracket;
             document.getElementById('bracket-overlay').style.display = showBracket ? 'flex' : 'none';
+
+            // Request fresh bracket if opening
+            if (showBracket && typeof clientConn !== 'undefined' && clientConn && clientConn.open) {
+                clientConn.send({ type: 'FORCE_SYNC' });
+            }
+
             if (showBracket && currentData && currentData.standingsData) renderBracket(currentData.standingsData.bracket);
         }
 
@@ -2171,8 +2281,17 @@
             if (showSchedule) renderScheduleTable();
         }
 
-        document.getElementById('btn-open-layout').addEventListener('click', () => document.getElementById('layout-overlay').style.display = 'flex');
-        document.getElementById('close-layout-btn').addEventListener('click', () => document.getElementById('layout-overlay').style.display = 'none');
+        // --- LAYOUT HANDLER ---
+        let showLayout = false;
+        function toggleLayout() {
+            showLayout = !showLayout;
+            document.getElementById('layout-overlay').style.display = showLayout ? 'flex' : 'none';
+        }
+
+        document.getElementById('close-layout-btn').addEventListener('click', () => {
+            showLayout = false;
+            document.getElementById('layout-overlay').style.display = 'none';
+        });
 
         // Render Functions 
         function renderStandingsTable(data) {
