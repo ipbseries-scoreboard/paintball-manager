@@ -861,8 +861,8 @@
         }
 
         #roster-iframe {
-            width: 4000px;
-            height: 2100px;
+            width: 100%;
+            height: 100%;
             border: none;
             position: absolute;
             top: 0;
@@ -1923,16 +1923,7 @@
 
                 // Scaling logic
                 setTimeout(() => {
-                    const targetW = wrapper.clientWidth;
-                    const iframeW = 4000;
-
-                    if (targetW < 100) {
-                        alert("ERRORE: Larghezza finestra troppo piccola (" + targetW + "). Il sito potrebbe non vedersi.");
-                        rosterBaseScale = 0.5;
-                    } else {
-                        rosterBaseScale = targetW / iframeW;
-                    }
-
+                    rosterBaseScale = 1.0;
                     applyRosterScale();
                 }, 1000);
 
@@ -1966,18 +1957,9 @@
 
         function applyRosterScale() {
             const iframe = document.getElementById('roster-iframe');
-            const wrapper = document.getElementById('roster-scale-wrapper');
             const scale = rosterBaseScale + rosterManualZoom;
-            const iframeW = 4000;
 
             iframe.style.transform = `scale(${scale}) translateX(${rosterPanX}px)`;
-            const targetW = wrapper.clientWidth;
-
-            // Adjust height
-            const scaledH = 2100 * scale;
-            if (scaledH < 800) {
-                // If becomes too short, maybe min-height?
-            }
         }
 
 
