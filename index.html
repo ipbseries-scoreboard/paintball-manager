@@ -2363,7 +2363,7 @@
 
                 // Attach heavy items ONLY for full sync
                 if (fullSync) {
-                    packet.clanConfig = state.clanConfig;
+                    // packet.clanConfig = state.clanConfig; // CRITICAL FIX: Removed! This 5MB JSON ruins the WebRTC DataChannel queue over TURN!
                     packet.tournament = state.tournament;
                     packet.standingsData = statsData;
                     // Cache the fastest round so we can send it on every sync without recalculating
