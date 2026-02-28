@@ -314,7 +314,18 @@
         function startClient(hostId) {
             if (hostId && !hostId.startsWith("IPBA-")) hostId = "IPBA-" + hostId;
 
-            const peer = new Peer();
+            const customIceConfig = {
+                config: {
+                    'iceServers': [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+                        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+                        { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+                    ]
+                }
+            };
+            const peer = new Peer(customIceConfig);
             peer.on('open', (myId) => {
                 const conn = peer.connect(hostId);
                 conn.on('open', () => {

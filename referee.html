@@ -686,7 +686,18 @@
             if (peer) peer.destroy();
 
             // Client creates its own random peer ID
-            peer = new Peer();
+            const customIceConfig = {
+                config: {
+                    'iceServers': [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+                        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+                        { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+                    ]
+                }
+            };
+            peer = new Peer(customIceConfig);
 
             peer.on('open', (myId) => {
                 const myIdEl = document.getElementById('my-id-display');
@@ -697,14 +708,24 @@
                 // Connection Timeout to help diagnose peer-unavailable
                 const connTimeout = setTimeout(() => {
                     if (!conn || !conn.open) {
-                        setStatus("Tempo scaduto. Controlla Match ID.", "var(--danger)");
+                        setStatus("Timeout. Match ID errato o rete bloccata.", "var(--danger)");
                         btnConnect.disabled = false;
                         btnConnect.innerText = "RIPROVA";
                     }
-                }, 10000);
+                }, 15000);
 
                 // Connect to the host using the provided ID
-                conn = peer.connect(idInput, { reliable: true });
+                conn = peer.connect(idInput);
+
+                conn.on('error', (err) => {
+                    setStatus("Errore Conn: " + err.type + " " + err.message, "var(--danger)");
+                });
+
+                if (conn.peerConnection) {
+                    conn.peerConnection.oniceconnectionstatechange = function () {
+                        setStatus("Stato ICE: " + conn.peerConnection.iceConnectionState, "var(--warning)");
+                    };
+                }
 
                 conn.on('open', () => {
                     clearTimeout(connTimeout);
