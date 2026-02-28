@@ -2260,7 +2260,12 @@
                 return nextMatch;
             }
 
+            let lastBroadcastTime = 0;
             function broadcastState(forceFullSync = false) {
+                const nowTotal = Date.now();
+                if (!forceFullSync && nowTotal - lastBroadcastTime < 100) return; // Throttle to 10Hz
+                lastBroadcastTime = nowTotal;
+
                 const teamLeftId = state.basesSwapped ? 'B' : 'A';
                 const teamRightId = state.basesSwapped ? 'A' : 'B';
 
