@@ -217,7 +217,19 @@
 
         // ---------------------------------------------------------
         // LOGICA CONNESSIONE ALLA REGIA PER AGGIORNARE IL TICKER E STATS
-        const peer = new Peer();
+        const peerConfig = {
+            config: {
+                'iceServers': [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'stun:stun3.l.google.com:19302' },
+                    { urls: 'stun:stun4.l.google.com:19302' },
+                    { urls: 'stun:stun.stunprotocol.org:3478' }
+                ]
+            }
+        };
+        const peer = new Peer(peerConfig);
         let conn = null;
         let cachedStandingsData = null; // Memorizza la classifica per evitare sfarfallii
         let cachedCurrentMatch = null;  // Memorizza le squadre attuali per i tick veloci che non includono tournament
