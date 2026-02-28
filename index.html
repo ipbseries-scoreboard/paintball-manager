@@ -2164,10 +2164,18 @@
                 peer.on('connection', (conn) => {
                     // Silenced: log("Nuova connessione da: " + conn.peer);
                     connections.push(conn);
+
                     // Send immediate state
-                    conn.on('open', () => {
+                    const sendInitialState = () => {
                         broadcastState(true); // Force full sync for new client
-                    });
+                    };
+
+                    if (conn.open) {
+                        sendInitialState();
+                    } else {
+                        conn.on('open', sendInitialState);
+                    }
+
                     conn.on('data', (data) => {
                         handleRemoteCommand(data);
                     });
