@@ -2292,30 +2292,9 @@
                 const teamLeftData = { ...state.teams[teamLeftId], totalPenalties: getTotalPenalties(state.teams[teamLeftId].name) };
                 const teamRightData = { ...state.teams[teamRightId], totalPenalties: getTotalPenalties(state.teams[teamRightId].name) };
 
-                // Get Logos explicitly for the packet
-                const getLogo = (name) => {
-                    if (!name || !state.clanConfig || state.clanConfig.length === 0) return "";
-                    // Flexible matching
-                    const cleanName = name.trim().toLowerCase().replace(/\s+/g, '');
-                    const c = state.clanConfig.find(cl => {
-                        const target = cl.name.trim().toLowerCase().replace(/\s+/g, '');
-                        return target === cleanName || target.includes(cleanName) || cleanName.includes(target);
-                    });
-                    if (c && c.logoUrl) {
-                        return c.logoUrl;
-                    }
-                    return "";
-                };
-
-                // Attach active logos if name changed, periodic, or full sync
-                if (forceLogo || fullSync) {
-                    teamLeftData.logoUrl = getLogo(teamLeftData.name);
-                    teamRightData.logoUrl = getLogo(teamRightData.name);
-
-                    if (fullSync) {
-                        console.log(`[SYNC] Full Sync (v1.8.1). ClanConfig size: ${state.clanConfig.length}. Logos found: Left=${!!teamLeftData.logoUrl}, Right=${!!teamRightData.logoUrl}`);
-                    }
-                }
+                // Get Logos explicitly for the packet (Only used locally now, DO NOT SEND massive base64 over WebRTC!)
+                // Local pages like board.html read clanConfig from localStorage anyway.
+                // Sending 5MB base64 images every 5 seconds over TURN completely destroys the connection.
 
                 const nm = getNextMatch();
                 let nextMatchInfo = null;
