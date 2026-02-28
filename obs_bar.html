@@ -142,28 +142,37 @@
             text-align: center;
         }
 
+        /* Logo Wrapper for Penalty Label */
+        .logo-wrapper {
+            position: relative;
+            order: -1;
+            display: flex;
+            justify-content: center;
+            align-self: flex-start;
+        }
+
+        .team-left .logo-wrapper {
+            margin-right: 20px;
+        }
+
+        .team-right .logo-wrapper {
+            margin-left: 20px;
+        }
+
         /* Penalty Label Positioning */
         .penalty-label {
             position: absolute;
-            top: 75px;
-            /* Just below the bar */
-            font-size: 32px;
+            top: 85px;
+            /* Under the logo */
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 24px;
             font-weight: bold;
             text-transform: uppercase;
             letter-spacing: 2px;
             display: none;
             z-index: 5;
             white-space: nowrap;
-        }
-
-        .team-left .penalty-label {
-            right: 15px;
-            /* Align near the score/timer */
-        }
-
-        .team-right .penalty-label {
-            left: 15px;
-            /* Align near the score/timer */
         }
 
         /* Status Colors */
@@ -218,18 +227,6 @@
             position: relative;
             align-self: flex-start;
             /* Align to top */
-        }
-
-        /* Adjust margins for logos to center them vertically relative to bar */
-        .team-left .team-logo {
-            margin-right: 20px;
-            order: -1;
-        }
-
-        .team-right .team-logo {
-            margin-left: 20px;
-            order: -1;
-            /* No extra margin top needed if align-self works */
         }
 
         /* SCORE POP ANIMATION */
@@ -388,11 +385,13 @@
     <div id="score-bar">
         <!-- TEAM A (LEFT) -->
         <div class="team-container team-left">
-            <img id="logo-a" class="team-logo" src="" alt="">
+            <div class="logo-wrapper">
+                <img id="logo-a" class="team-logo" src="" alt="">
+                <div id="penalty-a" class="penalty-label">MINOR</div>
+            </div>
             <div id="name-a" class="team-name">TEAM A</div>
             <div id="score-a" class="team-score">0</div>
             <div id="tech-a" class="tech-indicator"><span class="checkmark">✓</span></div>
-            <div id="penalty-a" class="penalty-label">MINOR PENALTY</div>
         </div>
 
         <!-- TIMER (CENTER) -->
@@ -402,11 +401,13 @@
 
         <!-- TEAM B (RIGHT) -->
         <div class="team-container team-right">
-            <img id="logo-b" class="team-logo" src="" alt="">
+            <div class="logo-wrapper">
+                <img id="logo-b" class="team-logo" src="" alt="">
+                <div id="penalty-b" class="penalty-label">MINOR</div>
+            </div>
             <div id="name-b" class="team-name">TEAM B</div>
             <div id="score-b" class="team-score">0</div>
             <div id="tech-b" class="tech-indicator"><span class="checkmark">✓</span></div>
-            <div id="penalty-b" class="penalty-label">MINOR PENALTY</div>
         </div>
 
         <div id="conn-status"></div>
@@ -827,14 +828,14 @@
                 if (type === 'MINOR') {
                     el.classList.add('flash-minor');
                     if (penEl) {
-                        penEl.innerText = "MINOR PENALTY";
+                        penEl.innerText = "MINOR";
                         penEl.classList.add('flash-minor');
                         penEl.style.display = 'block';
                     }
                 } else {
                     el.classList.add('flash-major');
                     if (penEl) {
-                        penEl.innerText = "MAJOR PENALTY";
+                        penEl.innerText = "MAJOR";
                         penEl.classList.add('flash-major');
                         penEl.style.display = 'block';
                     }
