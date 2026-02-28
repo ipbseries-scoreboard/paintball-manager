@@ -1437,7 +1437,6 @@
                 <div class="penalty-label" id="pen-label-left"></div>
                 <div class="logo-wrapper">
                     <div id="smoke-left" class="smoke-emitter"></div>
-                    <img id="logo-left" class="team-logo-display" src="" alt="Logo Left">
                 </div>
             </div>
 
@@ -1491,7 +1490,6 @@
                 <div class="penalty-label" id="pen-label-right"></div>
                 <div class="logo-wrapper">
                     <div id="smoke-right" class="smoke-emitter"></div>
-                    <img id="logo-right" class="team-logo-display" src="" alt="Logo Right">
                 </div>
             </div>
         </div>
@@ -2251,9 +2249,6 @@
                 lPenActive.style.display = 'none';
             }
 
-            // Left Logo
-            updateLogo('left', d.teamLeft.name, d.teamLeft.logoUrl);
-
             // Right Team
             const rNameRaw = d.teamRight.name || "";
             const rNameTrunc = smartTruncate(rNameRaw, style.limit || 11);
@@ -2269,9 +2264,6 @@
                 void rScore.offsetWidth; // Trigger reflow
                 rScore.classList.add('score-pop');
             }
-
-            // Right Logo
-            updateLogo('right', d.teamRight.name, d.teamRight.logoUrl);
 
             // Tech Pause Right
             const rTech = document.getElementById('tech-right');
@@ -2427,52 +2419,6 @@
                     label.classList.add('pen-major');
                     name.classList.add('flash-major');
                 }
-            }
-        }
-
-        // Helper for team logos
-        function updateLogo(side, teamName, forceUrl) {
-            const imgEl = document.getElementById('logo-' + side);
-            if (!imgEl) return;
-
-            if (!teamName) {
-                imgEl.style.display = 'none';
-                return;
-            }
-
-            // 1. If we have a forceUrl (newly received), CACHE it
-            if (forceUrl) {
-                logoCache[teamName.trim().toLowerCase()] = forceUrl;
-            }
-
-            // 2. Try to get logo from Cache first, then clanConfig
-            let logoUrl = logoCache[teamName.trim().toLowerCase()];
-
-            if (!logoUrl) {
-                // Flexible matching in local clanConfig
-                const cleanTag = teamName.trim().toLowerCase().replace(/\s+/g, '');
-                const config = clanConfig.find(cl => {
-                    const target = cl.name.trim().toLowerCase().replace(/\s+/g, '');
-                    return target === cleanTag || target.includes(cleanTag) || cleanTag.includes(target);
-                });
-
-                if (config) {
-                    logoUrl = config.logoUrl;
-                    // Seed the cache
-                    if (logoUrl) logoCache[teamName.trim().toLowerCase()] = logoUrl;
-                }
-            }
-
-            if (logoUrl) {
-                if (imgEl.src !== logoUrl) {
-                    imgEl.src = logoUrl;
-                }
-                imgEl.style.display = 'block';
-
-                // Apply Mascot Animation
-                applyMascotStyle(side, teamName);
-            } else {
-                imgEl.style.display = 'none';
             }
         }
 

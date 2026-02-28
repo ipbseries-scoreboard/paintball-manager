@@ -1679,8 +1679,34 @@
                     style="display: none; background: #c2410c; color: white; border-color: #ea580c; animation: pulse 2s infinite;"
                     onclick="reopenPhaseModal()">🏁 OPZIONI FINE</button>
                 <button id="btn-settings" class="btn">⚙️ Setup</button>
+                <button class="btn btn-warning" onclick="syncLogosToClients()"
+                    style="font-weight:bold; letter-spacing:1px; box-shadow:0 0 10px rgba(234,179,8,0.3);">🖼️ SYNC
+                    LOGHI AI DISPLAY</button>
                 <button id="btn-toggle-schedule" class="btn" onclick="toggleSchedule()">🗓️ Programma</button>
             </div>
+
+            <script>
+                window.syncLogosToClients = function () {
+                    const clans = window.state ? window.state.clanConfig : null;
+                    if (!clans || clans.length === 0) {
+                        alert("Nessun logo o squadra configurata nelle impostazioni. Puoi caricare i loghi nella sezione 'Impostazioni > Squadre e Loghi Streaming'.");
+                        return;
+                    }
+                    if (confirm("Inviare le immagini dei loghi a tutti i display (Ledwall, Tabellone)?\n\nAvviso: Siccome le immagini pesano molti Megabyte, il timer potrebbe incepparsi per qualche secondo durante il trasferimento su reti mobili.")) {
+                        try {
+                            const p = { type: 'CLAN_SYNC', clanConfig: clans };
+                            if (window.connections) {
+                                window.connections.forEach(c => {
+                                    if (c.open) c.send(p);
+                                });
+                            }
+                            alert("Loghi inviati con successo ai display collegati.");
+                        } catch (e) {
+                            alert("Errore invio loghi: " + e.message);
+                        }
+                    }
+                };
+            </script>
         </header>
 
         <div class="main-content">
@@ -2263,7 +2289,7 @@
             let lastBroadcastTime = 0;
             function broadcastState(forceFullSync = false) {
                 const nowTotal = Date.now();
-                if (!forceFullSync && nowTotal - lastBroadcastTime < 100) return; // Throttle to 10Hz
+                if (!forceFullSync && nowTotal - lastBroadcastTime < 200) return; // Throttle to 5Hz (resolves slight stutter on remote displays over strict internet relays)
                 lastBroadcastTime = nowTotal;
 
                 const teamLeftId = state.basesSwapped ? 'B' : 'A';
@@ -2343,7 +2369,28 @@
                 // Attach heavy items ONLY for full sync
                 if (fullSync) {
                     // packet.clanConfig = state.clanConfig; // CRITICAL FIX: Removed! This 5MB JSON ruins the WebRTC DataChannel queue over TURN!
-                    packet.tournament = state.tournament;
+
+                    // CRITICAL FIX 2: Create a lightweight tournament clone to prevent 1MB JSON WebRTC DataChannel queueing every 30s
+                    let lightTournament = null;
+                    if (state.tournament) {
+                        lightTournament = {
+                            active: state.tournament.active,
+                            currentIndex: state.tournament.currentIndex,
+                            delay: state.tournament.delay,
+                            layoutUrl: state.tournament.layoutUrl,
+                            settings: state.tournament.settings,
+                            matches: state.tournament.matches ? state.tournament.matches.map(m => ({
+                                time: m.time,
+                                teamA: m.teamA,
+                                teamB: m.teamB,
+                                phase: m.phase,
+                                field: m.field,
+                                savedState: m.savedState ? { finished: m.savedState.finished } : null
+                            })) : []
+                        };
+                    }
+
+                    packet.tournament = lightTournament || state.tournament;
                     packet.standingsData = statsData;
                     // Cache the fastest round so we can send it on every sync without recalculating
                     state.lastFastestRound = statsData ? (statsData.records[0] || null) : null;
@@ -2354,13 +2401,21 @@
                 packet.fastestRound = state.lastFastestRound || null;
 
                 try {
-                    connections.forEach(conn => {
+                    // HUGE PERFORMANCE FIX: PeerJS will JSON.stringify the packet for EVERY single connection in conn.send()! 
+                    // This causes massive CPU locks and SCTP queueing on the Host when 4 clients are connected at 5Hz. 
+                    // By stringifying it ONCE here, we bypass PeerJS's internal slow stringification.
+                    const payloadString = JSON.stringify(packet);
+
+                    let delayMs = 0;
+                    connections.forEach((conn, index) => {
                         if (conn.open) {
-                            try {
-                                conn.send(packet);
-                            } catch (err) {
-                                console.error("PeerJS Send Error:", err);
-                            }
+                            setTimeout(() => {
+                                try {
+                                    if (conn.open) conn.send(payloadString);
+                                } catch (err) {
+                                    console.error("PeerJS Send Error:", err);
+                                }
+                            }, index * 25); // Scatter sends artificially to not clog WebRTC channel multiplexing
                         }
                     });
                 } catch (e) {
