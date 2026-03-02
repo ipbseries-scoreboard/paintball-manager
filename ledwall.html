@@ -4,195 +4,190 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IPBA LED Wall Scoreboard</title>
-    <!-- PeerJS CDN -->
+    <title>LED Wall Display - IPBA</title>
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-    <!-- Google Fonts -->
-    <link
-        href="https://fonts.googleapis.com/css2?family=Oswald:wght@700&family=Orbitron:wght@700&family=Bebas+Neue&display=swap"
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@700&family=Inter:wght@900&display=swap"
         rel="stylesheet">
     <style>
         :root {
-            --bg-color: #000000;
-            --text-color: #ffffff;
-            --accent-color: #ffff00;
-            /* High visibility yellow */
-            --timer-color: #ffff00;
-            --team-a-color: #ffffff;
-            --team-b-color: #ffffff;
-            --font-main: 'Oswald', sans-serif;
-            --font-timer: 'Oswald', sans-serif;
-            --font-narrow: 'Bebas Neue', sans-serif;
+            --bg-color: #000;
+            --text-color: #fff;
+            --accent-color: #22d3ee;
+            --danger-color: #ef4444;
+            --success-color: #22c55e;
+            --team-a-color: #3b82f6;
+            --team-b-color: #ef4444;
         }
 
         body {
             margin: 0;
             padding: 0;
-            overflow: hidden;
             background-color: var(--bg-color);
             color: var(--text-color);
-            font-family: var(--font-main);
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            width: 1920px;
+            height: 1080px;
         }
 
-        /* SCALER CONTAINER (SQUARE 1:1) */
         #scaler {
-            width: 1080px;
-            height: 1080px;
-            position: absolute;
-            transform-origin: center center;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20px;
-            box-sizing: border-box;
+            transform-origin: top left;
         }
 
         #connect-ui {
-            background: #1e293b;
-            padding: 40px;
-            border-radius: 12px;
-            border: 4px solid var(--accent-color);
+            position: fixed;
+            inset: 0;
+            background: #000;
+            z-index: 9999;
             display: flex;
             flex-direction: column;
+            justify-content: center;
+            align-items: center;
             gap: 20px;
-            z-index: 1000;
-            position: fixed;
-            width: 80%;
-            max-width: 600px;
         }
 
-        input {
+        #connect-ui input {
             padding: 15px;
-            font-size: 1.5rem;
+            font-size: 24px;
             border-radius: 8px;
-            border: none;
-            background: #000;
+            border: 2px solid #333;
+            background: #111;
             color: white;
             text-align: center;
         }
 
-        button {
-            padding: 15px 30px;
-            font-size: 1.5rem;
+        #connect-ui button {
+            padding: 15px 40px;
+            font-size: 24px;
+            border-radius: 8px;
+            border: none;
             background: var(--accent-color);
             color: black;
-            border: none;
-            border-radius: 8px;
-            font-weight: bold;
+            font-weight: 900;
             cursor: pointer;
         }
 
-        /* LED WALL LAYOUT */
         #scoreboard {
-            display: none;
             width: 100%;
             height: 100%;
+            display: none;
             flex-direction: column;
-            justify-content: space-around;
+            justify-content: center;
             align-items: center;
+            position: relative;
         }
 
-        /* TOP SECTION: TIMER */
-        .timer-section {
+        /* --- LED WALL LAYOUT --- */
+        .main-container {
+            display: grid;
+            grid-template-columns: 1fr 400px 1fr;
             width: 100%;
-            text-align: center;
-            flex: 0 0 auto;
-            margin-top: 20px;
+            height: 100%;
+            padding: 40px;
+            box-sizing: border-box;
+            gap: 20px;
         }
 
-        #timer {
-            font-family: var(--font-timer);
-            font-size: 450px;
-            line-height: 0.9;
-            color: var(--timer-color);
-            text-shadow: 0 0 30px rgba(255, 255, 0, 0.3);
-            font-variant-numeric: tabular-nums;
-            margin-top: -20px;
-        }
-
-        /* MIDDLE SECTION: TEAMS & SCORES */
-        .match-section {
-            width: 100%;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex: 1;
-            padding: 0 10px;
-        }
-
-        .team-box {
+        .team-panel {
             display: flex;
             flex-direction: column;
+            justify-content: center;
             align-items: center;
-            width: 48%;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 30px;
+            border-bottom: 20px solid #ccc;
+        }
+
+        #panel-left {
+            border-color: var(--team-a-color);
+        }
+
+        #panel-right {
+            border-color: var(--team-b-color);
         }
 
         .team-name {
-            font-family: var(--font-narrow);
             font-size: 100px;
+            font-weight: 900;
             text-transform: uppercase;
-            white-space: nowrap;
-            overflow: hidden;
+            text-align: center;
+            margin-bottom: 20px;
+            line-height: 1;
+        }
+
+        .team-score {
+            font-size: 450px;
+            font-weight: 900;
+            font-family: 'Oswald', sans-serif;
+            line-height: 0.8;
+        }
+
+        .center-panel {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 40px;
+        }
+
+        .timer-box {
+            background: #111;
+            padding: 40px 20px;
+            border-radius: 20px;
+            border: 5px solid #333;
             width: 100%;
             text-align: center;
-            margin-bottom: -10px;
-            letter-spacing: 2px;
         }
 
-        .score {
-            font-size: 550px;
+        #timer {
+            font-size: 150px;
             font-weight: 900;
-            line-height: 0.75;
+            font-family: 'Oswald', sans-serif;
+            color: #fbbf24;
+            line-height: 1;
         }
 
-        #panel-left .team-name {
-            color: var(--team-a-color);
-        }
-
-        #panel-left .score {
-            color: var(--team-a-color);
-        }
-
-        #panel-right .team-name {
-            color: var(--team-b-color);
-        }
-
-        #panel-right .score {
-            color: var(--team-b-color);
-        }
-
-        .penalty-text {
-            font-family: var(--font-main);
-            font-size: 60px;
-            font-weight: bold;
-            margin-top: 10px;
+        .match-info {
+            font-size: 40px;
+            font-weight: 900;
+            color: var(--accent-color);
             text-transform: uppercase;
-            animation: flash 0.5s infinite alternate;
-            display: none;
+            letter-spacing: 5px;
         }
 
-        .major-pen {
-            color: #ef4444;
-            text-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+        /* SYNC OVERLAY */
+        #sync-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Oswald', sans-serif;
         }
 
-        .minor-pen {
-            color: #ffff00;
-            text-shadow: 0 0 20px rgba(255, 255, 0, 0.6);
+        .loader {
+            border: 8px solid #333;
+            border-top: 8px solid var(--accent-color);
+            border-radius: 50%;
+            width: 80px;
+            height: 80px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
         }
 
-        @keyframes flash {
-            from {
-                opacity: 1;
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
             }
 
-            to {
-                opacity: 0.3;
+            100% {
+                transform: rotate(360deg);
             }
         }
     </style>
@@ -200,119 +195,62 @@
 
 <body>
     <div id="connect-ui">
-        <h2 style="color: var(--accent-color); margin: 0; text-align: center; font-size: 2.5rem;">LED WALL VIEWER (1:1)
-        </h2>
-        <p style="text-align: center; color: #94a3b8; font-size: 1.2rem;">Inserisci il Match ID dalla finestra di Regia
-            (index.html)</p>
-        <input type="text" id="match-id" placeholder="es. 1234" />
-        <button id="connect-btn">CONNETTI</button>
+        <h2 style="color: var(--accent-color); margin: 0;">LED WALL VIEW</h2>
+        <input type="text" id="match-id" placeholder="Match ID">
+        <button id="connect-btn"
+            onclick="const id = document.getElementById('match-id').value; if(id) startClient(id);">CONNETTI</button>
     </div>
 
     <div id="scaler">
         <div id="scoreboard">
-            <!-- TIMER TOP -->
-            <div class="timer-section">
-                <div id="timer">10:00</div>
+            <div id="sync-overlay">
+                <div class="loader"></div>
+                <h2 style="color: var(--accent-color);">SINCRONIZZAZIONE...</h2>
             </div>
 
-            <!-- TEAMS MIDDLE -->
-            <div class="match-section">
-                <div class="team-box" id="panel-left">
-                    <div class="team-name" id="name-left">TEAM A</div>
-                    <div class="score" id="score-left">0</div>
-                    <div class="penalty-text" id="penalty-left">MINOR PENALTY</div>
+            <div class="main-container">
+                <div class="team-panel" id="panel-left">
+                    <div class="team-name" id="name-left">SQUADRA A</div>
+                    <div class="team-score" id="score-left">0</div>
                 </div>
 
-                <div class="team-box" id="panel-right">
-                    <div class="team-name" id="name-right">TEAM B</div>
-                    <div class="score" id="score-right">0</div>
-                    <div class="penalty-text" id="penalty-right">MINOR PENALTY</div>
+                <div class="center-panel">
+                    <div class="match-info" id="match-phase">GIRONI</div>
+                    <div class="timer-box">
+                        <div id="timer">10:00</div>
+                    </div>
+                    <div class="match-info" id="game-state">PRONTO</div>
+                </div>
+
+                <div class="team-panel" id="panel-right">
+                    <div class="team-name" id="name-right">SQUADRA B</div>
+                    <div class="team-score" id="score-right">0</div>
                 </div>
             </div>
-
         </div>
-    </div>
     </div>
 
     <script>
-        const btn = document.getElementById('connect-btn');
-        const input = document.getElementById('match-id');
         const ui = document.getElementById('connect-ui');
         const sb = document.getElementById('scoreboard');
         const scaler = document.getElementById('scaler');
+        const input = document.getElementById('match-id');
+        const btn = document.getElementById('connect-btn');
+        let clientConn = null;
 
-        function cleanTeamName(name) {
-            if (!name) return "";
-            let cleaned = name.trim();
-
-            // Pattern: "PHASE PREFIX - Team Name" 
-            if (cleaned.includes(" - ")) {
-                const parts = cleaned.split(" - ");
-                const phaseRegex = /QUARTI|SEMIFINALI|FINALE|FINALI|OTTAVI|ROUND|PLAYOFF|POSTO|QUALIFICAZIONI/i;
-                if (phaseRegex.test(parts[0])) {
-                    cleaned = parts[1].trim();
-                }
-            }
-
-            return cleaned.replace(/^SQUADRA\s+[A-Z]$/i, "")
-                .replace(/^TEAM\s+[A-Z]$/i, "")
-                .trim() || name;
-        }
-
-        function smartTruncate(str, limit) {
-            if (!str) return "";
-            str = str.trim().toUpperCase();
-            if (str.length <= limit) return str;
-
-            const words = str.split(/\s+/).filter(w => w.length > 0);
-
-            if (words.length >= 3) {
-                // First 4 letters + 2nd word initial + Last word
-                const w1 = words[0].substring(0, 4);
-                const w2Initial = words[1].substring(0, 1) + ".";
-                const lastWord = words[words.length - 1];
-
-                const prefix = w1 + " " + w2Initial + " ";
-                const remaining = limit - prefix.length;
-
-                return (prefix + (remaining > 0 ? lastWord.substring(0, remaining) : "")).trim();
-            } else if (words.length === 2) {
-                // First 4 letters + Last word
-                const w1 = words[0].substring(0, 4);
-                const lastWord = words[1];
-
-                const prefix = w1 + " ";
-                const remaining = limit - prefix.length;
-
-                return (prefix + (remaining > 0 ? lastWord.substring(0, remaining) : "")).trim();
-            } else {
-                // Single word
-                return str.substring(0, limit);
-            }
-        }
-
-        // SCALING (SQUARE 1:1)
         function scaleBoard() {
-            const targetWidth = 1080;
-            const targetHeight = 1080;
-            const winW = window.innerWidth;
-            const winH = window.innerHeight;
-            const scale = Math.min(winW / targetWidth, winH / targetHeight);
+            const scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
             scaler.style.transform = `scale(${scale})`;
         }
-
-        window.addEventListener('resize', scaleBoard);
+        window.onresize = scaleBoard;
         scaleBoard();
 
-        // PEERJS
-        btn.addEventListener('click', () => {
-            const id = input.value.trim();
-            if (!id) return;
-            startClient(id);
-        });
+        const lastId = localStorage.getItem('last_match_id');
+        if (lastId) input.value = lastId;
 
         function startClient(hostId) {
-            if (hostId && !hostId.startsWith("IPBA-")) hostId = "IPBA-" + hostId;
+            if (!hostId.startsWith("IPBA-")) hostId = "IPBA-" + hostId;
+            if (btn) btn.innerText = "CONNESSIONE...";
 
             const customIceConfig = {
                 config: {
@@ -327,60 +265,108 @@
                     ]
                 }
             };
+
             const peer = new Peer(customIceConfig);
-            peer.on('open', (myId) => {
+
+            peer.on('open', (id) => {
                 const conn = peer.connect(hostId);
+                clientConn = conn;
+
                 conn.on('open', () => {
-                    localStorage.setItem('last_match_id', hostId.replace('IPBA-', ''));
                     ui.style.display = 'none';
                     sb.style.display = 'flex';
-                    scaleBoard();
+                    localStorage.setItem('last_match_id', hostId.replace("IPBA-", ""));
                 });
 
                 conn.on('data', (data) => {
-                    updateUI(data);
+                    let packet = data;
+                    if (typeof data === 'string') {
+                        try { packet = JSON.parse(data); } catch (e) { return; }
+                    }
+                    updateBoardFromPacket(packet);
                 });
 
                 conn.on('close', () => {
-                    alert("Connessione persa!");
-                    location.reload();
+                    console.warn("Connection lost. Retrying...");
+                    setTimeout(() => startClient(hostId), 2000);
                 });
+
+                conn.on('error', (err) => {
+                    console.error("Conn Error:", err);
+                    setTimeout(() => startClient(hostId), 5000);
+                });
+            });
+
+            peer.on('disconnected', () => {
+                peer.reconnect();
+            });
+
+            peer.on('error', (err) => {
+                if (err.type === 'peer-unavailable') {
+                    setTimeout(() => startClient(hostId), 10000);
+                }
             });
         }
 
-        function updateUI(d) {
-            // Timer
-            let timerStr = d.timer || "00:00";
-            if (timerStr.includes('.')) {
-                timerStr = timerStr.split('.')[0];
+        const syncChannel = new BroadcastChannel('pm_sync');
+        syncChannel.onmessage = (event) => {
+            if (event.data && event.data.type === 'STATE_UPDATE') {
+                updateBoardFromPacket(event.data.payload);
             }
-            document.getElementById('timer').innerText = timerStr;
+        };
 
-            // Teams & Scores
+        // PUBLIC SYNC (Spectators)
+        setInterval(() => {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('cloud') === '1') {
+                fetch('./state.json?t=' + Date.now())
+                    .then(r => r.json())
+                    .then(packet => updateBoardFromPacket(packet))
+                    .catch(() => { });
+            } else if (!clientConn || !clientConn.open) {
+                const lastState = localStorage.getItem('pm_last_state');
+                if (lastState) {
+                    try {
+                        const packet = JSON.parse(lastState);
+                        updateBoardFromPacket(packet);
+                    } catch (e) { }
+                }
+            }
+        }, 1000);
+
+        function updateBoardFromPacket(d) {
+            const overlay = document.getElementById('sync-overlay');
+            if (overlay) overlay.style.display = 'none';
+
+            document.getElementById('timer').innerText = d.timer || "00:00";
+            document.getElementById('match-phase').innerText = d.phase || "";
+            document.getElementById('game-state').innerText = d.statusText || "PRONTO";
+
             const styleLimit = (d.styleConfig && d.styleConfig.limit) || 11;
-
-            const lNameRaw = d.teamLeft.name || "TEAM A";
-            document.getElementById('name-left').innerText = smartTruncate(cleanTeamName(lNameRaw), styleLimit);
+            document.getElementById('name-left').innerText = smartTruncate(cleanTeamName(d.teamLeft.name), styleLimit);
             document.getElementById('score-left').innerText = d.teamLeft.score;
-
-            const rNameRaw = d.teamRight.name || "TEAM B";
-            document.getElementById('name-right').innerText = smartTruncate(cleanTeamName(rNameRaw), styleLimit);
+            document.getElementById('name-right').innerText = smartTruncate(cleanTeamName(d.teamRight.name), styleLimit);
             document.getElementById('score-right').innerText = d.teamRight.score;
-
-
-
-
-            // Auto Color Sync
-            // Removed dynamic team color sync for scores/names as per user request (kept white)
-            // if (d.teamLeft.color) document.documentElement.style.setProperty('--team-a-color', d.teamLeft.color);
-            // if (d.teamRight.color) document.documentElement.style.setProperty('--team-b-color', d.teamRight.color);
         }
 
+        function cleanTeamName(name) {
+            if (!name) return "";
+            return name.replace(/QUARTI|SEMIFINALE|FINALE|GIRONI|MATCH/i, "").trim();
+        }
 
-        // Auto-connect if last ID exists
-        const lastId = localStorage.getItem('last_match_id');
-        if (lastId) input.value = lastId;
+        // Auto-connect if last ID exists or in URL
+        window.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const id = params.get('id');
+            const lastId = localStorage.getItem('last_match_id');
 
+            if (id) {
+                input.value = id;
+                startClient(id);
+            } else if (lastId) {
+                input.value = lastId;
+            }
+        });
     </script>
 </body>
 

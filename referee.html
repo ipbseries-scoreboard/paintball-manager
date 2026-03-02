@@ -628,6 +628,15 @@
     </div>
 
     <script>
+        const syncChannel = new BroadcastChannel('pm_sync');
+
+        // NEW: Zero-latency Local sync (Listen for state updates)
+        syncChannel.onmessage = (event) => {
+            if (event.data && event.data.type === 'STATE_UPDATE') {
+                updateUI(event.data.payload);
+            }
+        };
+
         let peer = null;
         let conn = null;
         let currentMode = 'IDLE';
@@ -740,31 +749,33 @@
                 });
 
                 conn.on('data', (data) => {
-                    updateUI(data);
+                    let packet = data;
+                    if (typeof data === 'string') {
+                        try { packet = JSON.parse(data); } catch (e) { return; }
+                    }
+                    updateUI(packet);
                 });
 
                 conn.on('close', () => {
-                    setStatus("Connessione persa", "var(--danger)");
+                    setStatus("Connessione persa. Riconnessione...", "var(--danger)");
                     document.getElementById('connection-status').classList.remove('online');
-                    document.getElementById('connect-ui').style.display = 'flex';
-                    btnConnect.disabled = false;
-                    btnConnect.innerText = "RICONNETTI";
+                    setTimeout(() => connectToHost(), 2000);
                 });
 
                 conn.on('error', (err) => {
-                    clearTimeout(connTimeout);
-                    setStatus("Errore Connessione: " + err, "var(--danger)");
-                    btnConnect.disabled = false;
-                    btnConnect.innerText = "RIPROVA";
+                    setStatus("Errore Conn: " + err, "var(--danger)");
+                    setTimeout(() => connectToHost(), 5000);
                 });
+            });
+
+            peer.on('disconnected', () => {
+                peer.reconnect();
             });
 
             peer.on('error', (err) => {
                 setStatus("Errore Peer: " + err.type, "var(--danger)");
-                btnConnect.disabled = false;
-                btnConnect.innerText = "RIPROVA";
                 if (err.type === 'peer-unavailable') {
-                    setStatus("Match non trovato (Verifica ID)", "var(--danger)");
+                    setTimeout(() => connectToHost(), 5000);
                 }
             });
         }
@@ -979,26 +990,18 @@
             }
         }
 
-        function openSettings() {
-            document.getElementById('settings-modal').style.display = 'flex';
-        }
-
-        function saveSettings() {
-            const pointInter = parseInt(document.getElementById('point-interval-duration').value) || 30;
-            const slotInter = parseInt(document.getElementById('slot-interval-duration').value) || 120;
-
-            sendCommand('UPDATE_SETTINGS', null, null, null, {
-                pointIntervalDuration: pointInter,
-                slotIntervalDuration: slotInter
-            });
-
-            document.getElementById('settings-modal').style.display = 'none';
-        }
-
         function sendCommand(type, side, level, decision, extraSettings) {
+            const payload = { type: type, side: side, level: level, decision: decision };
+            if (extraSettings) payload.settings = extraSettings;
+
+            // Send via BroadcastChannel for local zero-latency
+            syncChannel.postMessage({ type: 'REMOTE_COMMAND', payload: payload });
+
             if (!conn || !conn.open) {
                 console.error("COMMAND FAILED: Connection not open.");
                 document.getElementById('connection-status').classList.remove('online');
+                // Optional: alert only if it's a critical action like Start/Point
+                if (type === 'START' || type === 'POINT') alert("Comando non inviato: regia disconnessa!");
                 return;
             }
 
@@ -1008,12 +1011,11 @@
                 triggerFlash(side, color);
             }
 
-            // Rapid visual feedback
-            const payload = { type, side, level, decision };
-            if (extraSettings) payload.settings = extraSettings;
-
             console.log("SENDING COMMAND:", payload);
             conn.send(payload);
+
+            // Vibrate on success
+            if (type !== 'TIMER_SYNC') triggerVibration('point');
         }
 
         function triggerFlash(side, color) {

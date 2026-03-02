@@ -1470,6 +1470,14 @@
         let currentData = null;
         let oldData = null;
         let clanConfig = []; // [{ name, logoUrl, rosterUrl }]
+        const syncChannel = new BroadcastChannel('pm_sync');
+
+        // NEW: Zero-latency Local sync
+        syncChannel.onmessage = (event) => {
+            if (event.data && event.data.type === 'STATE_UPDATE') {
+                updateBoardFromPacket(event.data.payload);
+            }
+        };
 
         function cleanTeamName(name) {
             if (!name) return "";
@@ -1544,6 +1552,26 @@
                 if (currentData) updateBoard(currentData);
             }
         });
+
+        // PUBLIC SYNC (Spectators)
+        setInterval(() => {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('cloud') === '1') {
+                fetch('./state.json?t=' + Date.now())
+                    .then(r => r.json())
+                    .then(packet => updateBoardFromPacket(packet))
+                    .catch(() => { });
+            } else if (!clientConn || !clientConn.open) {
+                const lastState = localStorage.getItem('pm_last_state');
+                if (lastState) {
+                    try {
+                        const packet = JSON.parse(lastState);
+                        updateBoardFromPacket(packet);
+                    } catch (e) { }
+                }
+            }
+        }, 1000);
+
 
         const smokeIntensities = { left: 0, right: 0 };
         function initSmokeSystem() {
@@ -1644,51 +1672,75 @@
                     });
 
                     conn.on('data', (d) => {
-                        if (!hasLocalStyle && d.teamStyle) {
-                            try {
-                                styleConfig = {
-                                    fontSize: d.teamStyle.fontSize || 80,
-                                    fontFamily: d.teamStyle.fontFamily || "'Oswald', sans-serif",
-                                    bold: !!d.teamStyle.bold,
-                                    scaleX: d.teamStyle.scaleX || 1.0,
-                                    scaleY: d.teamStyle.scaleY || 2.1,
-                                    limit: d.teamStyle.limit || 11
-                                };
-                                applyStyleConfig();
-                            } catch (e) { console.error("Style Sync Error", e); }
+                        let packet = d;
+                        if (typeof d === 'string') {
+                            try { packet = JSON.parse(d); } catch (e) { return; }
                         }
-
-                        // Handle Full Sync vs Partial Sync
-                        if (d.type === 'FULL_SYNC' || d.clanConfig || d.tournament) {
-                            if (d.clanConfig) clanConfig = d.clanConfig;
-                            currentData = d;
-                        } else {
-                            // Partial Sync - Merge only volatile properties
-                            if (currentData) {
-                                Object.assign(currentData, d);
-                            } else {
-                                currentData = d;
-                            }
-                        }
-
-                        // Impact Trigger (Points)
-                        if (oldData && (d.teamLeft.score > oldData.teamLeft.score)) triggerMascotImpact('left');
-                        if (oldData && (d.teamRight.score > oldData.teamRight.score)) triggerMascotImpact('right');
-
-                        oldData = JSON.parse(JSON.stringify(d));
-                        updateBoard(d);
+                        updateBoardFromPacket(packet);
                     });
 
                     // Close handler
                     conn.on('close', () => {
-                        alert("Connessione chiusa dall'host");
-                        location.reload();
+                        console.warn("Connection closed. Retrying in 2s...");
+                        setTimeout(() => startClient(hostId), 2000);
                     });
+
+                    conn.on('error', (err) => {
+                        console.error("Connection Error:", err);
+                        setTimeout(() => startClient(hostId), 5000);
+                    });
+                });
+
+                peer.on('disconnected', () => {
+                    console.warn("Peer disconnected. Reconnecting...");
+                    peer.reconnect();
+                });
+
+                peer.on('error', (err) => {
+                    if (err.type === 'peer-unavailable') {
+                        setTimeout(() => startClient(hostId), 10000);
+                    }
                 });
             } catch (e) {
                 console.error("Critical Error starting client:", e);
                 alert("Errore Critico: " + e.message);
             }
+        }
+
+        function updateBoardFromPacket(d) {
+            if (!hasLocalStyle && d.teamStyle) {
+                try {
+                    styleConfig = {
+                        fontSize: d.teamStyle.fontSize || 80,
+                        fontFamily: d.teamStyle.fontFamily || "'Oswald', sans-serif",
+                        bold: !!d.teamStyle.bold,
+                        scaleX: d.teamStyle.scaleX || 1.0,
+                        scaleY: d.teamStyle.scaleY || 2.1,
+                        limit: d.teamStyle.limit || 11
+                    };
+                    applyStyleConfig();
+                } catch (e) { console.error("Style Sync Error", e); }
+            }
+
+            // Handle Full Sync vs Partial Sync
+            if (d.type === 'FULL_SYNC' || d.clanConfig || d.tournament) {
+                if (d.clanConfig) clanConfig = d.clanConfig;
+                currentData = d;
+            } else {
+                // Partial Sync - Merge only volatile properties
+                if (currentData) {
+                    Object.assign(currentData, d);
+                } else {
+                    currentData = d;
+                }
+            }
+
+            // Impact Trigger (Points)
+            if (oldData && (d.teamLeft.score > oldData.teamLeft.score)) triggerMascotImpact('left');
+            if (oldData && (d.teamRight.score > oldData.teamRight.score)) triggerMascotImpact('right');
+
+            oldData = JSON.parse(JSON.stringify(d));
+            updateBoard(d);
         }
 
         function updateBoard(d) {
@@ -2406,6 +2458,19 @@
             });
         }
 
+        // Load ID from URL or Storage
+        window.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const id = params.get('id');
+            const lastId = localStorage.getItem('last_match_id');
+
+            if (id) {
+                input.value = id;
+                startClient(id);
+            } else if (lastId) {
+                input.value = lastId;
+            }
+        });
     </script>
 </body>
 

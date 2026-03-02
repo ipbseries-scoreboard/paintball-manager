@@ -1635,10 +1635,42 @@
         // Load Stored Clans
         let clanConfig = [];
         let logoCache = {}; // Cache for logos: { "Team Name": "data:image..." }
+        const syncChannel = new BroadcastChannel('pm_sync');
+
+        // NEW: Zero-latency Local sync
+        syncChannel.onmessage = (event) => {
+            if (event.data && event.data.type === 'STATE_UPDATE') {
+                updateBoardFromPacket(event.data.payload);
+            }
+        };
+
         const storedClans = localStorage.getItem('pm_stream_clans');
         if (storedClans) {
             try { clanConfig = JSON.parse(storedClans); } catch (e) { clanConfig = []; }
         }
+
+        // PUBLIC SYNC (Spectators)
+        setInterval(() => {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('cloud') === '1') {
+                fetch('./state.json?t=' + Date.now())
+                    .then(r => r.json())
+                    .then(packet => updateBoardFromPacket(packet))
+                    .catch(() => { });
+            } else if (!clientConn || !clientConn.open) {
+                const lastState = localStorage.getItem('pm_last_state');
+                if (lastState) {
+                    try {
+                        const packet = JSON.parse(lastState);
+                        updateBoardFromPacket(packet);
+                    } catch (e) { }
+                }
+            }
+        }, 1000);
+
+        // Removed old interval block
+        /*
+        */
 
         // Load Mascot Animations
         let mascotAnims = {};
@@ -1790,40 +1822,37 @@
                     conn.on('data', (data) => {
                         if (!data) return;
 
-                        // Handle Full Sync vs Partial Sync
-                        if (data.type === 'FULL_SYNC' || data.clanConfig || data.tournament) {
-                            if (data.clanConfig) clanConfig = data.clanConfig;
-                            // Update currentData with the full payload
-                            currentData = data;
-                        } else {
-                            // Partial Sync - Merge only volatile properties
-                            // We use currentData as base and update only what's in the packet
-                            if (currentData) {
-                                Object.assign(currentData, data);
-                            } else {
-                                currentData = data; // Fallback for first packet
-                            }
+                        // Handle pre-stringified payload
+                        let packet = data;
+                        if (typeof data === 'string') {
+                            try { packet = JSON.parse(data); } catch (e) { return; }
                         }
 
-                        // Impact Trigger (Points)
-                        if (oldData && (currentData.teamLeft.score > oldData.teamLeft.score)) triggerMascotImpact('left');
-                        if (oldData && (currentData.teamRight.score > oldData.teamRight.score)) triggerMascotImpact('right');
-
-                        oldData = JSON.parse(JSON.stringify(currentData));
-                        updateBoard(currentData);
+                        updateBoardFromPacket(packet);
                     });
 
                     conn.on('close', () => {
-                        alert("Connessione persa!");
-                        location.reload();
+                        console.warn("Connection closed. Retrying in 2s...");
+                        setTimeout(() => startClient(hostId), 2000);
                     });
 
                     conn.on('error', (err) => {
                         console.error("Connection Error:", err);
-                        alert("Errore di connessione: " + err);
-                        ui.style.display = 'flex';
-                        board.style.display = 'none';
+                        // Do not alert for spectators, just retry
+                        setTimeout(() => startClient(hostId), 5000);
                     });
+                });
+
+                peer.on('disconnected', () => {
+                    console.warn("Peer disconnected from server. Reconnecting...");
+                    peer.reconnect();
+                });
+
+                peer.on('error', (err) => {
+                    if (err.type === 'peer-unavailable') {
+                        // Keep trying every 10s if host isn't online yet
+                        setTimeout(() => startClient(hostId), 10000);
+                    }
                 });
             } catch (e) {
                 console.error("Critical Error starting client:", e);
@@ -1831,7 +1860,31 @@
             }
         }
 
+        let oldData = null;
         let currentData = null;
+
+        function updateBoardFromPacket(data) {
+            if (!data) return;
+
+            // Handle Full Sync vs Partial Sync
+            if (data.type === 'FULL_SYNC' || data.clanConfig || data.tournament) {
+                if (data.clanConfig) clanConfig = data.clanConfig;
+                currentData = data;
+            } else {
+                if (currentData) {
+                    Object.assign(currentData, data);
+                } else {
+                    currentData = data;
+                }
+            }
+
+            // Impact Trigger (Points)
+            if (oldData && (currentData.teamLeft.score > oldData.teamLeft.score)) triggerMascotImpact('left');
+            if (oldData && (currentData.teamRight.score > oldData.teamRight.score)) triggerMascotImpact('right');
+
+            oldData = JSON.parse(JSON.stringify(currentData));
+            updateBoard(currentData);
+        }
 
         function updateBoard(d) {
             console.log("DEBUG: Received board update data:", d);
