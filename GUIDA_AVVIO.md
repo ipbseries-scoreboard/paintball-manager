@@ -11,8 +11,8 @@ Segui questi passaggi in ordine per preparare il sistema prima di un torneo:
 
 *Se vuoi che il punteggio sia visibile su GitHub Pages per gli spettatori da casa:*
 
-- [ ] Apri il terminale e digita: `python cloud_sync.py`.
-- [ ] Lascia il terminale aperto (minimizzato) per tutta la durata del torneo.
+- [ ] Fai doppio clic sul file **`AVVIA_CLOUD_SYNC.bat`**.
+- [ ] Lascia la finestra nera aperta (minimizzata) per tutta la durata del torneo.
 
 ### 3. Avvio della Regia (Manager)
 
