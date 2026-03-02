@@ -2351,10 +2351,12 @@
                 const nm = getNextMatch();
                 let nextMatchInfo = null;
                 if (nm) {
+                    const nextSwap = nm.savedState ? nm.savedState.basesSwappedNext : false;
                     nextMatchInfo = {
-                        teamA: nm.teamA, teamB: nm.teamB,
-                        scoreA: nm.savedState ? nm.savedState.scoreA : 0,
-                        scoreB: nm.savedState ? nm.savedState.scoreB : 0,
+                        teamA: nextSwap ? nm.teamB : nm.teamA,
+                        teamB: nextSwap ? nm.teamA : nm.teamB,
+                        scoreA: nm.savedState ? (nextSwap ? nm.savedState.scoreB : nm.savedState.scoreA) : 0,
+                        scoreB: nm.savedState ? (nextSwap ? nm.savedState.scoreA : nm.savedState.scoreB) : 0,
                         isStarted: !!nm.savedState,
                         time: nm.time,
                         timer: (nm.savedState && nm.savedState.timer !== undefined) ? formatTimeSeconds(nm.savedState.timer) : null
