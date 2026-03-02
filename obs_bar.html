@@ -610,6 +610,15 @@
         function handleData(data) {
             if (!data) return;
 
+            try {
+                if (typeof data === 'string') {
+                    data = JSON.parse(data);
+                }
+            } catch (e) {
+                console.error("Error parsing data:", e);
+                return;
+            }
+
             // Debug Diagnostics
             const now = new Date().toLocaleTimeString();
             updateDiag('last-sync', now);

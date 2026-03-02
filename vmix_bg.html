@@ -265,6 +265,15 @@
         function handleData(data) {
             if (!data) return;
 
+            try {
+                if (typeof data === 'string') {
+                    data = JSON.parse(data);
+                }
+            } catch (e) {
+                console.error("Error parsing data:", e);
+                return;
+            }
+
             // Aggiorna le memorie cache se riceviamo un pacchetto completo
             if (data.standingsData) {
                 cachedStandingsData = data.standingsData;
