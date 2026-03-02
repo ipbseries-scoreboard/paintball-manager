@@ -594,35 +594,6 @@
             return parseInt(p[0]) * 60 + parseInt(p[1]);
         }
 
-        const syncChannel = new BroadcastChannel('pm_sync');
-
-        // NEW: Zero-latency Local sync
-        syncChannel.onmessage = (event) => {
-            if (event.data && event.data.type === 'STATE_UPDATE') {
-                updateBoardFromPacket(event.data.payload);
-            }
-        };
-
-        // PUBLIC SYNC (Spectators)
-        setInterval(() => {
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('cloud') === '1') {
-                fetch('./state.json?t=' + Date.now())
-                    .then(r => r.json())
-                    .then(packet => updateBoardFromPacket(packet))
-                    .catch(() => { });
-            } else if (!clientConn || !clientConn.open) {
-                const lastState = localStorage.getItem('pm_last_state');
-                if (lastState) {
-                    try {
-                        const packet = JSON.parse(lastState);
-                        updateBoardFromPacket(packet);
-                    } catch (e) { }
-                }
-            }
-        }, 1000);
-
-
         function cleanTeamName(name) {
             if (!name) return "";
             // Remove prefixes like "Quarti di finale E - ", "Semifinale - ", etc.
