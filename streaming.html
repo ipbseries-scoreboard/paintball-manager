@@ -1852,7 +1852,7 @@
             // Layout URL
             if (d.layoutUrl) {
                 const iframe = document.getElementById('layout-iframe');
-                if (iframe.src !== d.layoutUrl) iframe.src = d.layoutUrl;
+                if (iframe && iframe.src !== d.layoutUrl) iframe.src = d.layoutUrl;
             }
 
             // Overlays update if open
