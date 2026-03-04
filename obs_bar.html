@@ -644,7 +644,9 @@
             }
 
             // Sync Main State: Unione intelligente
-            if (data.type === 'FULL_SYNC' || data.clanConfig) {
+            if (!currentData) {
+                currentData = data;
+            } else if (data.type === 'FULL_SYNC' || data.clanConfig) {
                 Object.assign(currentData, data);
             } else {
                 // Pacchetto parziale (tick del timer)
