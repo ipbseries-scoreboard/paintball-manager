@@ -455,6 +455,47 @@
     </div>
 
     <script>
+        // --- GitHub Logo Fetcher ---
+        let githubFilesList = [];
+        let githubFilesFetched = false;
+
+        async function fetchGithubFiles() {
+            if (githubFilesFetched) return;
+            try {
+                // Fetch tree from GitHub API to get list of files
+                const response = await fetch('https://api.github.com/repos/ipbseries-scoreboard/paintball-manager/contents/NO%20SFONDO');
+                if (response.ok) {
+                    const data = await response.json();
+                    githubFilesList = data.map(file => file.name);
+                    githubFilesFetched = true;
+                    console.log("Fetched GitHub logo list:", githubFilesList.length, "files");
+                }
+            } catch (e) {
+                console.error("Failed to fetch GitHub files list", e);
+            }
+        }
+
+        // Initiate fetch early
+        fetchGithubFiles();
+
+        function findFuzzyGithubLogo(teamName) {
+            if (!githubFilesFetched || !githubFilesList.length) return null;
+
+            const cleanTarget = teamName.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+            // 1. Exact match ignoring case/spaces
+            let match = githubFilesList.find(f => f.toLowerCase().replace(/[^a-z0-9.]/g, '') === cleanTarget + '.png');
+            if (match) return match;
+
+            // 2. Partial match (file name contains team name)
+            match = githubFilesList.find(f => {
+                const cleanFile = f.toLowerCase().replace(/[^a-z0-9.]/g, '').replace('.png', '');
+                return cleanFile.includes(cleanTarget) || cleanTarget.includes(cleanFile);
+            });
+
+            return match || null;
+        }
+
         const syncChannel = new BroadcastChannel('pm_sync');
         syncChannel.onmessage = (event) => {
             if (event.data && event.data.type === 'STATE_UPDATE') {
@@ -824,45 +865,62 @@
                 return;
             }
 
-            // 1. If we have a forceUrl (newly received), CACHE it
-            if (forceUrl) {
-                logoCache[teamName.trim().toLowerCase()] = forceUrl;
-                updateDiag('logo-' + side, 'RECEIVED (' + Math.round(forceUrl.length / 1024) + 'KB)');
+            const cleanName = teamName.trim();
+            let githubUrl = `https://raw.githubusercontent.com/ipbseries-scoreboard/paintball-manager/main/NO%20SFONDO/${encodeURIComponent(cleanName)}.png`;
+
+            // If we have the files list, try fuzzy matching first to get the EXACT filename
+            if (githubFilesFetched) {
+                const fuzzyMatchedFile = findFuzzyGithubLogo(cleanName);
+                if (fuzzyMatchedFile) {
+                    githubUrl = `https://raw.githubusercontent.com/ipbseries-scoreboard/paintball-manager/main/NO%20SFONDO/${encodeURIComponent(fuzzyMatchedFile)}`;
+                }
             }
 
-            // 2. Try to get logo from Cache first, then clanConfig
-            let logoUrl = logoCache[teamName.trim().toLowerCase()];
+            if (imgEl.getAttribute("data-team") !== cleanName) {
+                imgEl.setAttribute("data-team", cleanName);
 
-            if (!logoUrl) {
-                // Flexible matching in local clanConfig
-                const cleanTag = teamName.trim().toLowerCase().replace(/\s+/g, '');
-                const config = clanConfig.find(cl => {
-                    const target = cl.name.trim().toLowerCase().replace(/\s+/g, '');
-                    return target === cleanTag || target.includes(cleanTag) || cleanTag.includes(target);
-                });
+                // Configure fallback if GitHub image doesn't exist
+                imgEl.onerror = () => {
+                    imgEl.onerror = null; // Prevent infinite loops
+                    console.log("GitHub logo not found for", cleanName, "- falling back");
 
-                if (config) {
-                    logoUrl = config.logoUrl;
-                    // Seed the cache
-                    if (logoUrl) {
-                        logoCache[teamName.trim().toLowerCase()] = logoUrl;
-                        updateDiag('logo-' + side, 'FROM CONFIG');
+                    let fallbackUrl = null;
+                    if (forceUrl) {
+                        fallbackUrl = forceUrl;
+                    } else if (logoCache[cleanName.toLowerCase()]) {
+                        fallbackUrl = logoCache[cleanName.toLowerCase()];
                     } else {
-                        updateDiag('logo-' + side, 'CONFIG MATCH BUT NO DATA');
+                        const cleanTag = cleanName.toLowerCase().replace(/\s+/g, '');
+                        const config = clanConfig.find(cl => {
+                            const target = cl.name.trim().toLowerCase().replace(/\s+/g, '');
+                            return target === cleanTag || target.includes(cleanTag) || cleanTag.includes(target);
+                        });
+                        if (config && config.logoUrl) fallbackUrl = config.logoUrl;
                     }
-                } else {
-                    // No match found anywhere
-                    if (!forceUrl) updateDiag('logo-' + side, 'NO MATCH (' + teamName + ')');
-                }
-            }
 
-            if (logoUrl) {
-                if (imgEl.src !== logoUrl) {
-                    imgEl.src = logoUrl;
-                }
-                imgEl.style.display = 'block';
+                    if (fallbackUrl) {
+                        imgEl.src = fallbackUrl;
+                        updateDiag('logo-' + side, 'FALLBACK');
+                    } else {
+                        imgEl.style.display = 'none';
+                        imgEl.removeAttribute("data-team"); // clear so we can retry later if needed
+                        updateDiag('logo-' + side, 'NOT FOUND');
+                    }
+                };
+
+                imgEl.onload = () => {
+                    imgEl.style.display = 'block';
+                    updateDiag('logo-' + side, 'GITHUB LINK');
+                    imgEl.onload = null;
+                };
+
+                // Triggers load
+                imgEl.src = githubUrl;
             } else {
-                imgEl.style.display = 'none';
+                // Ensure it's visible if already loaded successfully
+                if (imgEl.src && imgEl.style.display === 'none') {
+                    imgEl.style.display = 'block';
+                }
             }
         }
 
