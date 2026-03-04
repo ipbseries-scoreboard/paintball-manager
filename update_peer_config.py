@@ -19,7 +19,7 @@ directory = r"c:\Users\Sports Investments\Downloads\paintball-manager-main\paint
 
 files_to_check = [
     "vmix_bg.html", "streaming.html", "pit.html", 
-    "obs_bar.html", "ledwall.html", "board.html", "control.html"
+    "obs_bar.html", "ledwall.html", "board.html"
 ]
 
 for filename in files_to_check:
@@ -31,7 +31,6 @@ for filename in files_to_check:
         content = f.read()
 
     # Replacing `const peer = new Peer();` or `peer = new Peer();`
-    # Also handles `peer = new Peer(targetId);` for control.html
     if 'peerConfig =' not in content:
         content = re.sub(
             r'const peer = new Peer\(\);',

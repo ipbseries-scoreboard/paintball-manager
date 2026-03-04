@@ -5,7 +5,7 @@ directory = r"c:\Users\Sports Investments\Downloads\paintball-manager-main\paint
 
 files_to_check = [
     "vmix_bg.html", "streaming.html", "pit.html", 
-    "obs_bar.html", "ledwall.html", "board.html", "control.html",
+    "obs_bar.html", "ledwall.html", "board.html",
     "index.html", "referee.html"
 ]
 

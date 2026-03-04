@@ -840,6 +840,11 @@
                     }
                 }
 
+                if (data && data.type === 'PING') {
+                    conn.send({ type: 'PONG', ts: data.ts });
+                    return;
+                }
+
                 if (data.teamLeft && data.teamLeft.lastPenalty) {
                     const lp = data.teamLeft.lastPenalty;
                     if (lp.timestamp > lastPenaltyTimeLeft) {

@@ -5,7 +5,7 @@ directory = r"c:\Users\Sports Investments\Downloads\paintball-manager-main\paint
 
 files_to_check = [
     "index.html", "referee.html", "streaming.html", "pit.html",
-    "vmix_bg.html", "obs_bar.html", "ledwall.html", "board.html", "control.html"
+    "vmix_bg.html", "obs_bar.html", "ledwall.html", "board.html"
 ]
 
 peer_config_code = """const customIceConfig = {
@@ -45,7 +45,7 @@ for filename in files_to_check:
         print(f"Skipping {filename}, already processed.")
         continue
 
-    # 1) index.html / control.html -> peer = new Peer(targetId);
+    # 1) index.html -> peer = new Peer(targetId);
     content = re.sub(
         r'peer = new Peer\((targetId)\);',
         f'{peer_config_code}\n                peer = new Peer(\\1, customIceConfig);',

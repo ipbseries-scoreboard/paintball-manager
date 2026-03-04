@@ -232,10 +232,7 @@
         };
         const peer = new Peer(customIceConfig);
         let conn = null;
-        let cachedStandingsData = null; // Memorizza la classifica per evitare sfarfallii
-        let cachedCurrentMatch = null;  // Memorizza le squadre attuali per i tick veloci che non includono tournament
-
-        let cachedTournamentMatches = null; // Memorizza la lista completa dei match per il ticker
+        let currentData = {}; // Stato consolidato
 
         const urlParams = new URLSearchParams(window.location.search);
         let matchId = urlParams.get('id') || urlParams.get('matchId');
@@ -247,7 +244,7 @@
         peer.on('open', (id) => {
             console.log('Ticker Peer ID:', id);
             if (matchId) {
-                let hostId = matchId.startsWith('IPBA-') ? matchId : 'IPBA-' + matchId;
+                let hostId = matchId.startsWith('IPBA-') ? matchId : 'IPBA-' + hostId;
                 connectToHost(hostId);
             }
         });
@@ -265,6 +262,12 @@
         function handleData(data) {
             if (!data) return;
 
+            // Handle Ping
+            if (data.type === 'PING' && conn) {
+                conn.send({ type: 'PONG', ts: data.ts });
+                return;
+            }
+
             try {
                 if (typeof data === 'string') {
                     data = JSON.parse(data);
@@ -274,42 +277,45 @@
                 return;
             }
 
-            // Aggiorna le memorie cache se riceviamo un pacchetto completo
-            if (data.standingsData) {
-                cachedStandingsData = data.standingsData;
-            }
-            if (data.tournament && data.tournament.active && typeof data.tournament.currentIndex !== 'undefined' && data.tournament.matches) {
-                cachedTournamentMatches = data.tournament.matches;
-                if (data.tournament.currentIndex >= 0 && data.tournament.currentIndex < data.tournament.matches.length) {
-                    cachedCurrentMatch = data.tournament.matches[data.tournament.currentIndex];
-                } else {
-                    cachedCurrentMatch = null;
-                }
+            // Unione intelligente dello stato: se arriva un FULL_SYNC o un blocco tournament, sovrascriviamo, altrimenti uniamo
+            if (data.type === 'FULL_SYNC' || data.tournament || data.standingsData) {
+                Object.assign(currentData, data);
+            } else {
+                // Pacchetto parziale (es. solo timer)
+                Object.assign(currentData, data);
             }
 
             // --- 1. POPOLAMENTO STATISTICHE SQUADRA CORRENTE ---
             const statsBoxA = document.getElementById('team-a-stats');
             const statsBoxB = document.getElementById('team-b-stats');
 
-            if (cachedCurrentMatch && cachedCurrentMatch.teamA && cachedCurrentMatch.teamB && cachedStandingsData && cachedStandingsData.standings) {
-                const standings = cachedStandingsData.standings;
-                const teamAInfo = standings.find(s => s.name === cachedCurrentMatch.teamA) || { played: 0, wins: 0, losses: 0, rw: 0, rl: 0 };
-                const teamBInfo = standings.find(s => s.name === cachedCurrentMatch.teamB) || { played: 0, wins: 0, losses: 0, rw: 0, rl: 0 };
+            // Utilizziamo lo stato consolidato (currentData) invece del pacchetto parziale
+            const standings = currentData.standingsData ? currentData.standingsData.standings : null;
+
+            // Determiniamo il match corrente dallo stato consolidato
+            let activeMatch = null;
+            if (currentData.tournament && currentData.tournament.active && typeof currentData.tournament.currentIndex !== 'undefined' && currentData.tournament.matches) {
+                activeMatch = currentData.tournament.matches[currentData.tournament.currentIndex];
+            }
+
+            if (activeMatch && activeMatch.teamA && activeMatch.teamB && standings) {
+                const teamAInfo = standings.find(s => s.name === activeMatch.teamA) || { played: 0, wins: 0, losses: 0, rw: 0, rl: 0 };
+                const teamBInfo = standings.find(s => s.name === activeMatch.teamB) || { played: 0, wins: 0, losses: 0, rw: 0, rl: 0 };
 
                 // Aggiorna Team A
-                document.getElementById('ts-name-a').innerText = cachedCurrentMatch.teamA;
-                document.getElementById('ts-p-a').innerText = teamAInfo.played;
-                document.getElementById('ts-w-a').innerText = teamAInfo.wins;
-                document.getElementById('ts-l-a').innerText = teamAInfo.losses;
+                document.getElementById('ts-name-a').innerText = activeMatch.teamA;
+                document.getElementById('ts-p-a').innerText = teamAInfo.played || 0;
+                document.getElementById('ts-w-a').innerText = teamAInfo.wins || 0;
+                document.getElementById('ts-l-a').innerText = teamAInfo.losses || 0;
                 let diffA = (teamAInfo.rw || 0) - (teamAInfo.rl || 0);
                 document.getElementById('ts-diff-a').innerText = diffA > 0 ? '+' + diffA : diffA;
                 document.getElementById('ts-diff-a').className = diffA > 0 ? 'val-green' : (diffA < 0 ? 'val-red' : '');
 
                 // Aggiorna Team B
-                document.getElementById('ts-name-b').innerText = cachedCurrentMatch.teamB;
-                document.getElementById('ts-p-b').innerText = teamBInfo.played;
-                document.getElementById('ts-w-b').innerText = teamBInfo.wins;
-                document.getElementById('ts-l-b').innerText = teamBInfo.losses;
+                document.getElementById('ts-name-b').innerText = activeMatch.teamB;
+                document.getElementById('ts-p-b').innerText = teamBInfo.played || 0;
+                document.getElementById('ts-w-b').innerText = teamBInfo.wins || 0;
+                document.getElementById('ts-l-b').innerText = teamBInfo.losses || 0;
                 let diffB = (teamBInfo.rw || 0) - (teamBInfo.rl || 0);
                 document.getElementById('ts-diff-b').innerText = diffB > 0 ? '+' + diffB : diffB;
                 document.getElementById('ts-diff-b').className = diffB > 0 ? 'val-green' : (diffB < 0 ? 'val-red' : '');
@@ -327,15 +333,15 @@
             let nmString = "";
             let modeString = "";
 
-            if (data.nextMatch) {
-                const scA = data.nextMatch.scoreA || 0;
-                const scB = data.nextMatch.scoreB || 0;
-                nmString = `PROSSIMO MATCH: <span style="color:#e2e8f0">${data.nextMatch.teamA}</span> <span style="color:var(--accent-color)">[${scA} - ${scB}]</span> <span style="color:#e2e8f0">${data.nextMatch.teamB}</span>`;
+            if (currentData.nextMatch) {
+                const scA = currentData.nextMatch.scoreA || 0;
+                const scB = currentData.nextMatch.scoreB || 0;
+                nmString = `PROSSIMO MATCH: <span style="color:#e2e8f0">${currentData.nextMatch.teamA}</span> <span style="color:var(--accent-color)">[${scA} - ${scB}]</span> <span style="color:#e2e8f0">${currentData.nextMatch.teamB}</span>`;
             }
 
-            if (data.mode === 'BREAK_MATCH' || data.mode === 'INTERVAL') {
+            if (currentData.mode === 'BREAK_MATCH' || currentData.mode === 'INTERVAL') {
                 modeString = "PARTITA IN PAUSA - SIAMO QUASI PRONTI A RIPARTIRE! ";
-            } else if (data.mode === 'MATCH_OVER') {
+            } else if (currentData.mode === 'MATCH_OVER') {
                 modeString = "PARTITA CONCLUSA! RISULTATO IN AGGIORNAMENTO... ";
             }
 
@@ -344,8 +350,8 @@
             if (nmString) finalScrollText += nmString + "  &nbsp;&nbsp;&bull;&nbsp;&nbsp;  ";
 
             // Aggiungi Storico Partite Giocate (Risultati)
-            if (cachedTournamentMatches) {
-                const pastMatches = cachedTournamentMatches.filter(m => m.savedState && m.savedState.finished);
+            if (currentData.tournament && currentData.tournament.matches) {
+                const pastMatches = currentData.tournament.matches.filter(m => m.savedState && m.savedState.finished);
                 if (pastMatches.length > 0) {
                     finalScrollText += "RISULTATI RECENTI: &nbsp;&nbsp;";
                     // Prendiamo le ultime 10 giocate (le piu recenti in fondo)
@@ -357,7 +363,7 @@
                     });
                 }
             } else {
-                finalScrollText += "IN ATTESA DELL'INIZIO DEL TORNEO...";
+                if (finalScrollText === "") finalScrollText += "BENVENUTI AL TORNEO! IN ATTESA DELL'INIZIO...";
             }
 
             tickerEl.innerHTML = finalScrollText;

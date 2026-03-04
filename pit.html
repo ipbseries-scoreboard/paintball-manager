@@ -414,10 +414,12 @@
             startClient(id);
         });
 
+        let currentHostId = null; // Cache for reconnection
+
         function startClient(hostId) {
             if (!hostId) return;
             if (!hostId.startsWith("IPBA-")) hostId = "IPBA-" + hostId;
-            const currentHostId = hostId; // Cache for reconnection
+            currentHostId = hostId;
 
             statusText.innerText = "Inizializzazione...";
 
@@ -458,6 +460,10 @@
             });
 
             conn.on('data', (data) => {
+                if (data && data.type === 'PING') {
+                    conn.send({ type: 'PONG', ts: data.ts });
+                    return;
+                }
                 let packet = data;
                 if (typeof data === 'string') {
                     try { packet = JSON.parse(data); } catch (e) { return; }

@@ -1819,6 +1819,12 @@
                     conn.on('data', (data) => {
                         if (!data) return;
 
+                        // Handle Ping from Master
+                        if (data.type === 'PING') {
+                            conn.send({ type: 'PONG', ts: data.ts });
+                            return;
+                        }
+
                         // Handle pre-stringified payload
                         let packet = data;
                         if (typeof data === 'string') {
@@ -1875,9 +1881,9 @@
                 }
             }
 
-            // Impact Trigger (Points)
-            if (oldData && (currentData.teamLeft.score > oldData.teamLeft.score)) triggerMascotImpact('left');
-            if (oldData && (currentData.teamRight.score > oldData.teamRight.score)) triggerMascotImpact('right');
+            // Impact Trigger (Points) - Added null checks
+            if (oldData && currentData && currentData.teamLeft && oldData.teamLeft && (currentData.teamLeft.score > oldData.teamLeft.score)) triggerMascotImpact('left');
+            if (oldData && currentData && currentData.teamRight && oldData.teamRight && (currentData.teamRight.score > oldData.teamRight.score)) triggerMascotImpact('right');
 
             oldData = JSON.parse(JSON.stringify(currentData));
             updateBoard(currentData);
@@ -2219,6 +2225,7 @@
         }
 
         function renderBoardState(d) {
+            if (!d || !d.teamLeft || !d.teamRight) return;
             // Outdoor Mode Logic with Persistence
             updateOutdoorClass(d.outdoorMode);
 

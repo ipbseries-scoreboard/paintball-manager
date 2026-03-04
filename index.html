@@ -1612,7 +1612,9 @@
                 </div>
                 <div id="connection-status">Match ID: <span id="my-peer-id" class="conn-id"
                         onclick="copyToClipboard(this)">Generazione...</span>
-                    <span id="conn-count" style="font-size: 0.8rem; color: #94a3b8; margin-left: 5px;">(0)</span>
+                    <span id="conn-count"
+                        style="font-size: 0.8rem; color: #94a3b8; margin-left: 5px; cursor: pointer; text-decoration: underline;"
+                        onclick="toggleConnectionMonitor()">(0)</span>
                     <label
                         style="margin-left: 10px; font-size: 0.75rem; color: #94a3b8; cursor: pointer; border: 1px solid #333; padding: 2px 5px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px;">
                         <input type="checkbox" id="cloud-sync-toggle" style="width: 12px; height: 12px;"> CLOUD
@@ -1690,6 +1692,22 @@
                 <button id="btn-toggle-schedule" class="btn" onclick="toggleSchedule()">🗓️ Programma</button>
             </div>
 
+            <!-- CONNECTION MONITOR OVERLAY -->
+            <div id="conn-monitor"
+                style="display: none; position: absolute; top: 70px; left: 20px; background: rgba(15, 23, 42, 0.95); border: 1px solid #334155; padding: 15px; border-radius: 8px; z-index: 1000; min-width: 300px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+                <div
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #334155; padding-bottom: 5px;">
+                    <h3 style="margin: 0; font-size: 0.9rem; color: var(--accent-color);">STATUS DISPOSITIVI COLLEGATI
+                    </h3>
+                    <button onclick="toggleConnectionMonitor()"
+                        style="background: transparent; border: none; color: #94a3b8; cursor: pointer; font-size: 1.2rem;">&times;</button>
+                </div>
+                <div id="conn-list" style="max-height: 300px; overflow-y: auto;">
+                    <div style="color: #64748b; font-size: 0.8rem; font-style: italic;">Nessun dispositivo collegato
+                    </div>
+                </div>
+            </div>
+
             <script>
                 window.syncLogosToClients = function () {
                     const clans = window.state ? window.state.clanConfig : null;
@@ -1713,6 +1731,7 @@
                 };
             </script>
         </header>
+
 
         <div class="main-content">
             <!-- Left Panel -->
@@ -2221,13 +2240,92 @@
                     }
 
                     conn.on('data', (data) => {
-                        handleRemoteCommand(data);
+                        if (data && data.type === 'PONG') {
+                            handlePong(conn.peer, data.ts);
+                        } else {
+                            handleRemoteCommand(data);
+                        }
                     });
                     conn.on('close', () => {
                         connections = connections.filter(c => c !== conn);
+                        delete connHealth[conn.peer];
                         updateConnectionCount();
+                        updateConnectionMonitorUI();
                     });
                 });
+
+                // Start Ping Interval
+                setInterval(sendPings, 5000);
+            }
+
+            let connHealth = {}; // { peerId: { latencies: [], lastSeen: ts, type: 'referee'/'board'/etc } }
+
+            function sendPings() {
+                const now = Date.now();
+                connections.forEach(conn => {
+                    if (conn.open) {
+                        conn.send({ type: 'PING', ts: now });
+                    }
+                });
+                // Cleanup old health data
+                for (let pid in connHealth) {
+                    if (now - connHealth[pid].lastSeen > 15000) {
+                        connHealth[pid].status = 'offline';
+                    }
+                }
+                updateConnectionMonitorUI();
+            }
+
+            function handlePong(peerId, sentTs) {
+                const latency = Date.now() - sentTs;
+                if (!connHealth[peerId]) {
+                    connHealth[peerId] = { latencies: [], lastSeen: Date.now(), status: 'online' };
+                }
+                connHealth[peerId].lastSeen = Date.now();
+                connHealth[peerId].status = 'online';
+                connHealth[peerId].latencies.push(latency);
+                if (connHealth[peerId].latencies.length > 5) connHealth[peerId].latencies.shift();
+                updateConnectionMonitorUI();
+            }
+
+            function toggleConnectionMonitor() {
+                const mon = document.getElementById('conn-monitor');
+                mon.style.display = mon.style.display === 'none' ? 'block' : 'none';
+                if (mon.style.display === 'block') updateConnectionMonitorUI();
+            }
+
+            function updateConnectionMonitorUI() {
+                const list = document.getElementById('conn-list');
+                if (!list) return;
+
+                if (connections.length === 0) {
+                    list.innerHTML = '<div style="color: #64748b; font-size: 0.8rem; font-style: italic;">Nessun dispositivo collegato</div>';
+                    return;
+                }
+
+                let html = '<table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">';
+                html += '<tr style="border-bottom: 1px solid #334155; color: #94a3b8; text-align: left;"><th style="padding: 5px;">Client</th><th style="padding: 5px;">Ping</th><th style="padding: 5px;">Stato</th></tr>';
+
+                connections.forEach(conn => {
+                    const health = connHealth[conn.peer] || { latencies: [], status: 'waiting' };
+                    const avgPing = health.latencies.length > 0 ? Math.round(health.latencies.reduce((a, b) => a + b) / health.latencies.length) : '--';
+
+                    let statusColor = '#22c55e'; // Green
+                    if (health.status === 'offline') statusColor = '#ef4444'; // Red
+                    else if (avgPing > 200 || health.status === 'waiting') statusColor = '#eab308'; // Yellow
+
+                    // Guess type from peer ID or other (simplified for now)
+                    let clientName = conn.peer.substring(0, 8);
+                    if (conn.metadata && conn.metadata.type) clientName = conn.metadata.type.toUpperCase();
+
+                    html += `<tr style="border-bottom: 1px solid #1e293b;">
+                        <td style="padding: 5px; color: #e2e8f0;">${clientName}</td>
+                        <td style="padding: 5px; color: ${statusColor === '#22c55e' ? '#94a3b8' : statusColor};">${avgPing} ms</td>
+                        <td style="padding: 5px; color: ${statusColor}; font-weight: bold;">${health.status.toUpperCase()}</td>
+                    </tr>`;
+                });
+                html += '</table>';
+                list.innerHTML = html;
             }
 
             function updateConnectionCount() {

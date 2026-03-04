@@ -1669,6 +1669,10 @@
                     });
 
                     conn.on('data', (d) => {
+                        if (d && d.type === 'PING') {
+                            conn.send({ type: 'PONG', ts: d.ts });
+                            return;
+                        }
                         let packet = d;
                         if (typeof d === 'string') {
                             try { packet = JSON.parse(d); } catch (e) { return; }
@@ -1732,12 +1736,12 @@
                 }
             }
 
-            // Impact Trigger (Points)
-            if (oldData && (d.teamLeft.score > oldData.teamLeft.score)) triggerMascotImpact('left');
-            if (oldData && (d.teamRight.score > oldData.teamRight.score)) triggerMascotImpact('right');
+            // Impact Trigger (Points) - Added null checks and using currentData
+            if (oldData && currentData && currentData.teamLeft && oldData.teamLeft && (currentData.teamLeft.score > oldData.teamLeft.score)) triggerMascotImpact('left');
+            if (oldData && currentData && currentData.teamRight && oldData.teamRight && (currentData.teamRight.score > oldData.teamRight.score)) triggerMascotImpact('right');
 
-            oldData = JSON.parse(JSON.stringify(d));
-            updateBoard(d);
+            oldData = JSON.parse(JSON.stringify(currentData));
+            updateBoard(currentData);
         }
 
         function updateBoard(d) {

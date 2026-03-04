@@ -325,6 +325,10 @@
                     scaleBoard();
                 });
                 conn.on('data', (data) => {
+                    if (data && data.type === 'PING') {
+                        conn.send({ type: 'PONG', ts: data.ts });
+                        return;
+                    }
                     let packet = data;
                     if (typeof data === 'string') { try { packet = JSON.parse(data); } catch (e) { return; } }
                     updateBoardFromPacket(packet);
@@ -351,6 +355,7 @@
         }, 1000);
 
         function updateBoardFromPacket(d) {
+            if (!d) return;
             const overlay = document.getElementById('sync-overlay');
             if (overlay) overlay.style.display = 'none';
 
@@ -359,10 +364,14 @@
             document.getElementById('timer').innerText = timerStr;
 
             const limit = (d.styleConfig && d.styleConfig.limit) || 11;
-            document.getElementById('name-left').innerText = smartTruncate(cleanTeamName(d.teamLeft.name), limit);
-            document.getElementById('score-left').innerText = d.teamLeft.score;
-            document.getElementById('name-right').innerText = smartTruncate(cleanTeamName(d.teamRight.name), limit);
-            document.getElementById('score-right').innerText = d.teamRight.score;
+            if (d.teamLeft) {
+                document.getElementById('name-left').innerText = smartTruncate(cleanTeamName(d.teamLeft.name), limit);
+                document.getElementById('score-left').innerText = d.teamLeft.score;
+            }
+            if (d.teamRight) {
+                document.getElementById('name-right').innerText = smartTruncate(cleanTeamName(d.teamRight.name), limit);
+                document.getElementById('score-right').innerText = d.teamRight.score;
+            }
         }
 
         window.addEventListener('DOMContentLoaded', () => {

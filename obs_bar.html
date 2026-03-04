@@ -535,6 +535,10 @@
             });
 
             conn.on('data', (data) => {
+                if (data && data.type === 'PING') {
+                    conn.send({ type: 'PONG', ts: data.ts });
+                    return;
+                }
                 handleData(data);
             });
 
@@ -607,6 +611,7 @@
         }
 
         // --- Data Handling ---
+
         function handleData(data) {
             if (!data) return;
 
@@ -617,6 +622,14 @@
             } catch (e) {
                 console.error("Error parsing data:", e);
                 return;
+            }
+
+            // Sync Main State: Unione intelligente
+            if (data.type === 'FULL_SYNC' || data.clanConfig) {
+                Object.assign(currentData, data);
+            } else {
+                // Pacchetto parziale (tick del timer)
+                Object.assign(currentData, data);
             }
 
             // Debug Diagnostics
@@ -637,14 +650,9 @@
                 }
             }
 
-            // Handle Full Sync vs Partial Sync
-            if (data.type === 'FULL_SYNC' || data.clanConfig) {
-                if (data.clanConfig) clanConfig = data.clanConfig;
-            }
-
-            // Sync Main Display
-            if (data.timer !== undefined) {
-                updateUI(data);
+            // Esegui update UI solo se abbiamo dati minimi per il cronometro o un sync completo
+            if (currentData.timer !== undefined) {
+                updateUI(currentData);
             }
         }
 
