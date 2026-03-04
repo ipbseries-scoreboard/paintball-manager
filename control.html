@@ -6,13 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IPBA Tournament Manager - REGIA</title>
     <!-- PeerJS CDN -->
-    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" crossorigin="anonymous"></script>
     <!-- Google Fonts -->
     <link
         href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Bebas+Neue&family=Orbitron:wght@600&family=Black+Ops+One&family=Roboto:wght@400;700&display=swap"
         rel="stylesheet">
     <!-- QRCode.js CDN -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" crossorigin="anonymous"></script>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -682,6 +682,15 @@
 </head>
 
 <body>
+    <script>
+        window.onerror = function (msg, url, line, col, error) {
+            const stack = error && error.stack ? ("\n\nStack: " + error.stack.split('\n').slice(0, 3).join('\n')) : "";
+            const detail = `\nURL: ${url}\nPos: ${line}:${col}${stack}`;
+            console.error("CRITICAL ERROR:", msg, detail);
+            alert("ERRORE JS CRITICO:\n" + msg + detail);
+            return false;
+        };
+    </script>
     <div id="scaler">
         <div id="top-bar">
             NEXT: <span id="tb-teams" style="color: white; margin-left: 10px;">-- vs --</span>
@@ -1971,64 +1980,68 @@
             }
 
             function tick() {
-                if (state.mode === 'IDLE' || state.mode.startsWith('PAUSED')) return;
+                try {
+                    if (state.mode === 'IDLE' || state.mode.startsWith('PAUSED')) return;
 
-                const now = performance.now();
-                const dt = (now - state.lastTime) / 1000;
-                state.lastTime = now;
+                    const now = performance.now();
+                    const dt = (now - state.lastTime) / 1000;
+                    state.lastTime = now;
 
-                if (state.timer > 0) {
-                    const prev = state.timer;
-                    state.timer -= dt;
-                    if (state.timer < 0) state.timer = 0;
+                    if (state.timer > 0) {
+                        const prev = state.timer;
+                        state.timer -= dt;
+                        if (state.timer < 0) state.timer = 0;
 
-                    updateTimerDisplay();
+                        updateTimerDisplay();
 
-                    // Sound Triggers (Edge Detection)
-                    if (prev > 60 && state.timer <= 60 && !state.flags.warn60) { state.flags.warn60 = true; playBeep('warn'); speak("Sessanta secondi", "Sixty seconds"); }
-                    if (prev > 30 && state.timer <= 30 && !state.flags.warn30) { state.flags.warn30 = true; playBeep('warn'); speak("Trenta secondi", "Thirty seconds"); }
-                    if (prev > 20 && state.timer <= 20 && !state.flags.warn20) { state.flags.warn20 = true; playBeep('warn'); speak("Venti secondi", "Twenty seconds"); }
-                    if (prev > 10 && state.timer <= 10 && !state.flags.warn10) { state.flags.warn10 = true; speak("Dieci secondi", "Ten seconds"); }
+                        // Sound Triggers (Edge Detection)
+                        if (prev > 60 && state.timer <= 60 && !state.flags.warn60) { state.flags.warn60 = true; playBeep('warn'); speak("Sessanta secondi", "Sixty seconds"); }
+                        if (prev > 30 && state.timer <= 30 && !state.flags.warn30) { state.flags.warn30 = true; playBeep('warn'); speak("Trenta secondi", "Thirty seconds"); }
+                        if (prev > 20 && state.timer <= 20 && !state.flags.warn20) { state.flags.warn20 = true; playBeep('warn'); speak("Venti secondi", "Twenty seconds"); }
+                        if (prev > 10 && state.timer <= 10 && !state.flags.warn10) { state.flags.warn10 = true; speak("Dieci secondi", "Ten seconds"); }
 
-                    // Beep every second (approx) when < 10. Check integer boundary crossing.
-                    if (state.timer < 10 && state.timer > 0 && Math.ceil(prev) > Math.ceil(state.timer)) playBeep('tick');
+                        // Beep every second (approx) when < 10. Check integer boundary crossing.
+                        if (state.timer < 10 && state.timer > 0 && Math.ceil(prev) > Math.ceil(state.timer)) playBeep('tick');
 
-                } else {
-                    if (state.mode === 'INTERVAL') {
-                        log("FINE INTERVALLO - GIOCO ATTIVO");
-                        if (state.settings.autoStart) startPoint();
-                        else { playHorn(1.0); state.mode = 'IDLE'; render(); }
-                    }
-                    else if (state.mode === 'POINT' || state.mode === 'OVERTIME') {
-                        playHorn();
-                        speak("Fine tempo!", "Time over!");
-                        log("FINE TEMPO (00:00)");
-                        state.gameTimeRemaining = 0;
-                        state.timer = 0;
-                        state.mode = 'IDLE';
-                        stopTimerLoop();
-                        render();
+                    } else {
+                        if (state.mode === 'INTERVAL') {
+                            log("FINE INTERVALLO - GIOCO ATTIVO");
+                            if (state.settings.autoStart) startPoint();
+                            else { playHorn(1.0); state.mode = 'IDLE'; render(); }
+                        }
+                        else if (state.mode === 'POINT' || state.mode === 'OVERTIME') {
+                            playHorn();
+                            speak("Fine tempo!", "Time over!");
+                            log("FINE TEMPO (00:00)");
+                            state.gameTimeRemaining = 0;
+                            state.timer = 0;
+                            state.mode = 'IDLE';
+                            stopTimerLoop();
+                            render();
 
-                        // Check for Draw (only in POINT mode, not OVERTIME... unless requested?)
-                        // Request: "quando finisce il tempo e siamo sul punteggio pari"
-                        if (state.teams.A.score === state.teams.B.score) {
-                            document.getElementById('draw-verify-modal').style.display = 'flex';
-                            log("FINE TEMPO CON PAREGGIO - IN ATTESA DI DECISIONE");
-                        } else {
-                            matchOver();
+                            // Check for Draw (only in POINT mode, not OVERTIME... unless requested?)
+                            // Request: "quando finisce il tempo e siamo sul punteggio pari"
+                            if (state.teams.A.score === state.teams.B.score) {
+                                document.getElementById('draw-verify-modal').style.display = 'flex';
+                                log("FINE TEMPO CON PAREGGIO - IN ATTESA DI DECISIONE");
+                            } else {
+                                matchOver();
+                            }
+                        }
+                        else if (state.mode === 'BREAK_MATCH') {
+                            const nextIdx = (state.nextMatchIndex !== undefined) ? state.nextMatchIndex : (state.tournament.currentIndex + 1);
+                            state.nextMatchIndex = undefined;
+                            loadMatch(nextIdx);
+                            log("FINE PAUSA MATCH - AVVIO AUTOMATICO INTERVALLO");
+                            startInter(); // Auto-start interval
+                        }
+                        else if (state.mode === 'GOLDEN_BREAK') {
+                            log("FINE PAUSA GOLDEN POINT - START OVERTIME");
+                            startOvertime();
                         }
                     }
-                    else if (state.mode === 'BREAK_MATCH') {
-                        const nextIdx = (state.nextMatchIndex !== undefined) ? state.nextMatchIndex : (state.tournament.currentIndex + 1);
-                        state.nextMatchIndex = undefined;
-                        loadMatch(nextIdx);
-                        log("FINE PAUSA MATCH - AVVIO AUTOMATICO INTERVALLO");
-                        startInter(); // Auto-start interval
-                    }
-                    else if (state.mode === 'GOLDEN_BREAK') {
-                        log("FINE PAUSA GOLDEN POINT - START OVERTIME");
-                        startOvertime();
-                    }
+                } catch (e) {
+                    console.error("Tick Error:", e);
                 }
             }
 

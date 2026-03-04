@@ -5,9 +5,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Referee Field Control - IPBA</title>
-    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" crossorigin="anonymous"></script>
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@700&family=Inter:wght@400;900&display=swap"
         rel="stylesheet">
+    <script>
+        window.onerror = function (msg, url, line, col, error) {
+            const stack = error && error.stack ? ("\n\nStack: " + error.stack.split('\n').slice(0, 3).join('\n')) : "";
+            const detail = `\nURL: ${url}\nPos: ${line}:${col}${stack}`;
+            console.error("CRITICAL ERROR:", msg, detail);
+            alert("ERRORE JS CRITICO:\n" + msg + detail);
+            return false;
+        };
+    </script>
     <style>
         :root {
             --bg-color: #000000;

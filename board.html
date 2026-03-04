@@ -6,11 +6,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IPBA Scoreboard - STREAM</title>
     <!-- PeerJS CDN -->
-    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" crossorigin="anonymous"></script>
     <!-- Google Fonts: Oswald, Bebas Neue, Orbitron, Black Ops One, Roboto -->
     <link
         href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Bebas+Neue&family=Orbitron:wght@600&family=Black+Ops+One&family=Roboto:wght@400;700&display=swap"
         rel="stylesheet">
+    <script>
+        window.onerror = function (msg, url, line, col, error) {
+            const stack = error && error.stack ? ("\n\nStack: " + error.stack.split('\n').slice(0, 3).join('\n')) : "";
+            const detail = `\nURL: ${url}\nPos: ${line}:${col}${stack}`;
+            console.error("CRITICAL ERROR:", msg, detail);
+            alert("ERRORE JS CRITICO:\n" + msg + detail);
+            return false;
+        };
+    </script>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -2225,204 +2234,208 @@
         }
 
         function renderBoardState(d) {
-            if (!d || !d.teamLeft || !d.teamRight) return;
-            // Outdoor Mode Logic with Persistence
-            updateOutdoorClass(d.outdoorMode);
+            try {
+                if (!d || !d.teamLeft || !d.teamRight) return;
+                // Outdoor Mode Logic with Persistence
+                updateOutdoorClass(d.outdoorMode);
 
-            // Update standings cache and render
-            if (d.standingsData) {
-                lastStandingsData = d.standingsData;
-                renderStandingsTable(d.standingsData);
-            }
-
-            // Fastest Round (TOP BAR)
-            const topBar = document.getElementById('top-bar');
-            if (d.fastestRound) {
-                topBar.style.display = 'flex';
-                document.getElementById('tb-record-team').innerText = d.fastestRound.team;
-                document.getElementById('tb-record-val').innerText = formatTimeSeconds(d.fastestRound.duration);
-            } else {
-                topBar.style.display = 'none';
-            }
-
-            // IPBA Layout URL Sync
-            if (d.layoutUrl) {
-                const iframe = document.getElementById('layout-iframe');
-                if (iframe.src !== d.layoutUrl) {
-                    iframe.src = d.layoutUrl;
+                // Update standings cache and render
+                if (d.standingsData) {
+                    lastStandingsData = d.standingsData;
+                    renderStandingsTable(d.standingsData);
                 }
-            }
 
-            // Timer
-            const tDiv = document.getElementById('timer');
-            tDiv.innerText = d.timer;
-            if (d.isBreak) tDiv.classList.add('timer-break');
-            else tDiv.classList.remove('timer-break');
-
-            // Apply Dynamic Styling
-            const style = d.teamStyle || { fontSize: 80, fontFamily: "'Oswald', sans-serif", bold: true, scaleX: 1.2, scaleY: 2.1, limit: 11, dot: '.' };
-            const names = document.querySelectorAll('.team-name');
-            names.forEach(n => {
-                n.style.fontSize = style.fontSize + 'px';
-                n.style.fontFamily = style.fontFamily || "'Oswald', sans-serif";
-                n.style.fontWeight = style.bold ? 'bold' : 'normal';
-                n.style.transform = `scale(${style.scaleX}, ${style.scaleY})`;
-            });
-
-            // Left Team
-            const lNameRaw = d.teamLeft.name || "";
-            const lNameTrunc = smartTruncate(lNameRaw, style.limit || 11);
-            document.getElementById('name-left').innerText = lNameTrunc;
-
-            const lPanel = document.getElementById('panel-left');
-            lPanel.style.borderTopColor = d.teamLeft.color;
-
-            const lScore = document.getElementById('score-left');
-            if (lScore.innerText !== String(d.teamLeft.score)) {
-                lScore.innerText = d.teamLeft.score;
-                lScore.classList.remove('score-pop');
-                void lScore.offsetWidth; // Trigger reflow
-                lScore.classList.add('score-pop');
-            }
-
-            // Tech Pause Left
-            const lTech = document.getElementById('tech-left');
-            if (d.teamLeft.techUsed) {
-                lTech.classList.add('active');
-            } else {
-                lTech.classList.remove('active');
-            }
-
-            // Penalty Boxes Left
-            const lPenBox = document.getElementById('pen-box-left');
-            lPenBox.style.borderTopColor = d.teamLeft.color;
-            document.getElementById('pen-total-left').innerText = "TOT: " + (d.teamLeft.totalPenalties || 0);
-
-            const lPenActive = document.getElementById('pen-active-left');
-            if (d.teamLeft.penalties > 0) {
-                lPenActive.style.display = 'block';
-                lPenActive.innerText = "PEN: " + d.teamLeft.penalties;
-            } else {
-                lPenActive.style.display = 'none';
-            }
-
-            // Right Team
-            const rNameRaw = d.teamRight.name || "";
-            const rNameTrunc = smartTruncate(rNameRaw, style.limit || 11);
-            document.getElementById('name-right').innerText = rNameTrunc;
-
-            const rPanel = document.getElementById('panel-right');
-            rPanel.style.borderTopColor = d.teamRight.color;
-
-            const rScore = document.getElementById('score-right');
-            if (rScore.innerText !== String(d.teamRight.score)) {
-                rScore.innerText = d.teamRight.score;
-                rScore.classList.remove('score-pop');
-                void rScore.offsetWidth; // Trigger reflow
-                rScore.classList.add('score-pop');
-            }
-
-            // Tech Pause Right
-            const rTech = document.getElementById('tech-right');
-            if (d.teamRight.techUsed) {
-                rTech.classList.add('active');
-            } else {
-                rTech.classList.remove('active');
-            }
-
-            // Penalty Boxes Right
-            const rPenBox = document.getElementById('pen-box-right');
-            rPenBox.style.borderTopColor = d.teamRight.color;
-            document.getElementById('pen-total-right').innerText = "TOT: " + (d.teamRight.totalPenalties || 0);
-
-            const rPenActive = document.getElementById('pen-active-right');
-            if (d.teamRight.penalties > 0) {
-                rPenActive.style.display = 'block';
-                rPenActive.innerText = "PEN: " + d.teamRight.penalties;
-            } else {
-                rPenActive.style.display = 'none';
-            }
-
-            // Mercy
-            if (d.mercy) board.style.border = "10px solid red"; // Warning border scaled
-            else board.style.border = "none";
-
-            // Status Bar
-            const sBar = document.getElementById('status-bar');
-            const hasSpotlight = d.fastestRound;
-
-            if (d.mode === 'PAUSED' && !hasSpotlight) {
-                sBar.style.display = 'block';
-                sBar.innerText = "PAUSA";
-                sBar.style.color = "yellow";
-            } else if (d.isBreak) {
-                sBar.style.display = 'block';
-                sBar.innerText = "NEXT: " + d.breakLabel;
-                sBar.style.color = "white";
-            } else {
-                sBar.style.display = 'none';
-            }
-
-            // Phase Display
-            const phaseEl = document.getElementById('match-phase');
-            if (phaseEl) {
-                phaseEl.innerText = d.phase || "";
-                phaseEl.style.display = d.phase ? 'block' : 'none';
-            }
-
-            // State Indicator
-            const ind = document.getElementById('game-state-ind');
-            if (d.statusText) {
-                ind.innerText = d.statusText;
-                ind.className = d.statusClass;
-            }
-
-            updatePenaltyVisuals('left', d.teamLeft);
-            updatePenaltyVisuals('right', d.teamRight);
-
-            // NEXT MATCH SPOTLIGHT
-            const nmSpot = document.getElementById('next-match-spotlight');
-            if (d.nextMatch) {
-                nmSpot.style.display = 'flex';
-
-                // Smart Truncation for spotlight
-                const nmLimit = 11; // Same as team panels for consistency
-                const tATrunc = smartTruncate(d.nextMatch.teamA, nmLimit);
-                const tBTrunc = smartTruncate(d.nextMatch.teamB, nmLimit);
-
-                document.getElementById('spot-nm-teams').innerText = `${tATrunc} vs ${tBTrunc}`;
-
-                const spotNmScore = document.getElementById('spot-nm-score');
-                const spotNmTimer = document.getElementById('spot-nm-timer');
-
-                if (d.nextMatch.isStarted) {
-                    spotNmScore.style.display = 'block';
-                    spotNmScore.innerText = `[ ${d.nextMatch.scoreA} - ${d.nextMatch.scoreB} ]`;
-                    spotNmTimer.innerText = d.nextMatch.timer || "";
-                    spotNmTimer.style.color = "#fbbf24";
+                // Fastest Round (TOP BAR)
+                const topBar = document.getElementById('top-bar');
+                if (d.fastestRound) {
+                    topBar.style.display = 'flex';
+                    document.getElementById('tb-record-team').innerText = d.fastestRound.team;
+                    document.getElementById('tb-record-val').innerText = formatTimeSeconds(d.fastestRound.duration);
                 } else {
-                    spotNmScore.style.display = 'none';
-                    spotNmTimer.innerText = d.nextMatch.time || "--:--";
-                    spotNmTimer.style.color = "#94a3b8";
+                    topBar.style.display = 'none';
                 }
-            } else {
-                nmSpot.style.display = 'none';
-            }
 
-            // HIDE OLD FOOTER
-            document.getElementById('next-match-footer').style.display = 'none';
+                // IPBA Layout URL Sync
+                if (d.layoutUrl) {
+                    const iframe = document.getElementById('layout-iframe');
+                    if (iframe.src !== d.layoutUrl) {
+                        iframe.src = d.layoutUrl;
+                    }
+                }
 
-            const nmLayer = document.getElementById('next-match-layer');
+                // Timer
+                const tDiv = document.getElementById('timer');
+                tDiv.innerText = d.timer;
+                if (d.isBreak) tDiv.classList.add('timer-break');
+                else tDiv.classList.remove('timer-break');
 
-            const showOverlay = d.showNextMatchOverlay || (d.isBreak && d.nextMatch);
-            if (showOverlay && d.nextMatch) {
-                nmLayer.style.display = 'none';
-                /* nmLayer.style.display = 'flex'; */
-                document.getElementById('nm-team-a').innerText = d.nextMatch.teamA;
-                document.getElementById('nm-team-b').innerText = d.nextMatch.teamB;
-                document.getElementById('nm-timer').innerText = d.timer;
-            } else {
-                nmLayer.style.display = 'none';
+                // Apply Dynamic Styling
+                const style = d.teamStyle || { fontSize: 80, fontFamily: "'Oswald', sans-serif", bold: true, scaleX: 1.2, scaleY: 2.1, limit: 11, dot: '.' };
+                const names = document.querySelectorAll('.team-name');
+                names.forEach(n => {
+                    n.style.fontSize = style.fontSize + 'px';
+                    n.style.fontFamily = style.fontFamily || "'Oswald', sans-serif";
+                    n.style.fontWeight = style.bold ? 'bold' : 'normal';
+                    n.style.transform = `scale(${style.scaleX}, ${style.scaleY})`;
+                });
+
+                // Left Team
+                const lNameRaw = d.teamLeft.name || "";
+                const lNameTrunc = smartTruncate(lNameRaw, style.limit || 11);
+                document.getElementById('name-left').innerText = lNameTrunc;
+
+                const lPanel = document.getElementById('panel-left');
+                lPanel.style.borderTopColor = d.teamLeft.color;
+
+                const lScore = document.getElementById('score-left');
+                if (lScore.innerText !== String(d.teamLeft.score)) {
+                    lScore.innerText = d.teamLeft.score;
+                    lScore.classList.remove('score-pop');
+                    void lScore.offsetWidth; // Trigger reflow
+                    lScore.classList.add('score-pop');
+                }
+
+                // Tech Pause Left
+                const lTech = document.getElementById('tech-left');
+                if (d.teamLeft.techUsed) {
+                    lTech.classList.add('active');
+                } else {
+                    lTech.classList.remove('active');
+                }
+
+                // Penalty Boxes Left
+                const lPenBox = document.getElementById('pen-box-left');
+                lPenBox.style.borderTopColor = d.teamLeft.color;
+                document.getElementById('pen-total-left').innerText = "TOT: " + (d.teamLeft.totalPenalties || 0);
+
+                const lPenActive = document.getElementById('pen-active-left');
+                if (d.teamLeft.penalties > 0) {
+                    lPenActive.style.display = 'block';
+                    lPenActive.innerText = "PEN: " + d.teamLeft.penalties;
+                } else {
+                    lPenActive.style.display = 'none';
+                }
+
+                // Right Team
+                const rNameRaw = d.teamRight.name || "";
+                const rNameTrunc = smartTruncate(rNameRaw, style.limit || 11);
+                document.getElementById('name-right').innerText = rNameTrunc;
+
+                const rPanel = document.getElementById('panel-right');
+                rPanel.style.borderTopColor = d.teamRight.color;
+
+                const rScore = document.getElementById('score-right');
+                if (rScore.innerText !== String(d.teamRight.score)) {
+                    rScore.innerText = d.teamRight.score;
+                    rScore.classList.remove('score-pop');
+                    void rScore.offsetWidth; // Trigger reflow
+                    rScore.classList.add('score-pop');
+                }
+
+                // Tech Pause Right
+                const rTech = document.getElementById('tech-right');
+                if (d.teamRight.techUsed) {
+                    rTech.classList.add('active');
+                } else {
+                    rTech.classList.remove('active');
+                }
+
+                // Penalty Boxes Right
+                const rPenBox = document.getElementById('pen-box-right');
+                rPenBox.style.borderTopColor = d.teamRight.color;
+                document.getElementById('pen-total-right').innerText = "TOT: " + (d.teamRight.totalPenalties || 0);
+
+                const rPenActive = document.getElementById('pen-active-right');
+                if (d.teamRight.penalties > 0) {
+                    rPenActive.style.display = 'block';
+                    rPenActive.innerText = "PEN: " + d.teamRight.penalties;
+                } else {
+                    rPenActive.style.display = 'none';
+                }
+
+                // Mercy
+                if (d.mercy) board.style.border = "10px solid red"; // Warning border scaled
+                else board.style.border = "none";
+
+                // Status Bar
+                const sBar = document.getElementById('status-bar');
+                const hasSpotlight = d.fastestRound;
+
+                if (d.mode === 'PAUSED' && !hasSpotlight) {
+                    sBar.style.display = 'block';
+                    sBar.innerText = "PAUSA";
+                    sBar.style.color = "yellow";
+                } else if (d.isBreak) {
+                    sBar.style.display = 'block';
+                    sBar.innerText = "NEXT: " + d.breakLabel;
+                    sBar.style.color = "white";
+                } else {
+                    sBar.style.display = 'none';
+                }
+
+                // Phase Display
+                const phaseEl = document.getElementById('match-phase');
+                if (phaseEl) {
+                    phaseEl.innerText = d.phase || "";
+                    phaseEl.style.display = d.phase ? 'block' : 'none';
+                }
+
+                // State Indicator
+                const ind = document.getElementById('game-state-ind');
+                if (d.statusText) {
+                    ind.innerText = d.statusText;
+                    ind.className = d.statusClass;
+                }
+
+                updatePenaltyVisuals('left', d.teamLeft);
+                updatePenaltyVisuals('right', d.teamRight);
+
+                // NEXT MATCH SPOTLIGHT
+                const nmSpot = document.getElementById('next-match-spotlight');
+                if (d.nextMatch) {
+                    nmSpot.style.display = 'flex';
+
+                    // Smart Truncation for spotlight
+                    const nmLimit = 11; // Same as team panels for consistency
+                    const tATrunc = smartTruncate(d.nextMatch.teamA, nmLimit);
+                    const tBTrunc = smartTruncate(d.nextMatch.teamB, nmLimit);
+
+                    document.getElementById('spot-nm-teams').innerText = `${tATrunc} vs ${tBTrunc}`;
+
+                    const spotNmScore = document.getElementById('spot-nm-score');
+                    const spotNmTimer = document.getElementById('spot-nm-timer');
+
+                    if (d.nextMatch.isStarted) {
+                        spotNmScore.style.display = 'block';
+                        spotNmScore.innerText = `[ ${d.nextMatch.scoreA} - ${d.nextMatch.scoreB} ]`;
+                        spotNmTimer.innerText = d.nextMatch.timer || "";
+                        spotNmTimer.style.color = "#fbbf24";
+                    } else {
+                        spotNmScore.style.display = 'none';
+                        spotNmTimer.innerText = d.nextMatch.time || "--:--";
+                        spotNmTimer.style.color = "#94a3b8";
+                    }
+                } else {
+                    nmSpot.style.display = 'none';
+                }
+
+                // HIDE OLD FOOTER
+                document.getElementById('next-match-footer').style.display = 'none';
+
+                const nmLayer = document.getElementById('next-match-layer');
+
+                const showOverlay = d.showNextMatchOverlay || (d.isBreak && d.nextMatch);
+                if (showOverlay && d.nextMatch) {
+                    nmLayer.style.display = 'none';
+                    /* nmLayer.style.display = 'flex'; */
+                    document.getElementById('nm-team-a').innerText = d.nextMatch.teamA;
+                    document.getElementById('nm-team-b').innerText = d.nextMatch.teamB;
+                    document.getElementById('nm-timer').innerText = d.timer;
+                } else {
+                    nmLayer.style.display = 'none';
+                }
+            } catch (e) {
+                console.error("Render Board State Error:", e);
             }
         }
 
