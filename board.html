@@ -1641,6 +1641,8 @@
         const board = document.getElementById('scoreboard');
         const scaler = document.getElementById('scaler');
 
+        let clientConn = null;
+
         // Load Stored Clans
         let clanConfig = [];
         let logoCache = {}; // Cache for logos: { "Team Name": "data:image..." }
@@ -1762,12 +1764,13 @@
         // Auto-connect if ID is in URL or pre-fill last ID
         window.addEventListener('DOMContentLoaded', () => {
             const params = new URLSearchParams(window.location.search);
-            const id = params.get('id');
+            const id = params.get('matchId') || params.get('id');
             const lastId = localStorage.getItem('last_match_id');
 
             if (id) {
-                input.value = id;
-                startClient(id);
+                const fullId = id.startsWith("IPBA-") ? id : "IPBA-" + id;
+                input.value = id.replace("IPBA-", "");
+                startClient(fullId);
             } else if (lastId) {
                 input.value = lastId;
                 // We don't auto-connect with lastId to avoid errors if the ID is expired, 
@@ -1811,6 +1814,7 @@
                 peer.on('open', (myId) => {
                     console.log("My peer ID: " + myId);
                     const conn = peer.connect(hostId);
+                    clientConn = conn;
 
                     conn.on('open', () => {
                         console.log("Connected to " + hostId);
