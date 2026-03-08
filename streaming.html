@@ -1500,6 +1500,74 @@
         window.addEventListener('scroll', noScroll);
         function noScroll() { window.scrollTo(0, 0); }
 
+        // --- GitHub Logo Fetcher ---
+        let githubFilesList = [];
+        let githubFilesFetched = false;
+
+        async function fetchGithubFiles() {
+            if (githubFilesFetched) return;
+            try {
+                console.log("Fetching GitHub logos list...");
+                const response = await fetch('https://api.github.com/repos/ipbseries-scoreboard/paintball-manager/contents/NO%20SFONDO');
+                if (response.ok) {
+                    const data = await response.json();
+                    githubFilesList = data.map(file => file.name);
+                    githubFilesFetched = true;
+                    console.log("SUCCESS: Fetched GitHub logo list:", githubFilesList.length, "files");
+                } else {
+                    console.error("FAILED to fetch GitHub logos:", response.status, response.statusText);
+                    // Retry in 10 seconds
+                    setTimeout(fetchGithubFiles, 10000);
+                }
+            } catch (e) {
+                console.error("CRITICAL ERROR fetching GitHub logos:", e);
+                // Retry in 10 seconds
+                setTimeout(fetchGithubFiles, 10000);
+            }
+        }
+
+        // Initiate fetch early
+        fetchGithubFiles();
+
+        function findFuzzyGithubLogo(teamName) {
+            if (!githubFilesFetched) {
+                console.log("GitHub logos not yet fetched, skipping fuzzy match for:", teamName);
+                return null;
+            }
+            if (!githubFilesList.length) {
+                console.warn("GitHub logo list is empty!");
+                return null;
+            }
+
+            const cleanTarget = teamName.toLowerCase().replace(/[^a-z0-9]/g, '');
+            console.log(`Searching GitHub logo for: "${teamName}" (Cleaned: "${cleanTarget}")`);
+
+            // 1. Exact match ignoring case/spaces/dots
+            let match = githubFilesList.find(f => {
+                const cleanFile = f.toLowerCase().replace(/[^a-z0-9.]/g, '');
+                return cleanFile === cleanTarget + '.png' || cleanFile === cleanTarget;
+            });
+
+            if (match) {
+                console.log("MATCH FOUND (Exact):", match);
+                return match;
+            }
+
+            // 2. Partial match (file name contains team name or vice versa)
+            match = githubFilesList.find(f => {
+                const cleanFile = f.toLowerCase().replace(/[^a-z0-9]/g, '').replace('png', '').replace('jpg', '');
+                return cleanFile.length > 2 && (cleanFile.includes(cleanTarget) || cleanTarget.includes(cleanFile));
+            });
+
+            if (match) {
+                console.log("MATCH FOUND (Fuzzy):", match);
+            } else {
+                console.log("NO MATCH found on GitHub for:", teamName);
+            }
+
+            return match || null;
+        }
+
         function scaleBoard() {
             const targetWidth = 1920;
             const targetHeight = 1080;
@@ -1903,20 +1971,33 @@
             const imgEl = document.getElementById('logo-' + side);
             if (!imgEl) return;
 
-            if (!teamName) {
+            if (!teamName || teamName === "TEAM A" || teamName === "TEAM B" || teamName === "SQUADRA A" || teamName === "SQUADRA B") {
                 imgEl.style.display = 'none';
                 return;
             }
 
             const config = clanConfig.find(c => c.name.trim().toLowerCase() === teamName.trim().toLowerCase());
+
             if (config && config.logoUrl) {
                 imgEl.src = config.logoUrl;
                 imgEl.style.display = 'block';
-
-                // Apply Mascot Animation
+                imgEl.onerror = null; // Reset error handler
                 applyMascotStyle(side, teamName);
             } else {
-                imgEl.style.display = 'none';
+                // FALLBACK: Search on GitHub
+                const githubFile = findFuzzyGithubLogo(teamName);
+                if (githubFile) {
+                    const rawUrl = `https://raw.githubusercontent.com/ipbseries-scoreboard/paintball-manager/main/NO%20SFONDO/${encodeURIComponent(githubFile)}`;
+                    imgEl.src = rawUrl;
+                    imgEl.style.display = 'block';
+                    imgEl.onerror = () => {
+                        console.error("Failed to load image from GitHub:", rawUrl);
+                        imgEl.style.display = 'none';
+                    };
+                    applyMascotStyle(side, teamName);
+                } else {
+                    imgEl.style.display = 'none';
+                }
             }
         }
 
