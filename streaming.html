@@ -2380,8 +2380,20 @@
                         closeClanOverlay();
                     }
                 };
-                const logo = clan.logoUrl ? `<img src="${clan.logoUrl}" class="clan-logo">` : `<div class="clan-logo" style="display:flex;justify-content:center;align-items:center;color:#64748b;font-size:50px;">?</div>`;
-                card.innerHTML = `${logo}<div class="clan-card-name">${clan.name}</div>${clan.rosterUrl ? '<div style="color:var(--accent-color); font-size:12px; margin-top:5px;">🔗 OPEN ROSTER</div>' : ''}`;
+
+                // Logic to fallback to GitHub logo if locally missing
+                let finalLogoUrl = clan.logoUrl;
+                if (!finalLogoUrl) {
+                    const fuzzyFile = findFuzzyGithubLogo(clan.name);
+                    if (fuzzyFile) {
+                        finalLogoUrl = `https://raw.githubusercontent.com/ipbseries-scoreboard/paintball-manager/main/NO%20SFONDO/${encodeURIComponent(fuzzyFile)}`;
+                    }
+                }
+
+                const logo = finalLogoUrl ? `<img src="${finalLogoUrl}" class="clan-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">` : '';
+                const placeholder = `<div class="clan-logo-placeholder" style="display:${finalLogoUrl ? 'none' : 'flex'}; justify-content:center; align-items:center; color:#64748b; font-size:50px; background: rgba(255,255,255,0.05); border-radius: 10px; width: 100%; height: 200px;">?</div>`;
+
+                card.innerHTML = `${logo}${placeholder}<div class="clan-card-name">${clan.name}</div>${clan.rosterUrl ? '<div style="color:var(--accent-color); font-size:12px; margin-top:5px;">🔗 OPEN ROSTER</div>' : ''}`;
                 grid.appendChild(card);
             });
         }
