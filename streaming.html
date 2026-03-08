@@ -1515,9 +1515,9 @@
 
         if (targetId) {
             // If from URL, update input and try to auto-start immediately
-            if (!targetId.startsWith("IPBA-")) targetId = "IPBA-" + targetId;
+            const fullId = targetId.startsWith("IPBA-") ? targetId : "IPBA-" + targetId;
             input.value = targetId.replace("IPBA-", "");
-            setTimeout(() => startClient(targetId), 500); // Small delay to let UI settle
+            setTimeout(() => startClient(fullId), 500); // Small delay to let UI settle
         } else {
             const lastId = localStorage.getItem('last_match_id');
             if (lastId) input.value = lastId;
