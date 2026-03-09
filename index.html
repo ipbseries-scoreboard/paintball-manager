@@ -941,6 +941,14 @@
         </div>
         <script>
             window.onerror = function (msg, url, line, col, error) {
+                // Silenzia errori PeerJS non critici o provenienti da peer già distrutti 
+                // per evitare di interrompere l'utente con popup tecnici durante fluttuazioni di rete.
+                const isPeerError = msg.toLowerCase().includes('peer') || (url && url.includes('peerjs'));
+                if (isPeerError && (msg.toLowerCase().includes('destroyed') || msg.toLowerCase().includes('disconnected'))) {
+                    console.warn("[SILENCED] PeerJS Network Fluctuation:", msg);
+                    return true; // Stop propagation, don't show alert
+                }
+
                 const stack = error && error.stack ? ("\n\nStack: " + error.stack.split('\n').slice(0, 3).join('\n')) : "";
                 const detail = `\nURL: ${url}\nPos: ${line}:${col}${stack}`;
 
@@ -2212,8 +2220,26 @@
 
                 // Auto-Reconnect if disconnected from PeerServer
                 peer.on('disconnected', () => {
-                    console.log("Disconnected from signaling server. Reconnecting...");
-                    peer.reconnect();
+                    console.log("Disconnected from signaling server. Attempting recovery...");
+
+                    // Prevenzione crash: se il peer è già distrutto, non possiamo usare reconnect().
+                    // Dobbiamo reinizializzare l'intero oggetto Peer.
+                    if (peer.destroyed) {
+                        console.log("Peer object destroyed. Re-initializing entirely...");
+                        setTimeout(() => initPeer(), 2000); // Ritardo di sicurezza
+                    } else {
+                        peer.reconnect();
+                    }
+                });
+
+                peer.on('error', (err) => {
+                    console.error("PeerJS Global Error:", err.type, err.message);
+                    // Se l'ID è già preso o il peer è distrutto, forziamo un reset pulito
+                    if (err.type === 'unavailable-id' || err.type === 'server-error' || peer.destroyed) {
+                        console.warn("Attempting full Peer reset due to error...");
+                        if (peer && !peer.destroyed) peer.destroy();
+                        setTimeout(() => initPeer(), 3000);
+                    }
                 });
                 console.log("[SYSTEM] Paintball Manager v1.8.1-Robust - INIZIALIZZAZIONE...");
 
@@ -3544,7 +3570,7 @@
                     rotateMatch(false); // false = NO swap side
                 } else {
                     // Manual mode: just start a new interval
-                    startInter('single_slot');
+                    startInter('point');
                 }
             }
 
@@ -3963,7 +3989,7 @@
                         // Peer is done. We become Single Slot.
                         log("PEER MATCH TERMINATO -> STANDARD ROTATION (Single Mode)");
                         if (swapSide) state.basesSwapped = !state.basesSwapped;
-                        startInter('single_slot');
+                        startInter('point');
                     } else {
                         log(`ROTAZIONE SLOT: Match ${currIdx + 1} -> Match ${nextSlotIdx + 1}`);
                         loadMatch(nextSlotIdx, true);
@@ -3976,7 +4002,7 @@
                     } else {
                         log("ROTAZIONE NO-POINT -> MANTENIMENTO LATI");
                     }
-                    startInter('single_slot');
+                    startInter('point');
                 }
             }
 
