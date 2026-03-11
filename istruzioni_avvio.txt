@@ -1,0 +1,59 @@
+====================================================
+GUIDA ALL'AVVIO - PAINTBALL MANAGER (SISTEMA LOCALE)
+====================================================
+
+Per avviare il sistema con la nuova configurazione ultra-rapida e senza blocchi (Server Locale), segui questi passaggi nell'ordine esatto:
+
+FASE 1: AVVIARE IL SERVER LOCALE (FONDAMENTALE)
+-----------------------------------------------
+1. Apri il Prompt dei Comandi (cmd) o Powershell.
+2. Digita il comando per avviare il server PeerJS locale:
+   peerjs --port 9000 --key peerjs --path /
+   
+   (Se hai uno script o un file .bat apposito per avviare "Local PeerJS", avvia semplicemente quello).
+   Assicurati che rimanga aperto in background per tutta la durata del torneo. Se questa finestra viene chiusa, gli schermi locali si scollegheranno.
+
+
+FASE 2: AVVIARE LA REGIA (INDEX.HTML)
+-----------------------------------------------
+1. Apri il file "index.html" (Pannello di Controllo/Regia) sul computer principale.
+2. Noterai una nuova spunta "CLOUD" accanto al campo MATCH ID:
+   
+   [ ] CLOUD (Deselzionato) -> Usa il SERVER LOCALE (Consigliato per la stabilità, latenza zero)
+   [x] CLOUD (Selezionato)  -> Usa il SERVER GLOBALE (Da usare SOLO se devi far connettere "board.html" da un'altra rete/internet)
+
+3. Per l'uso standard (Ledwall, Arbitri, Pit, Streaming su vMix/OBS locale): 
+   LASCIA LA SPUNTA "CLOUD" DESELEZIONATA.
+
+4. Inserisci il tuo Match ID (es. 1234) e clicca "CONNETTI". 
+   (Dovrebbe connettersi istantaneamente e l'ID diventerà verde).
+
+
+FASE 3: APRIRE GLI SCHERMI SECONDARI
+-----------------------------------------------
+Ora che la Regia è connessa in locale, puoi aprire tutti gli altri schermi sugli altri dispositivi/monitor connessi alla stessa rete WiFi/LAN:
+
+- referee.html (Arbitro)
+- pit.html (Pit)
+- control.html
+- streaming.html (Streaming principale)
+- ledwall.html (Ledwall fisico)
+- vmix_bg.html (Sfondo vMix)
+- obs_bar.html (Barra OBS)
+
+COSA FARE SUGLI SCHERMI SECONDARI:
+1. Aprilo.
+2. Se non si connette in automatico, inserisci lo STESSO Match ID che hai messo nella Regia.
+3. Clicca "CONNETTI". 
+
+Nota bene: questi schermi sono stati modificati per cercare SOLO il server locale sulla porta 9000. Non si scollegheranno più e non soffriranno di ban da parte di PeerJS.
+
+
+CASO SPECIALE: LA BOARD PUBBLICA (board.html)
+-----------------------------------------------
+Se hai bisogno che il pubblico da casa (su reti diverse) veda i risultati tramite "board.html":
+1. Sulla Regia (index.html), metti la spunta su "CLOUD". La regia cambierà server e si connetterà a quello globale.
+2. Invia il link di "board.html" a chi deve vederlo da fuori.
+
+ATTENZIONE: Se attivi la spunta "CLOUD", la regia si scollega dal server locale per mandare i dati su internet. Gli schermi locali (referee, pit, ledwall) potrebbero non ricevere più aggiornamenti, a meno che non implementiamo una doppia trasmissione (che attualmente non è attiva per evitare sovraccarichi). 
+Si consiglia di usare il sistema interamente in LOCALE (Spunta Cloud spenta) per le vere competizioni dal vivo per garantire la massima prestazione senza lag.

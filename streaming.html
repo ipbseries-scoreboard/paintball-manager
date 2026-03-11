@@ -1699,17 +1699,19 @@
             if (btn) btn.innerText = "CONNESSIONE...";
 
             try {
-                const customIceConfig = {
+                const peerOptions = {
+                    secure: false, // Localhost usually isn't HTTPS
+                    host: 'localhost',
+                    port: 9000,
+                    path: '/',
                     config: {
                         'iceServers': [
                             { urls: 'stun:stun.l.google.com:19302' },
-                            { urls: 'stun:stun.relay.metered.ca:80' },
-                            { urls: 'turn:global.relay.metered.ca:80', username: 'fe841146f64ad98d3f631f65', credential: '1RWiOOZ7GOYCgcBw' },
-                            { urls: 'turn:global.relay.metered.ca:443', username: 'fe841146f64ad98d3f631f65', credential: '1RWiOOZ7GOYCgcBw' }
+                            { urls: 'stun:stun.relay.metered.ca:80' }
                         ]
                     }
                 };
-                const peer = new Peer(customIceConfig);
+                const peer = new Peer(peerOptions);
 
                 peer.on('error', (err) => {
                     console.error("PeerJS Error:", err);

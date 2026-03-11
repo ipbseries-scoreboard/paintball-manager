@@ -2173,6 +2173,8 @@
             // PEERJS & LOCAL SYNC LOGIC --------------------
             let peer = null;
             let connections = []; // Support multiple viewers
+            let pingInterval = null;
+            let reconnectTimeout = null;
             const syncChannel = new BroadcastChannel('pm_sync');
 
             // Listen for remote commands from local tabs (Forward to handler)
@@ -2182,7 +2184,17 @@
                 }
             };
 
+            function scheduleReconnect(delay) {
+                if (reconnectTimeout) clearTimeout(reconnectTimeout);
+                reconnectTimeout = setTimeout(() => {
+                    initPeer();
+                }, delay);
+            }
+
             function initPeer() {
+                if (reconnectTimeout) clearTimeout(reconnectTimeout);
+                if (pingInterval) clearInterval(pingInterval);
+
                 // Persistent ID logic
                 let targetId = state.settings.matchId;
 
@@ -2208,9 +2220,25 @@
                             { urls: 'stun:stun3.l.google.com:19302' },
                             { urls: 'stun:stun4.l.google.com:19302' },
                             { urls: 'stun:stun.relay.metered.ca:80' }
-                            // Removed expired TURN credentials to rely on STUN and avoid auth errors
                         ]
                     },
+                    debug: 1
+                };
+
+                // Check Cloud Toggle for Server Target
+                const useCloud = document.getElementById('cloud-sync-toggle').checked;
+                const peerOptions = useCloud ? {
+                    secure: true,
+                    host: '0.peerjs.com',
+                    port: 443,
+                    config: customIceConfig.config,
+                    debug: 1
+                } : {
+                    secure: false, // Localhost usually isn't HTTPS
+                    host: 'localhost',
+                    port: 9000,
+                    path: '/',
+                    config: customIceConfig.config,
                     debug: 1
                 };
 
@@ -2219,26 +2247,28 @@
                     peerIdDisplay.onclick = () => {
                         if (confirm("Riavviare la connessione di rete?")) {
                             if (peer && !peer.destroyed) peer.destroy();
-                            setTimeout(() => initPeer(), 500);
+                            scheduleReconnect(500);
                         }
                     };
                     peerIdDisplay.title = "Clicca per riavviare la rete";
                     peerIdDisplay.style.cursor = "pointer";
                 }
 
-                peer = new Peer(targetId, customIceConfig);
+                peer = new Peer(targetId, peerOptions);
 
                 // Auto-Reconnect if disconnected from PeerServer
                 peer.on('disconnected', () => {
                     console.log("Disconnected from signaling server. Attempting recovery...");
-
-                    // Prevenzione crash: se il peer è già distrutto, non possiamo usare reconnect().
-                    // Dobbiamo reinizializzare l'intero oggetto Peer.
                     if (peer.destroyed) {
                         console.log("Peer object destroyed. Re-initializing entirely...");
-                        setTimeout(() => initPeer(), 2000); // Ritardo di sicurezza
+                        scheduleReconnect(2000);
                     } else {
-                        peer.reconnect();
+                        // Prevent tight reconnect loops for transient errors
+                        setTimeout(() => {
+                            if (peer && !peer.destroyed && peer.disconnected) {
+                                peer.reconnect();
+                            }
+                        }, 2000);
                     }
                 });
 
@@ -2255,20 +2285,45 @@
                         }
                         if (peer && !peer.destroyed) peer.destroy();
                         state.settings.matchId = newId;
-                        setTimeout(() => initPeer(), 2000);
+                        scheduleReconnect(2000);
                     } else if (err.type === 'server-error' || peer.destroyed) {
                         if (display) {
-                            display.innerText = "ERRORE SERVER";
+                            display.innerText = "BAN SERVER - CAMBIA ID";
+                            display.style.fontSize = "0.7em";
                             display.style.color = 'var(--danger-color)';
                         }
-                        console.warn("Attempting full Peer reset due to error...");
+                        console.warn("Attempting full Peer reset due to server error (possible IP/ID Ban)...");
+                        
+                        // Fallback ID Strategy to bypass ban
+                        if (!targetId.includes("-FB-")) {
+                            const newFallbackId = targetId + "-FB-" + Math.floor(Math.random() * 99);
+                            state.settings.matchId = newFallbackId;
+                            console.warn("Generating fallback ID:", newFallbackId);
+                        }
+
                         if (peer && !peer.destroyed) peer.destroy();
-                        setTimeout(() => initPeer(), 5000);
+                        scheduleReconnect(8000); // 8s delay to avoid hammering banned server
                     } else if (err.type === 'network') {
-                        if (display) display.innerText = "ERRORE RETE";
+                        if (display) {
+                            display.innerText = "ERRORE RETE";
+                            display.style.color = 'var(--danger-color)';
+                        }
+                        console.warn("Network error detected. Retrying in 5s...");
+                        if (peer && !peer.destroyed) peer.destroy();
+                        scheduleReconnect(5000);
+                    } else if (err.type === 'peer-unavailable') {
+                         console.warn("Target peer not found. Ignoring as it's a connection time issue.");
+                    } else if (err.type === 'browser-incompatible') {
+                         if (display) display.innerText = "BROWSER NON COMPATIBILE";
+                    } else {
+                        // For generic errors, try a slow retry
+                        console.warn("Unhandled PeerJS error. Slow retry...");
+                        if (peer && !peer.destroyed) peer.destroy();
+                        scheduleReconnect(8000);
                     }
                 });
-                console.log("[SYSTEM] Paintball Manager v1.8.1-Robust - INIZIALIZZAZIONE...");
+
+                console.log("[SYSTEM] Paintball Manager v1.8.2-Robust - INIZIALIZZAZIONE...");
 
                 peer.on('open', (id) => {
                     if (!id) {
@@ -2276,6 +2331,8 @@
                         document.getElementById('my-peer-id').innerText = "ERRORE ID";
                         return;
                     }
+                    if (reconnectTimeout) clearTimeout(reconnectTimeout);
+                    
                     // Show only the numeric part to the user
                     const displayId = id.replace("IPBA-" + "", "");
                     document.getElementById('my-peer-id').innerText = displayId;
@@ -2284,7 +2341,6 @@
                 });
 
                 peer.on('connection', (conn) => {
-                    // Silenced: log("Nuova connessione da: " + conn.peer);
                     connections.push(conn);
                     updateConnectionCount();
 
@@ -2314,8 +2370,8 @@
                     });
                 });
 
-                // Start Ping Interval
-                setInterval(sendPings, 5000);
+                // Start Ping Interval safely
+                pingInterval = setInterval(sendPings, 5000);
             }
 
             let connHealth = {}; // { peerId: { latencies: [], lastSeen: ts, type: 'referee'/'board'/etc } }
@@ -4823,6 +4879,26 @@
             state.gameTimeRemaining = CONFIG.gameTime;
             // Auto-Init
             console.log("Auto-initializing...");
+            
+            // Load Cloud Preference
+            const savedCloudPref = localStorage.getItem('pm_use_cloud');
+            if (savedCloudPref !== null) {
+                document.getElementById('cloud-sync-toggle').checked = savedCloudPref === 'true';
+            } else {
+                // Default to Local network for stability if using physical venue
+                document.getElementById('cloud-sync-toggle').checked = false;
+            }
+
+            document.getElementById('cloud-sync-toggle').addEventListener('change', (e) => {
+                const isCloud = e.target.checked;
+                localStorage.setItem('pm_use_cloud', isCloud);
+                log(`Rete cambiata in modalità: ${isCloud ? 'CLOUD (Pubblica)' : 'LOCALE (Privata)'}`);
+                if (peer) {
+                    peer.destroy();
+                }
+                scheduleReconnect(500);
+            });
+
             populateVoiceList();
             initPeer();
             loadTournamentState(); // Load persistent tournament
