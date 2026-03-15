@@ -5053,9 +5053,8 @@
                 const isCloud = e.target.checked;
                 localStorage.setItem('pm_use_cloud', isCloud);
                 log(`Rete cambiata in modalità: ${isCloud ? 'CLOUD (Pubblica)' : 'LOCALE (Privata)'}`);
-                if (peer) {
-                    peer.destroy();
-                }
+                if (peerLocal && !peerLocal.destroyed) peerLocal.destroy();
+                if (peerCloud && !peerCloud.destroyed) peerCloud.destroy();
                 scheduleReconnect(500);
             });
 
@@ -5204,10 +5203,8 @@
                         log(`MATCH ID AGGIORNATO: ${newMatchId}. Riconnessione in corso...`);
                         
                         // Re-init Peer without reload
-                        if (peer) {
-                            peer.destroy();
-                            peer = null;
-                        }
+                        if (peerLocal && !peerLocal.destroyed) peerLocal.destroy();
+                        if (peerCloud && !peerCloud.destroyed) peerCloud.destroy();
                         initPeer();
                     }
 
