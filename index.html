@@ -938,6 +938,7 @@
         <div id="top-bar">
             NEXT: <span id="tb-teams" style="color: white; margin-left: 10px;">-- vs --</span>
             <span id="tb-score" class="tb-live-score" style="display:none;">0 - 0</span>
+            <span id="conn-count" style="margin-left: auto; margin-right: 20px; font-size: 0.8rem; color: #94a3b8; font-weight: bold;">Connessi: 0</span>
         </div>
         <script>
             window.onerror = function (msg, url, line, col, error) {
@@ -1324,8 +1325,8 @@
 
                 <div
                     style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-top: 15px; border-top: 1px solid #334155; margin-top: auto;">
-                    <button class="btn btn-danger" id="btn-reset-tournament"
-                        style="background: #991b1b; border-color: #7f1d1d; color: white;">🗑️ RESET DATI TORNEO</button>
+                    <button class="btn btn-danger" id="btn-reset-tournament" onclick="clearEntireTournament()"
+                        style="background: #991b1b; border-color: #7f1d1d; color: white;">🗑️ AZZERA INTERO TORNEO</button>
                     <div style="display: flex; gap: 10px;">
                         <button class="btn" style="border-color: #64748b; color: #94a3b8;"
                             onclick="document.getElementById('settings-modal').style.display='none'">Annulla</button>
@@ -2447,8 +2448,9 @@
             function updateConnectionCount() {
                 const el = document.getElementById('conn-count');
                 if (el) {
-                    el.innerText = `(${connections.length})`;
-                    el.style.color = connections.length > 10 ? 'var(--danger-color)' : '#94a3b8';
+                    const count = connections.length;
+                    el.innerText = `Connessi: ${count}`;
+                    el.style.color = count > 0 ? '#22c55e' : '#94a3b8';
                 }
             }
             function showQRCode(type = 'spectator') {
@@ -3670,6 +3672,96 @@
                 }
             }
 
+            function addQuickMatch() {
+                const newTeamA = prompt(`Inserisci Nome Squadra A:`, 'A');
+                if (!newTeamA) return;
+                const newTeamB = prompt(`Inserisci Nome Squadra B:`, 'B');
+                if (!newTeamB) return;
+                let newTime = prompt(`Inserisci Orario Partita (es. 14:30):`, '00:00');
+                if (!newTime) newTime = '00:00';
+
+                state.tournament.matches.push({
+                    time: newTime,
+                    teamA: newTeamA.trim(),
+                    teamB: newTeamB.trim(),
+                    phase: 'GIRONI',
+                    field: 'Campo 1'
+                });
+
+                log(`PROGRAMMA AGGIUNTA: Nuovo Match inserito in fondo (${newTeamA.trim()} vs ${newTeamB.trim()})`);
+                
+                // If it's the very first match added to an empty tournament
+                if (state.tournament.matches.length === 1 && !state.tournament.active) {
+                    state.tournament.active = true;
+                    loadMatch(0);
+                } else {
+                    render();
+                }
+            }
+
+            function removeMatch(idx) {
+                if (idx < 0 || idx >= state.tournament.matches.length) return;
+                const m = state.tournament.matches[idx];
+                
+                if (confirm(`Sei sicuro di voler RIMUOVERE il Match ${idx + 1} (${m.teamA} vs ${m.teamB}) dal programma?`)) {
+                    state.tournament.matches.splice(idx, 1);
+                    log(`PROGRAMMA RIMOSSO: Match ${idx + 1} (${m.teamA} vs ${m.teamB}) eliminato dal torneo.`);
+
+                    // Logic if removing active or previous matches
+                    if (state.tournament.active) {
+                        if (idx < state.tournament.currentIndex) {
+                            // Shift current index back to point to the same match
+                            state.tournament.currentIndex--;
+                            render();
+                        } else if (idx === state.tournament.currentIndex) {
+                            // Removing the currently active match!
+                            state.tournament.currentIndex = -1;
+                            state.tournament.active = false;
+                            resetAll(false);
+                            log(`ATTENZIONE: Rimosso il match attualmente in corso. Torneo in attesa.`);
+                            
+                            // Try to load the matching index (which is now the next match) if it exists
+                            if (state.tournament.matches.length > idx) {
+                                loadMatch(idx);
+                            } else if (state.tournament.matches.length > 0) {
+                                // Or at least the previous one if it was the last
+                                loadMatch(state.tournament.matches.length - 1);
+                            } else {
+                                state.teams.A.name = "";
+                                state.teams.B.name = "";
+                                render();
+                            }
+                        } else {
+                            render();
+                        }
+                    } else {
+                        render();
+                    }
+                }
+            }
+
+            function clearEntireTournament() {
+                if (confirm(`⚠ SEI SICURO? ⚠\nQuesta opzione CANCELLERÀ TUTTE LE PARTITE IN PROGRAMMA E I PUNTEGGI DI QUESTO TORNEO!`)) {
+                    if (confirm(`ULTIMO AVVISO!\nVuoi procedere all'azzeramento completo del pannello PROGRAMMA? (Azione irreversibile)`)) {
+                        state.tournament.matches = [];
+                        state.tournament.active = false;
+                        state.tournament.currentIndex = -1;
+                        state.tournament.name = "";
+                        state.tournament.delay = 0;
+                        
+                        resetAll(false);
+                        state.teams.A.name = "";
+                        state.teams.B.name = "";
+                        
+                        document.getElementById('tourney-name').value = "";
+                        document.getElementById('tournament-input').value = "";
+                        
+                        log(`⚠ TORNEO COMPLETAMENTE AZZERATO ⚠`);
+                        render();
+                    }
+                }
+            }
+
             function handleNoPoint() {
                 // Remote command or local button: proceed with standard rotation WITHOUT swapping sides
                 speak("Nessun Punto. Nessun Punto.", "No Point. No Point.");
@@ -4378,7 +4470,10 @@
                                 <div class="si-time">${m.time || '--:--'} - ${m.phase || 'GIRONI'}</div>
                                 <div class="si-teams" style="display: flex; justify-content: space-between; align-items: center;">
                                     <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 85%;">${m.teamA} vs ${m.teamB}</span>
-                                    <button class="btn btn-warning" style="padding: 2px 6px; font-size: 0.8rem; border-radius: 4px; margin-left: 5px; cursor: pointer;" onclick="event.stopPropagation(); editMatchTeams(${idx})" title="Modifica Squadre">✏️</button>
+                                    <div>
+                                        <button class="btn btn-warning" style="padding: 2px 6px; font-size: 0.8rem; border-radius: 4px; cursor: pointer;" onclick="event.stopPropagation(); editMatchTeams(${idx})" title="Modifica Squadre">✏️</button>
+                                        <button class="btn btn-danger" style="padding: 2px 6px; font-size: 0.8rem; border-radius: 4px; margin-left: 2px; cursor: pointer;" onclick="event.stopPropagation(); removeMatch(${idx})" title="Rimuovi Slot">🗑️</button>
+                                    </div>
                                 </div>
                                 <div class="si-info">${m.field || 'Campo 1'}</div>
                             `;
@@ -4389,6 +4484,19 @@
                             };
                             list.appendChild(item);
                         });
+
+                        // Add bottom button for quick match creation
+                        const addBtn = document.createElement('button');
+                        addBtn.className = "btn";
+                        addBtn.style.marginTop = "10px";
+                        addBtn.style.background = "var(--primary-color)";
+                        addBtn.style.width = "100%";
+                        addBtn.innerText = "+ AGGIUNGI MATCH";
+                        addBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            addQuickMatch();
+                        };
+                        list.appendChild(addBtn);
 
                         // Update Delay Status
                         const delayEl = document.getElementById('schedule-delay-status');
