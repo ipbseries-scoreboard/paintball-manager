@@ -2466,13 +2466,16 @@
 
                 const baseDir = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
                 let targetUrl = "";
+                
+                const useCloud = document.getElementById('cloud-sync-toggle').checked;
+                const localParam = useCloud ? "&local=0" : "&local=1";
 
                 if (type === 'referee') {
                     qrTitle.innerText = "QR Code Arbitro";
-                    targetUrl = baseDir + "referee.html?id=" + peerId + "&v=" + Date.now();
+                    targetUrl = baseDir + "referee.html?id=" + peerId + localParam + "&v=" + Date.now();
                 } else {
                     qrTitle.innerText = "QR Code Spettatore";
-                    targetUrl = baseDir + "board.html?id=" + peerId + "&v=" + Date.now();
+                    targetUrl = baseDir + "board.html?id=" + peerId + localParam + "&v=" + Date.now();
                 }
 
                 document.getElementById('qr-url').innerText = targetUrl;

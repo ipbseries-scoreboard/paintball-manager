@@ -1793,6 +1793,9 @@
             if (btn) btn.innerText = "CONNESSIONE...";
 
             try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const isLocal = urlParams.get('local') === '1';
+
                 const customIceConfig = {
                     config: {
                         'iceServers': [
@@ -1803,7 +1806,19 @@
                         ]
                     }
                 };
-                const peer = new Peer(customIceConfig);
+
+                let peerOptions = customIceConfig;
+                if (isLocal) {
+                    peerOptions = {
+                        secure: false, // Localhost / Local IP usually isn't HTTPS
+                        host: window.location.hostname || 'localhost',
+                        port: 9000,
+                        path: '/',
+                        config: customIceConfig.config
+                    };
+                }
+
+                const peer = new Peer(peerOptions);
 
                 peer.on('error', (err) => {
                     console.error("PeerJS Error:", err);
