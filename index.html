@@ -1,3 +1,4 @@
+<!-- DUAL BRIDGE PEERJS ENABLED -->
 <!DOCTYPE html>
 <html lang="it">
 
@@ -2172,7 +2173,8 @@
             }
 
             // PEERJS & LOCAL SYNC LOGIC --------------------
-            let peer = null;
+            let peerLocal = null;
+            let peerCloud = null;
             let connections = []; // Support multiple viewers
             let pingInterval = null;
             let reconnectTimeout = null;
@@ -2190,6 +2192,127 @@
                 reconnectTimeout = setTimeout(() => {
                     initPeer();
                 }, delay);
+            }
+
+            function bindPeer(p, tag, targetId) {
+                // Auto-Reconnect if disconnected from PeerServer
+                p.on('disconnected', () => {
+                    console.log(`[${tag}] Disconnected from signaling server. Attempting recovery...`);
+                    if (p.destroyed) {
+                        console.log(`[${tag}] Peer object destroyed. Re-initializing entirely...`);
+                        scheduleReconnect(2000);
+                    } else {
+                        // Prevent tight reconnect loops for transient errors
+                        setTimeout(() => {
+                            if (p && !p.destroyed && p.disconnected) {
+                                p.reconnect();
+                            }
+                        }, 2000);
+                    }
+                });
+
+                p.on('error', (err) => {
+                    console.error(`[${tag}] PeerJS Global Error:`, err.type, err.message);
+                    const display = document.getElementById('my-peer-id');
+                    
+                    if (err.type === 'unavailable-id') {
+                        const newId = targetId + "-" + Math.floor(Math.random() * 1000);
+                        console.warn(`[${tag}] ID ${targetId} occupato. Provo con ${newId}...`);
+                        if (display) {
+                            display.innerText = "ID OCCUPATO...";
+                            display.style.color = 'var(--danger-color)';
+                        }
+                        if (peerLocal && !peerLocal.destroyed) peerLocal.destroy();
+                        if (peerCloud && !peerCloud.destroyed) peerCloud.destroy();
+                        state.settings.matchId = newId;
+                        scheduleReconnect(2000);
+                    } else if (err.type === 'server-error' || p.destroyed) {
+                        if (display) {
+                            display.innerText = "BAN SERVER - CAMBIA ID";
+                            display.style.fontSize = "0.7em";
+                            display.style.color = 'var(--danger-color)';
+                        }
+                        console.warn(`[${tag}] Attempting full Peer reset due to server error (possible IP/ID Ban)...`);
+                        
+                        // Fallback ID Strategy to bypass ban
+                        if (!targetId.includes("-FB-")) {
+                            const newFallbackId = targetId + "-FB-" + Math.floor(Math.random() * 99);
+                            state.settings.matchId = newFallbackId;
+                            console.warn(`[${tag}] Generating fallback ID:`, newFallbackId);
+                        }
+
+                        if (peerLocal && !peerLocal.destroyed) peerLocal.destroy();
+                        if (peerCloud && !peerCloud.destroyed) peerCloud.destroy();
+                        scheduleReconnect(8000); // 8s delay to avoid hammering banned server
+                    } else if (err.type === 'network') {
+                        if (display && tag === 'CLOUD') {
+                            display.innerText = "ERRORE RETE CLOUD";
+                            display.style.color = 'var(--danger-color)';
+                        }
+                        console.warn(`[${tag}] Network error detected. Retrying in 5s...`);
+                        if (p && !p.destroyed) p.destroy();
+                        // Only schedule full reconnect if it's the local that failed, cloud can be restarted independently later maybe.
+                        scheduleReconnect(5000);
+                    } else if (err.type === 'peer-unavailable') {
+                         console.warn(`[${tag}] Target peer not found. Ignoring as it's a connection time issue.`);
+                    } else if (err.type === 'browser-incompatible') {
+                         if (display) display.innerText = "BROWSER NON COMPATIBILE";
+                    } else {
+                        // For generic errors, try a slow retry
+                        console.warn(`[${tag}] Unhandled PeerJS error. Slow retry...`);
+                        if (p && !p.destroyed) p.destroy();
+                        scheduleReconnect(8000);
+                    }
+                });
+
+                p.on('open', (id) => {
+                    if (!id) {
+                        console.error(`[${tag}] PeerJS open event fired but ID is undefined`);
+                        if (tag === 'LOCAL') document.getElementById('my-peer-id').innerText = "ERRORE ID";
+                        return;
+                    }
+                    if (reconnectTimeout) clearTimeout(reconnectTimeout);
+                    
+                    // Show only the numeric part to the user, based on the reliable local connection main ID.
+                    if (tag === 'LOCAL') {
+                        const displayId = id.replace("IPBA-" + "", "");
+                        document.getElementById('my-peer-id').innerText = displayId;
+                        document.getElementById('my-peer-id').style.color = 'var(--success-color)';
+                        log("Rete " + tag + " pronta. ID: " + displayId);
+                    } else {
+                        log("Rete " + tag + " pronta al Sync.");
+                    }
+                });
+
+                p.on('connection', (conn) => {
+                    connections.push(conn);
+                    updateConnectionCount();
+
+                    // Send immediate state
+                    const sendInitialState = () => {
+                        broadcastState(true); // Force full sync for new client
+                    };
+
+                    if (conn.open) {
+                        sendInitialState();
+                    } else {
+                        conn.on('open', sendInitialState);
+                    }
+
+                    conn.on('data', (data) => {
+                        if (data && data.type === 'PONG') {
+                            handlePong(conn.peer, data.ts);
+                        } else {
+                            handleRemoteCommand(data);
+                        }
+                    });
+                    conn.on('close', () => {
+                        connections = connections.filter(c => c !== conn);
+                        delete connHealth[conn.peer];
+                        updateConnectionCount();
+                        updateConnectionMonitorUI();
+                    });
+                });
             }
 
             function initPeer() {
@@ -2226,15 +2349,15 @@
                     debug: 1
                 };
 
-                // Check Cloud Toggle for Server Target
-                const useCloud = document.getElementById('cloud-sync-toggle').checked;
-                const peerOptions = useCloud ? {
+                // PREPARE OPTIONS
+                const cloudOptions = {
                     secure: true,
                     host: '0.peerjs.com',
                     port: 443,
                     config: customIceConfig.config,
                     debug: 1
-                } : {
+                };
+                const localOptions = {
                     secure: false, // Localhost usually isn't HTTPS
                     host: 'localhost',
                     port: 9000,
@@ -2246,8 +2369,9 @@
                 const peerIdDisplay = document.getElementById('my-peer-id');
                 if (peerIdDisplay) {
                     peerIdDisplay.onclick = () => {
-                        if (confirm("Riavviare la connessione di rete?")) {
-                            if (peer && !peer.destroyed) peer.destroy();
+                        if (confirm("Riavviare la connessione di rete (locale e cloud)?")) {
+                            if (peerLocal && !peerLocal.destroyed) peerLocal.destroy();
+                            if (peerCloud && !peerCloud.destroyed) peerCloud.destroy();
                             scheduleReconnect(500);
                         }
                     };
@@ -2255,121 +2379,18 @@
                     peerIdDisplay.style.cursor = "pointer";
                 }
 
-                peer = new Peer(targetId, peerOptions);
+                // ALWAYS BOOT LOCAL PEER
+                peerLocal = new Peer(targetId, localOptions);
+                bindPeer(peerLocal, 'LOCAL', targetId);
 
-                // Auto-Reconnect if disconnected from PeerServer
-                peer.on('disconnected', () => {
-                    console.log("Disconnected from signaling server. Attempting recovery...");
-                    if (peer.destroyed) {
-                        console.log("Peer object destroyed. Re-initializing entirely...");
-                        scheduleReconnect(2000);
-                    } else {
-                        // Prevent tight reconnect loops for transient errors
-                        setTimeout(() => {
-                            if (peer && !peer.destroyed && peer.disconnected) {
-                                peer.reconnect();
-                            }
-                        }, 2000);
-                    }
-                });
+                // BOOT CLOUD PEER IF ENABLED
+                const useCloud = document.getElementById('cloud-sync-toggle').checked;
+                if (useCloud) {
+                    peerCloud = new Peer(targetId, cloudOptions);
+                    bindPeer(peerCloud, 'CLOUD', targetId);
+                }
 
-                peer.on('error', (err) => {
-                    console.error("PeerJS Global Error:", err.type, err.message);
-                    const display = document.getElementById('my-peer-id');
-                    
-                    if (err.type === 'unavailable-id') {
-                        const newId = targetId + "-" + Math.floor(Math.random() * 1000);
-                        console.warn(`ID ${targetId} occupato. Provo con ${newId}...`);
-                        if (display) {
-                            display.innerText = "ID OCCUPATO...";
-                            display.style.color = 'var(--danger-color)';
-                        }
-                        if (peer && !peer.destroyed) peer.destroy();
-                        state.settings.matchId = newId;
-                        scheduleReconnect(2000);
-                    } else if (err.type === 'server-error' || peer.destroyed) {
-                        if (display) {
-                            display.innerText = "BAN SERVER - CAMBIA ID";
-                            display.style.fontSize = "0.7em";
-                            display.style.color = 'var(--danger-color)';
-                        }
-                        console.warn("Attempting full Peer reset due to server error (possible IP/ID Ban)...");
-                        
-                        // Fallback ID Strategy to bypass ban
-                        if (!targetId.includes("-FB-")) {
-                            const newFallbackId = targetId + "-FB-" + Math.floor(Math.random() * 99);
-                            state.settings.matchId = newFallbackId;
-                            console.warn("Generating fallback ID:", newFallbackId);
-                        }
-
-                        if (peer && !peer.destroyed) peer.destroy();
-                        scheduleReconnect(8000); // 8s delay to avoid hammering banned server
-                    } else if (err.type === 'network') {
-                        if (display) {
-                            display.innerText = "ERRORE RETE";
-                            display.style.color = 'var(--danger-color)';
-                        }
-                        console.warn("Network error detected. Retrying in 5s...");
-                        if (peer && !peer.destroyed) peer.destroy();
-                        scheduleReconnect(5000);
-                    } else if (err.type === 'peer-unavailable') {
-                         console.warn("Target peer not found. Ignoring as it's a connection time issue.");
-                    } else if (err.type === 'browser-incompatible') {
-                         if (display) display.innerText = "BROWSER NON COMPATIBILE";
-                    } else {
-                        // For generic errors, try a slow retry
-                        console.warn("Unhandled PeerJS error. Slow retry...");
-                        if (peer && !peer.destroyed) peer.destroy();
-                        scheduleReconnect(8000);
-                    }
-                });
-
-                console.log("[SYSTEM] Paintball Manager v1.8.2-Robust - INIZIALIZZAZIONE...");
-
-                peer.on('open', (id) => {
-                    if (!id) {
-                        console.error("PeerJS open event fired but ID is undefined");
-                        document.getElementById('my-peer-id').innerText = "ERRORE ID";
-                        return;
-                    }
-                    if (reconnectTimeout) clearTimeout(reconnectTimeout);
-                    
-                    // Show only the numeric part to the user
-                    const displayId = id.replace("IPBA-" + "", "");
-                    document.getElementById('my-peer-id').innerText = displayId;
-                    document.getElementById('my-peer-id').style.color = 'var(--success-color)';
-                    log("Rete pronta. ID: " + displayId);
-                });
-
-                peer.on('connection', (conn) => {
-                    connections.push(conn);
-                    updateConnectionCount();
-
-                    // Send immediate state
-                    const sendInitialState = () => {
-                        broadcastState(true); // Force full sync for new client
-                    };
-
-                    if (conn.open) {
-                        sendInitialState();
-                    } else {
-                        conn.on('open', sendInitialState);
-                    }
-
-                    conn.on('data', (data) => {
-                        if (data && data.type === 'PONG') {
-                            handlePong(conn.peer, data.ts);
-                        } else {
-                            handleRemoteCommand(data);
-                        }
-                    });
-                    conn.on('close', () => {
-                        connections = connections.filter(c => c !== conn);
-                        delete connHealth[conn.peer];
-                        updateConnectionCount();
-                        updateConnectionMonitorUI();
-                    });
-                });
+                console.log("[SYSTEM] Paintball Manager v1.8.2-Robust - INIZIALIZZAZIONE DUAL-BRIDGE...");
 
                 // Start Ping Interval safely
                 pingInterval = setInterval(sendPings, 5000);
@@ -2458,7 +2479,7 @@
                 const qrTitle = document.getElementById('qr-title');
                 qrMain.innerHTML = '';
 
-                let peerId = (peer && peer.id) ? peer.id : document.getElementById('my-peer-id').innerText;
+                let peerId = (peerLocal && peerLocal.id) ? peerLocal.id : document.getElementById('my-peer-id').innerText;
                 if (!peerId || peerId === "undefined" || peerId === "Generazione...") {
                     alert("Errore: Match ID non pronto.");
                     return;
