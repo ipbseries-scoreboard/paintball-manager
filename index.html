@@ -3645,6 +3645,31 @@
                 render(); // To populate list
             }
 
+            function editMatchTeams(idx) {
+                if (idx < 0 || idx >= state.tournament.matches.length) return;
+                const m = state.tournament.matches[idx];
+                const newTeamA = prompt(`Modifica Squadra A (Match ${idx + 1}):`, m.teamA);
+                if (newTeamA === null) return;
+                const newTeamB = prompt(`Modifica Squadra B (Match ${idx + 1}):`, m.teamB);
+                if (newTeamB === null) return;
+
+                const oldA = m.teamA;
+                const oldB = m.teamB;
+                m.teamA = newTeamA.trim() || oldA;
+                m.teamB = newTeamB.trim() || oldB;
+                
+                if (oldA !== m.teamA || oldB !== m.teamB) {
+                    log(`PROGRAMMA EDIT: Match ${idx + 1} (${oldA} vs ${oldB}) -> (${m.teamA} vs ${m.teamB})`);
+                    
+                    // Update loaded teams names directly if we edited the active match
+                    if (state.tournament.currentIndex === idx) {
+                        state.teams.A.name = m.teamA;
+                        state.teams.B.name = m.teamB;
+                    }
+                    render();
+                }
+            }
+
             function handleNoPoint() {
                 // Remote command or local button: proceed with standard rotation WITHOUT swapping sides
                 speak("Nessun Punto. Nessun Punto.", "No Point. No Point.");
@@ -4072,7 +4097,7 @@
                         // Peer is done. We become Single Slot.
                         log("PEER MATCH TERMINATO -> STANDARD ROTATION (Single Mode)");
                         if (swapSide) state.basesSwapped = !state.basesSwapped;
-                        startInter('point');
+                        startInter('single_slot');
                     } else {
                         log(`ROTAZIONE SLOT: Match ${currIdx + 1} -> Match ${nextSlotIdx + 1}`);
                         loadMatch(nextSlotIdx, true);
@@ -4085,7 +4110,7 @@
                     } else {
                         log("ROTAZIONE NO-POINT -> MANTENIMENTO LATI");
                     }
-                    startInter('point');
+                    startInter('single_slot');
                 }
             }
 
@@ -4351,7 +4376,10 @@
 
                             item.innerHTML = `
                                 <div class="si-time">${m.time || '--:--'} - ${m.phase || 'GIRONI'}</div>
-                                <div class="si-teams">${m.teamA} vs ${m.teamB}</div>
+                                <div class="si-teams" style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 85%;">${m.teamA} vs ${m.teamB}</span>
+                                    <button class="btn btn-warning" style="padding: 2px 6px; font-size: 0.8rem; border-radius: 4px; margin-left: 5px; cursor: pointer;" onclick="event.stopPropagation(); editMatchTeams(${idx})" title="Modifica Squadre">✏️</button>
+                                </div>
                                 <div class="si-info">${m.field || 'Campo 1'}</div>
                             `;
                             // Explicit click listener to load match and PREVENT bubbling to timer
