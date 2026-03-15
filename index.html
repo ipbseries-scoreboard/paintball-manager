@@ -6211,6 +6211,10 @@
 
                 if (newMatches.length === 0) return alert("Nessun match valido trovato!");
 
+                const wasEmptyOrFinished = state.tournament.matches.length === 0 || 
+                                           state.tournament.currentIndex >= state.tournament.matches.length - 1 ||
+                                           state.tournament.matches.length === state.tournament.currentIndex; // safety
+
                 state.tournament.matches.push(...newMatches);
                 saveTournamentState();
 
@@ -6218,6 +6222,11 @@
 
                 document.getElementById('wizard-modal').style.display = 'none';
                 state.wizard.active = false;
+
+                if (wasEmptyOrFinished) {
+                    const nextIdx = state.tournament.matches.length - newMatches.length;
+                    loadMatch(Math.max(0, nextIdx));
+                }
 
                 render();
                 broadcastState();
