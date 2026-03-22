@@ -958,9 +958,14 @@
                 if (data.mode === 'POINT' || data.mode === 'OVERTIME') {
                     mainBtn.innerText = "PAUSA";
                     mainBtn.className = "btn-main bg-pause";
+                } else if (data.mode === 'PAUSED' || data.mode === 'TECH_PAUSED') {
+                    mainBtn.innerText = "RIPRENDI";
+                    mainBtn.className = "btn-main bg-pause"; // Same warning color, but text is clearer
+                    mainBtn.style.backgroundColor = '#ef4444'; // Force red background like index.html
                 } else {
                     mainBtn.innerText = "START";
                     mainBtn.className = "btn-main bg-active";
+                    mainBtn.style.backgroundColor = ''; // Clear inline styles
                 }
 
                 // Update Next Match Panel
@@ -1074,7 +1079,7 @@
         }
 
         function handlePauseToggle() {
-            if (currentMode === 'PAUSED' || currentMode === 'IDLE' || currentMode === 'INTERVAL' || currentMode === 'GOLDEN_BREAK') {
+            if (currentMode === 'PAUSED' || currentMode === 'TECH_PAUSED' || currentMode === 'IDLE' || currentMode === 'INTERVAL' || currentMode === 'GOLDEN_BREAK') {
                 sendCommand('START_POINT');
             } else if (currentMode === 'BREAK_MATCH') {
                 sendCommand('START_INTER');
