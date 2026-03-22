@@ -3389,8 +3389,8 @@
                         // Should not happen here anymore as mode wasn't set to IDLE
                     } else {
                         // Approved or Reversed -> Rotate Interleaved Match (Swap side by default)
-                        log("CONFERMA PUNTO -> ROTATING MATCH SLOT (Delay 4s)");
-                        window.pendingRotation = setTimeout(() => { rotateMatch(); window.pendingRotation = null; }, 4000);
+                        log("CONFERMA PUNTO -> ROTATING MATCH SLOT (Delay 3s)");
+                        window.pendingRotation = setTimeout(() => { rotateMatch(); window.pendingRotation = null; }, 3000);
                     }
                 }
                 pendingPointSide = null; // Clear pending state
@@ -3417,8 +3417,8 @@
                 state.mode = 'IDLE';
                 // Mercy checked inside rotateMatch
                 render();
-                log("TOWEL AVVENUTO -> ROTATING MATCH SLOT (Delay 4s)");
-                window.pendingRotation = setTimeout(() => { rotateMatch(); window.pendingRotation = null; }, 4000); // Towel ends the point
+                log("TOWEL AVVENUTO -> ROTATING MATCH SLOT (Delay 3s)");
+                window.pendingRotation = setTimeout(() => { rotateMatch(); window.pendingRotation = null; }, 3000); // Towel ends the point
             }
 
             function handleSmartAction(side) {
@@ -3505,8 +3505,8 @@
                     state.mode = 'IDLE';
                     // Mercy checked inside rotateMatch
                     render();
-                    log("PUNTO AUTOMATICO DA PENALITA' -> ROTATING MATCH SLOT (Delay 4s)");
-                    window.pendingRotation = setTimeout(() => { rotateMatch(); window.pendingRotation = null; }, 4000);
+                    log("PUNTO AUTOMATICO DA PENALITA' -> ROTATING MATCH SLOT (Delay 3s)");
+                    window.pendingRotation = setTimeout(() => { rotateMatch(); window.pendingRotation = null; }, 3000);
                 }
 
                 render();
@@ -3820,10 +3820,18 @@
                 render();
             }
 
+            function resetAudioFlags() {
+                if (state.timer >= 60) state.flags.warn60 = false;
+                if (state.timer >= 30) state.flags.warn30 = false;
+                if (state.timer >= 20) state.flags.warn20 = false;
+                if (state.timer >= 10) state.flags.warn10 = false;
+            }
+
             function adjustTimer(delta) {
                 saveStateToHistory(); // Hook
                 state.timer += delta;
                 if (state.timer < 0) state.timer = 0;
+                resetAudioFlags();
                 if (state.mode === 'POINT' || state.mode === 'OVERTIME') state.gameTimeRemaining = state.timer;
                 updateTimerDisplay();
                 log(`TIMER EDIT MANUALE: ${delta > 0 ? '+' : ''}${delta}s. Ora: ${formatTimeSeconds(state.timer)}`);
@@ -5126,7 +5134,7 @@
             const tm = document.getElementById('timer-edit-modal');
             document.getElementById('game-timer').addEventListener('dblclick', () => { tm.style.display = 'flex'; document.getElementById('edit-min').value = Math.floor(state.timer / 60); document.getElementById('edit-sec').value = (state.timer % 60).toString().padStart(2, '0'); });
             document.getElementById('cancel-edit-btn').addEventListener('click', () => tm.style.display = 'none');
-            document.getElementById('confirm-edit-btn').addEventListener('click', () => { state.timer = (parseInt(document.getElementById('edit-min').value) * 60) + parseInt(document.getElementById('edit-sec').value); if (state.mode === 'POINT' || state.mode === 'OVERTIME') state.gameTimeRemaining = state.timer; updateTimerDisplay(); tm.style.display = 'none'; });
+            document.getElementById('confirm-edit-btn').addEventListener('click', () => { state.timer = (parseInt(document.getElementById('edit-min').value) * 60) + parseInt(document.getElementById('edit-sec').value); resetAudioFlags(); if (state.mode === 'POINT' || state.mode === 'OVERTIME') state.gameTimeRemaining = state.timer; updateTimerDisplay(); tm.style.display = 'none'; });
             document.getElementById('cancel-towel-btn').addEventListener('click', () => { document.getElementById('towel-confirm-modal').style.display = 'none'; });
             document.getElementById('confirm-towel-btn').addEventListener('click', () => { if (pendingTowelSide) { let tId = !state.basesSwapped ? (pendingTowelSide === 'left' ? 'A' : 'B') : (pendingTowelSide === 'left' ? 'B' : 'A'); executeTowel(tId, tId === 'A' ? 'B' : 'A'); } document.getElementById('towel-confirm-modal').style.display = 'none'; });
 
