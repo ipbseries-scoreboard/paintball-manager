@@ -3033,8 +3033,18 @@
 
                         // Sound Triggers (Edge Detection)
                         if (prev >= 60 && state.timer < 60 && !state.flags.warn60) { state.flags.warn60 = true; playBeep('warn'); speak("Sessanta secondi", "Sixty seconds"); }
-                        if (prev >= 30 && state.timer < 30 && !state.flags.warn30) { state.flags.warn30 = true; playBeep('warn'); speak("Trenta secondi", "Thirty seconds"); }
-                        if (prev >= 20 && state.timer < 20 && !state.flags.warn20) { state.flags.warn20 = true; playBeep('warn'); speak("Venti secondi", "Twenty seconds"); }
+                        if (prev >= 30 && state.timer < 30 && !state.flags.warn30) { 
+                            state.flags.warn30 = true; 
+                            if (state.mode !== 'POINT' && state.mode !== 'OVERTIME') {
+                                playBeep('warn'); speak("Trenta secondi", "Thirty seconds"); 
+                            }
+                        }
+                        if (prev >= 20 && state.timer < 20 && !state.flags.warn20) { 
+                            state.flags.warn20 = true; 
+                            if (state.mode !== 'POINT' && state.mode !== 'OVERTIME') {
+                                playBeep('warn'); speak("Venti secondi", "Twenty seconds"); 
+                            }
+                        }
                         if (prev >= 10 && state.timer < 10 && !state.flags.warn10) { 
                             state.flags.warn10 = true; 
                             if (state.mode !== 'POINT' && state.mode !== 'OVERTIME') {
@@ -3071,7 +3081,8 @@
                                 document.getElementById('draw-verify-modal').style.display = 'flex';
                                 log("FINE TEMPO CON PAREGGIO - IN ATTESA DI DECISIONE");
                             } else {
-                                matchOver();
+                                log("FINE TEMPO - ROTATING MATCH SLOT (Delay 3s)");
+                                window.pendingRotation = setTimeout(() => { matchOver(); window.pendingRotation = null; }, 3000);
                             }
                         }
                         else if (state.mode === 'BREAK_MATCH') {
