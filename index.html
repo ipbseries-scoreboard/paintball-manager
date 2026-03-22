@@ -3032,13 +3032,22 @@
                         updateTimerDisplay();
 
                         // Sound Triggers (Edge Detection)
-                        if (prev > 60 && state.timer <= 60 && !state.flags.warn60) { state.flags.warn60 = true; playBeep('warn'); speak("Sessanta secondi", "Sixty seconds"); }
-                        if (prev > 30 && state.timer <= 30 && !state.flags.warn30) { state.flags.warn30 = true; playBeep('warn'); speak("Trenta secondi", "Thirty seconds"); }
-                        if (prev > 20 && state.timer <= 20 && !state.flags.warn20) { state.flags.warn20 = true; playBeep('warn'); speak("Venti secondi", "Twenty seconds"); }
-                        if (prev > 10 && state.timer <= 10 && !state.flags.warn10) { state.flags.warn10 = true; speak("Dieci secondi", "Ten seconds"); }
+                        if (prev >= 60 && state.timer < 60 && !state.flags.warn60) { state.flags.warn60 = true; playBeep('warn'); speak("Sessanta secondi", "Sixty seconds"); }
+                        if (prev >= 30 && state.timer < 30 && !state.flags.warn30) { state.flags.warn30 = true; playBeep('warn'); speak("Trenta secondi", "Thirty seconds"); }
+                        if (prev >= 20 && state.timer < 20 && !state.flags.warn20) { state.flags.warn20 = true; playBeep('warn'); speak("Venti secondi", "Twenty seconds"); }
+                        if (prev >= 10 && state.timer < 10 && !state.flags.warn10) { 
+                            state.flags.warn10 = true; 
+                            if (state.mode !== 'POINT' && state.mode !== 'OVERTIME') {
+                                speak("Dieci secondi", "Ten seconds"); 
+                            }
+                        }
 
                         // Beep every second (approx) when < 10. Check integer boundary crossing.
-                        if (state.timer < 10 && state.timer > 0 && Math.ceil(prev) > Math.ceil(state.timer)) playBeep('tick');
+                        if (state.timer < 10 && state.timer > 0 && Math.ceil(prev) > Math.ceil(state.timer)) {
+                            if (state.mode !== 'POINT' && state.mode !== 'OVERTIME') {
+                                playBeep('tick');
+                            }
+                        }
 
                     } else {
                         if (state.mode === 'INTERVAL') {
@@ -3174,6 +3183,7 @@
                 render();
             }
             function startInter(type = 'point') {
+                if (window.pendingRotation) { clearTimeout(window.pendingRotation); window.pendingRotation = null; }
                 if (typeof type !== 'string') type = 'point'; // Safety check for event objects
                 state.mode = 'INTERVAL';
                 state.timerMode = 'INTERVAL';
@@ -3189,6 +3199,7 @@
                 broadcastState(true); // Sync istantaneo dei dati squadre
             }
             function startPoint() {
+                if (window.pendingRotation) { clearTimeout(window.pendingRotation); window.pendingRotation = null; }
                 // If in Golden Break, "Start Point" should start the Golden Point instead!
                 if (state.mode === 'GOLDEN_BREAK') {
                     startOvertime(true);
@@ -3209,6 +3220,7 @@
                 broadcastState(true); // Sync istantaneo dei dati squadre
             }
             function pause(isAutoPause = false) {
+                if (window.pendingRotation) { clearTimeout(window.pendingRotation); window.pendingRotation = null; }
                 if (state.mode === 'POINT' || state.mode === 'INTERVAL' || state.mode === 'OVERTIME') {
                     stopTimerLoop();
                     if (state.mode === 'POINT' || state.mode === 'OVERTIME') state.gameTimeRemaining = state.timer;
@@ -3377,8 +3389,8 @@
                         // Should not happen here anymore as mode wasn't set to IDLE
                     } else {
                         // Approved or Reversed -> Rotate Interleaved Match (Swap side by default)
-                        log("CONFERMA PUNTO -> ROTATING MATCH SLOT");
-                        rotateMatch();
+                        log("CONFERMA PUNTO -> ROTATING MATCH SLOT (Delay 4s)");
+                        window.pendingRotation = setTimeout(() => { rotateMatch(); window.pendingRotation = null; }, 4000);
                     }
                 }
                 pendingPointSide = null; // Clear pending state
@@ -3405,7 +3417,8 @@
                 state.mode = 'IDLE';
                 // Mercy checked inside rotateMatch
                 render();
-                rotateMatch(); // Towel ends the point
+                log("TOWEL AVVENUTO -> ROTATING MATCH SLOT (Delay 4s)");
+                window.pendingRotation = setTimeout(() => { rotateMatch(); window.pendingRotation = null; }, 4000); // Towel ends the point
             }
 
             function handleSmartAction(side) {
@@ -3492,7 +3505,8 @@
                     state.mode = 'IDLE';
                     // Mercy checked inside rotateMatch
                     render();
-                    rotateMatch();
+                    log("PUNTO AUTOMATICO DA PENALITA' -> ROTATING MATCH SLOT (Delay 4s)");
+                    window.pendingRotation = setTimeout(() => { rotateMatch(); window.pendingRotation = null; }, 4000);
                 }
 
                 render();
@@ -4334,6 +4348,18 @@
                 // Update Header Status as well
                 statusHeader.innerText = statusText;
 
+                // Update PAUSA/RIPRENDI button
+                const pauseBtn = document.getElementById('btn-pause');
+                if (pauseBtn) {
+                    if (state.mode === 'PAUSED' || state.mode === 'TECH_PAUSED') {
+                        pauseBtn.innerText = "RIPRENDI";
+                        pauseBtn.classList.add("btn-danger");
+                    } else {
+                        pauseBtn.innerText = "PAUSA";
+                        pauseBtn.classList.remove("btn-danger");
+                    }
+                }
+
                 // Update Phase Display
                 const phaseEl = document.getElementById('match-phase');
                 if (phaseEl) {
@@ -4641,12 +4667,12 @@
 
             function undoLastAction() {
                 if (historyStack.length === 0) {
-                    alert("Nessuna azione da annullare.");
+                    log("Ops: Nessuna azione da annullare.");
                     return;
                 }
-                if (state.settings.confirmUndo) {
-                    if (!confirm("Annullare l'ultima azione?")) return;
-                }
+                if (state.settings.confirmUndo && !confirm("Sei sicuro di voler annullare l'ultima azione?")) return;
+                
+                if (window.pendingRotation) { clearTimeout(window.pendingRotation); window.pendingRotation = null; }
 
                 const snapshot = historyStack.pop();
                 // Restore state
@@ -5329,6 +5355,13 @@
                         if (isPressed && !wasPressed) {
                             // Button PUSHED
                             const buzzerId = `GP${gp.index}_B${bIdx}`;
+
+                            // Auto-fill Buzzer Mapping UI if visible
+                            const newBuzzerInput = document.getElementById('new-buzzer-id');
+                            if (newBuzzerInput && document.getElementById('settings-modal').style.display !== 'none') {
+                                newBuzzerInput.value = buzzerId;
+                            }
+
                             // log removed here as it's now handled inside executeBuzzerGameAction
 
                             // Check version without GP prefix for backward compatibility if user manually typed just the number
@@ -5356,6 +5389,13 @@
                 if (!match) return;
 
                 const id = match[1];
+
+                // Auto-fill Buzzer Mapping UI if visible
+                const newBuzzerInput = document.getElementById('new-buzzer-id');
+                if (newBuzzerInput && document.getElementById('settings-modal').style.display !== 'none') {
+                    newBuzzerInput.value = id;
+                }
+                
                 // log removed here as it's now handled inside executeBuzzerGameAction for better priority reporting
 
                 const action = state.settings.buzzerMapping[id];
