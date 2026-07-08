@@ -5935,7 +5935,15 @@
                     const txt = ownText(el);
                     if (!txt) return;
                     const tm = txt.match(/^(\d{1,2})[.:](\d{2})\b/);
-                    if (tm) { pendingTime = tm[1] + ':' + tm[2]; return; }
+                    if (tm) {
+                        pendingTime = tm[1] + ':' + tm[2];
+                        // Fallback: se manca il riepilogo in testa, le stesse regole sono
+                        // ripetute su ogni riga ("9.00 - mercy 5 - 15 min - 3 pod")
+                        if (!out.system) { const m = txt.match(/mercy\s*(?:to\s*)?(\d+)/i); if (m) out.system = 'Mercy to ' + m[1]; }
+                        if (!out.matchTime) { const m = txt.match(/(\d+)\s*min\b/i); if (m) out.matchTime = m[1]; }
+                        if (!out.pods) { const m = txt.match(/(\d+)\s*pod\b/i); if (m) out.pods = m[1]; }
+                        return;
+                    }
                     // Intestazioni di fase (Semifinali, Finale...) — parseTournament le usa per saltare i knockout
                     if (txt.length < 40 && /^(girone|pool|ottavi|quarti|semifinal|final|playout)/i.test(txt)) currentPhase = txt.toUpperCase();
                 });
@@ -5966,6 +5974,33 @@
                     state.tournament.description = ev.description || '';
                     state.tournament.eventUrl = eventoUrl;
 
+                    // Applica le regole del palinsesto alle impostazioni della regia
+                    // (stessa logica del salvataggio dal pannello Impostazioni)
+                    const applied = [];
+                    const mercyM = (ev.system || '').match(/mercy\s*(?:to\s*)?(\d+)/i);
+                    if (mercyM) {
+                        state.settings.mercyDiff = parseInt(mercyM[1]);
+                        CONFIG.mercyDiff = state.settings.mercyDiff;
+                        applied.push('Mercy ' + CONFIG.mercyDiff);
+                    }
+                    const gameMins = parseInt(ev.matchTime);
+                    if (gameMins > 0) {
+                        state.settings.gameDuration = gameMins;
+                        const newGameTime = gameMins * 60;
+                        if (state.mode === 'IDLE' && state.timer === CONFIG.gameTime) {
+                            state.timer = newGameTime;
+                            state.gameTimeRemaining = newGameTime;
+                            updateTimerDisplay();
+                        }
+                        CONFIG.gameTime = newGameTime;
+                        applied.push('Match time ' + gameMins + ' min');
+                    }
+                    if (applied.length) {
+                        localStorage.setItem('pm_settings', JSON.stringify(state.settings));
+                        log('REGOLE DA EVENTO IPBA: ' + applied.join(', '));
+                        broadcastState();
+                    }
+
                     const lines = [];
                     let lastPhase = null;
                     ev.matches.forEach(m => {
@@ -5978,7 +6013,8 @@
                     const extra = [
                         ev.system ? 'Sistema: ' + ev.system : '',
                         ev.matchTime ? 'Match time: ' + ev.matchTime + ' min' : '',
-                        ev.pods ? 'Limite POD: ' + ev.pods : ''
+                        ev.pods ? 'Limite POD: ' + ev.pods : '',
+                        applied.length ? '⚙️ regole applicate' : ''
                     ].filter(Boolean).join(' | ');
                     setEventoImportStatus('✅ Importato: ' + (ev.name || eventoUrl) + ' — ' + ev.matches.length + ' match trovati.' + (extra ? ' (' + extra + ')' : ''));
                     log('EVENTO IPBA IMPORTATO: ' + (ev.name || eventoUrl) + ' (' + ev.matches.length + ' match)');
