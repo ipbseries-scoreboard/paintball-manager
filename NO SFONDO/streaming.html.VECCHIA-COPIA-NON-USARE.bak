@@ -6,9 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IPBA Stream Manager</title>
     <!-- PeerJS CDN -->
-    <script src="lib/peerjs.min.js"></script>
-    <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');</script>
-    <script src="pm-client.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
     <!-- Google Fonts -->
     <link
         href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Bebas+Neue&family=Orbitron:wght@600&family=Black+Ops+One&family=Roboto:wght@400;700&display=swap"
@@ -1509,22 +1507,16 @@
         async function fetchGithubFiles() {
             if (githubFilesFetched) return;
             try {
-                console.log("Fetching GitHub logos list...");
+                // Fetch tree from GitHub API to get list of files
                 const response = await fetch('https://api.github.com/repos/ipbseries-scoreboard/paintball-manager/contents/NO%20SFONDO');
                 if (response.ok) {
                     const data = await response.json();
                     githubFilesList = data.map(file => file.name);
                     githubFilesFetched = true;
-                    console.log("SUCCESS: Fetched GitHub logo list:", githubFilesList.length, "files");
-                } else {
-                    console.error("FAILED to fetch GitHub logos:", response.status, response.statusText);
-                    // Retry in 10 seconds
-                    setTimeout(fetchGithubFiles, 10000);
+                    console.log("Fetched GitHub logo list:", githubFilesList.length, "files");
                 }
             } catch (e) {
-                console.error("CRITICAL ERROR fetching GitHub logos:", e);
-                // Retry in 10 seconds
-                setTimeout(fetchGithubFiles, 10000);
+                console.error("Failed to fetch GitHub files list", e);
             }
         }
 
@@ -1532,40 +1524,19 @@
         fetchGithubFiles();
 
         function findFuzzyGithubLogo(teamName) {
-            if (!githubFilesFetched) {
-                console.log("GitHub logos not yet fetched, skipping fuzzy match for:", teamName);
-                return null;
-            }
-            if (!githubFilesList.length) {
-                console.warn("GitHub logo list is empty!");
-                return null;
-            }
+            if (!githubFilesFetched || !githubFilesList.length) return null;
 
             const cleanTarget = teamName.toLowerCase().replace(/[^a-z0-9]/g, '');
-            console.log(`Searching GitHub logo for: "${teamName}" (Cleaned: "${cleanTarget}")`);
 
-            // 1. Exact match ignoring case/spaces/dots
-            let match = githubFilesList.find(f => {
-                const cleanFile = f.toLowerCase().replace(/[^a-z0-9.]/g, '');
-                return cleanFile === cleanTarget + '.png' || cleanFile === cleanTarget;
-            });
+            // 1. Exact match ignoring case/spaces
+            let match = githubFilesList.find(f => f.toLowerCase().replace(/[^a-z0-9.]/g, '') === cleanTarget + '.png');
+            if (match) return match;
 
-            if (match) {
-                console.log("MATCH FOUND (Exact):", match);
-                return match;
-            }
-
-            // 2. Partial match (file name contains team name or vice versa)
+            // 2. Partial match (file name contains team name)
             match = githubFilesList.find(f => {
-                const cleanFile = f.toLowerCase().replace(/[^a-z0-9]/g, '').replace('png', '').replace('jpg', '');
-                return cleanFile.length > 2 && (cleanFile.includes(cleanTarget) || cleanTarget.includes(cleanFile));
+                const cleanFile = f.toLowerCase().replace(/[^a-z0-9.]/g, '').replace('.png', '');
+                return cleanFile.includes(cleanTarget) || cleanTarget.includes(cleanFile);
             });
-
-            if (match) {
-                console.log("MATCH FOUND (Fuzzy):", match);
-            } else {
-                console.log("NO MATCH found on GitHub for:", teamName);
-            }
 
             return match || null;
         }
@@ -1693,30 +1664,89 @@
 
         btn.addEventListener('click', () => startClient(input.value.trim()));
 
-        let smokeSystemStarted = false;
-
         function startClient(hostId) {
             if (!hostId) return alert("Inserisci ID");
+            if (!hostId.startsWith("IPBA-")) hostId = "IPBA-" + hostId;
+
+            // Updated Button Text
             if (btn) btn.innerText = "CONNESSIONE...";
 
-            // Il trasporto (retry, PING/PONG, fallback locale->cloud) è gestito da pm-client.js
-            if (clientConn) clientConn.destroy();
-            clientConn = PMClient.connect({
-                id: hostId,
-                staleBadge: true,
-                onStatus: (msg) => { if (btn) btn.innerText = msg; },
-                onOpen: () => {
-                    if (!smokeSystemStarted) {
-                        smokeSystemStarted = true;
-                        initSmokeSystem();
+            try {
+                const customIceConfig = {
+                    config: {
+                        'iceServers': [
+                            { urls: 'stun:stun.l.google.com:19302' },
+                            { urls: 'stun:stun.relay.metered.ca:80' },
+                            { urls: 'turn:global.relay.metered.ca:80', username: 'fe841146f64ad98d3f631f65', credential: '1RWiOOZ7GOYCgcBw' },
+                            { urls: 'turn:global.relay.metered.ca:443', username: 'fe841146f64ad98d3f631f65', credential: '1RWiOOZ7GOYCgcBw' }
+                        ]
                     }
-                    localStorage.setItem('last_match_id', PMClient.normalizeId(hostId).replace('IPBA-', ''));
-                    ui.style.display = 'none';
-                    board.style.display = 'grid';
-                    scaleBoard();
-                },
-                onData: updateBoardFromPacket
-            });
+                };
+                const peer = new Peer(customIceConfig);
+
+                peer.on('error', (err) => {
+                    console.error("PeerJS Error:", err);
+                    alert("Errore PeerJS: " + err.type);
+                    if (btn) btn.innerText = "CONNETTI";
+                });
+
+                peer.on('open', (id) => {
+                    console.log("My Peer ID:", id);
+                    const conn = peer.connect(hostId);
+                    clientConn = conn;
+
+                    conn.on('error', (err) => {
+                        console.error("Connection Error:", err);
+                        alert("Errore Connessione: " + err);
+                    });
+
+                    conn.on('open', () => {
+                        initSmokeSystem();
+                        console.log("Client connected with ID:", hostId);
+                        localStorage.setItem('last_match_id', hostId.replace('IPBA-', ''));
+                        ui.style.display = 'none';
+                        board.style.display = 'grid';
+                        scaleBoard();
+                    });
+
+                    conn.on('data', (d) => {
+                        if (d && d.type === 'PING') {
+                            conn.send({ type: 'PONG', ts: d.ts });
+                            return;
+                        }
+                        let packet = d;
+                        if (typeof d === 'string') {
+                            try { packet = JSON.parse(d); } catch (e) { return; }
+                        }
+                        updateBoardFromPacket(packet);
+                    });
+
+                    // Close handler
+                    conn.on('close', () => {
+                        console.warn("Connection closed. Retrying in 2s...");
+                        setTimeout(() => startClient(hostId), 2000);
+                    });
+
+                    conn.on('error', (err) => {
+                        console.error("Connection Error:", err);
+                        setTimeout(() => startClient(hostId), 5000);
+                    });
+                });
+
+                peer.on('disconnected', () => {
+                    console.warn("Peer disconnected. Reconnecting...");
+                    peer.reconnect();
+                });
+
+                peer.on('error', (err) => {
+                    if (err.type === 'peer-unavailable') {
+                        setTimeout(() => startClient(hostId), 10000);
+                    }
+                });
+            } catch (e) {
+                console.error("Critical Error starting client:", e);
+                alert("Errore Critico: " + e.message);
+            }
         }
 
         function updateBoardFromPacket(d) {
@@ -1914,7 +1944,7 @@
             const imgEl = document.getElementById('logo-' + side);
             if (!imgEl) return;
 
-            if (!teamName || teamName === "TEAM A" || teamName === "TEAM B" || teamName === "SQUADRA A" || teamName === "SQUADRA B") {
+            if (!teamName) {
                 imgEl.style.display = 'none';
                 return;
             }
@@ -1924,7 +1954,6 @@
             if (config && config.logoUrl) {
                 imgEl.src = config.logoUrl;
                 imgEl.style.display = 'block';
-                imgEl.onerror = null; // Reset error handler
                 applyMascotStyle(side, teamName);
             } else {
                 // FALLBACK: Search on GitHub
@@ -1933,11 +1962,7 @@
                     const rawUrl = `https://raw.githubusercontent.com/ipbseries-scoreboard/paintball-manager/main/NO%20SFONDO/${encodeURIComponent(githubFile)}`;
                     imgEl.src = rawUrl;
                     imgEl.style.display = 'block';
-                    imgEl.onerror = () => {
-                        console.error("Failed to load image from GitHub:", rawUrl);
-                        imgEl.style.display = 'none';
-                    };
-                    applyMascotStyle(side, teamName);
+                    applyMascotStyle(side, teamName); // Still apply mascot styles if exist for this team name
                 } else {
                     imgEl.style.display = 'none';
                 }
@@ -2323,20 +2348,8 @@
                         closeClanOverlay();
                     }
                 };
-
-                // Logic to fallback to GitHub logo if locally missing
-                let finalLogoUrl = clan.logoUrl;
-                if (!finalLogoUrl) {
-                    const fuzzyFile = findFuzzyGithubLogo(clan.name);
-                    if (fuzzyFile) {
-                        finalLogoUrl = `https://raw.githubusercontent.com/ipbseries-scoreboard/paintball-manager/main/NO%20SFONDO/${encodeURIComponent(fuzzyFile)}`;
-                    }
-                }
-
-                const logo = finalLogoUrl ? `<img src="${finalLogoUrl}" class="clan-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">` : '';
-                const placeholder = `<div class="clan-logo-placeholder" style="display:${finalLogoUrl ? 'none' : 'flex'}; justify-content:center; align-items:center; color:#64748b; font-size:50px; background: rgba(255,255,255,0.05); border-radius: 10px; width: 100%; height: 200px;">?</div>`;
-
-                card.innerHTML = `${logo}${placeholder}<div class="clan-card-name">${clan.name}</div>${clan.rosterUrl ? '<div style="color:var(--accent-color); font-size:12px; margin-top:5px;">🔗 OPEN ROSTER</div>' : ''}`;
+                const logo = clan.logoUrl ? `<img src="${clan.logoUrl}" class="clan-logo">` : `<div class="clan-logo" style="display:flex;justify-content:center;align-items:center;color:#64748b;font-size:50px;">?</div>`;
+                card.innerHTML = `${logo}<div class="clan-card-name">${clan.name}</div>${clan.rosterUrl ? '<div style="color:var(--accent-color); font-size:12px; margin-top:5px;">🔗 OPEN ROSTER</div>' : ''}`;
                 grid.appendChild(card);
             });
         }
@@ -2498,7 +2511,7 @@
         // Load ID from URL or Storage
         window.addEventListener('DOMContentLoaded', () => {
             const params = new URLSearchParams(window.location.search);
-            const id = params.get('id') || params.get('matchId');
+            const id = params.get('id');
             const lastId = localStorage.getItem('last_match_id');
 
             if (id) {

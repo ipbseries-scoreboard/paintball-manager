@@ -6,7 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IPBA vMix Background & Ticker</title>
     <!-- PeerJS CDN -->
-    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <script src="lib/peerjs.min.js"></script>
+    <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');</script>
+    <script src="pm-client.js"></script>
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Roboto:wght@400;700&display=swap"
         rel="stylesheet">
@@ -217,45 +219,23 @@
 
         // ---------------------------------------------------------
         // LOGICA CONNESSIONE ALLA REGIA PER AGGIORNARE IL TICKER E STATS
-        const peerOptions = {
-            secure: false, // Localhost usually isn't HTTPS
-            host: 'localhost',
-            port: 9000,
-            path: '/',
-            config: {
-                'iceServers': [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun.relay.metered.ca:80' }
-                ]
-            }
-        };
-        const peer = new Peer(peerOptions);
+        // Il trasporto (retry, PING/PONG, fallback locale->cloud) è gestito da pm-client.js
         let conn = null;
         let currentData = {}; // Stato consolidato
 
-        const urlParams = new URLSearchParams(window.location.search);
-        let matchId = urlParams.get('id') || urlParams.get('matchId');
+        let matchId = PMClient.getUrlId();
 
         if (!matchId) {
             matchId = prompt("Inserisci il Match ID della Regia:", "1674");
         }
 
-        peer.on('open', (id) => {
-            console.log('Ticker Peer ID:', id);
-            if (matchId) {
-                let hostId = matchId.startsWith('IPBA-') ? matchId : 'IPBA-' + hostId;
-                connectToHost(hostId);
-            }
-        });
-
-        function connectToHost(hostId) {
-            conn = peer.connect(hostId);
-            conn.on('open', () => {
-                conn.send({ type: 'requestState' });
+        if (matchId) {
+            conn = PMClient.connect({
+                id: matchId,
+                staleBadge: true,
+                onStatus: (msg) => console.log('[Ticker]', msg),
+                onData: handleData
             });
-            conn.on('data', handleData);
-            conn.on('close', () => setTimeout(() => connectToHost(hostId), 3000));
-            conn.on('error', () => setTimeout(() => connectToHost(hostId), 3000));
         }
 
         function handleData(data) {

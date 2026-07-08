@@ -6,14 +6,40 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IPBA Tournament Manager - REGIA</title>
-    <!-- PeerJS CDN -->
-    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" crossorigin="anonymous"></script>
+    <script>
+        // PROTEZIONE LOCALSTORAGE: in alcuni contesti (URL "data:", webview con
+        // storage disabilitato) leggere window.localStorage lancia un SecurityError
+        // e uccide la pagina. In quel caso lo sostituiamo con una copia in memoria.
+        (function () {
+            try {
+                window.localStorage.getItem('__pm_test__');
+            } catch (e) {
+                var mem = {};
+                var fake = {
+                    getItem: function (k) { return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null; },
+                    setItem: function (k, v) { mem[k] = String(v); },
+                    removeItem: function (k) { delete mem[k]; },
+                    clear: function () { mem = {}; },
+                    key: function (i) { return Object.keys(mem)[i] || null; }
+                };
+                try {
+                    Object.defineProperty(fake, 'length', { get: function () { return Object.keys(mem).length; } });
+                    Object.defineProperty(window, 'localStorage', { value: fake, configurable: true });
+                    console.warn('[PM] localStorage non disponibile: uso memoria temporanea (le impostazioni non verranno salvate).');
+                } catch (e2) { }
+            }
+        })();
+    </script>
+    <!-- PeerJS: copia locale (funziona senza internet), CDN solo come riserva -->
+    <script src="lib/peerjs.min.js"></script>
+    <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" crossorigin="anonymous"><\/script>');</script>
     <!-- Google Fonts -->
     <link
         href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Bebas+Neue&family=Orbitron:wght@600&family=Black+Ops+One&family=Roboto:wght@400;700&display=swap"
         rel="stylesheet">
-    <!-- QRCode.js CDN -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" crossorigin="anonymous"></script>
+    <!-- QRCode.js: copia locale, CDN come riserva -->
+    <script src="lib/qrcode.min.js"></script>
+    <script>window.QRCode || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" crossorigin="anonymous"><\/script>');</script>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -957,8 +983,11 @@
                 // Log to console for dev tools
                 console.error("CRITICAL ERROR:", msg, detail);
 
-                // Show user-friendly alert with enough detail for debugging
-                alert("ERRORE JS CRITICO:\n" + msg + detail);
+                // Niente alert bloccante: un popup modale durante una gara congela la Regia.
+                // L'errore finisce nel log di gara (se disponibile) e in console.
+                try {
+                    if (typeof log === 'function') log("ERRORE JS: " + msg);
+                } catch (e) { }
                 return false;
             };
         </script>
@@ -1866,13 +1895,22 @@
             </div>
         </div>
 
-        <!-- PDF.js from CDN -->
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+        <!-- PDF.js: copia locale, CDN come riserva -->
+        <script src="lib/pdf.min.js"></script>
         <script>
-            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            if (!window.pdfjsLib) {
+                window.__pdfjsFromCdn = true;
+                document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"><\/script>');
+            }
         </script>
-        <!-- jsPDF from CDN -->
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+        <script>
+            pdfjsLib.GlobalWorkerOptions.workerSrc = window.__pdfjsFromCdn
+                ? 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+                : 'lib/pdf.worker.min.js';
+        </script>
+        <!-- jsPDF: copia locale, CDN come riserva -->
+        <script src="lib/jspdf.umd.min.js"></script>
+        <script>window.jspdf || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>');</script>
 
         <!-- SCRIPT -->
         <script>
@@ -2195,8 +2233,13 @@
             }
 
             function bindPeer(p, tag, targetId) {
+                // Un peer "vecchio" (sostituito da initPeer) non deve più influenzare il sistema:
+                // i suoi eventi di errore/disconnessione ucciderebbero la connessione attiva.
+                const isStale = () => (p !== peerLocal && p !== peerCloud);
+
                 // Auto-Reconnect if disconnected from PeerServer
                 p.on('disconnected', () => {
+                    if (isStale()) return;
                     console.log(`[${tag}] Disconnected from signaling server. Attempting recovery...`);
                     if (p.destroyed) {
                         console.log(`[${tag}] Peer object destroyed. Re-initializing entirely...`);
@@ -2212,35 +2255,32 @@
                 });
 
                 p.on('error', (err) => {
+                    if (isStale()) {
+                        console.warn(`[${tag}] Errore da peer obsoleto ignorato:`, err.type);
+                        return;
+                    }
                     console.error(`[${tag}] PeerJS Global Error:`, err.type, err.message);
                     const display = document.getElementById('my-peer-id');
-                    
+
                     if (err.type === 'unavailable-id') {
-                        const newId = targetId + "-" + Math.floor(Math.random() * 1000);
-                        console.warn(`[${tag}] ID ${targetId} occupato. Provo con ${newId}...`);
+                        // NON cambiare il Match ID: quasi sempre è una registrazione fantasma
+                        // (un nostro peer precedente) che il server scarta entro pochi secondi.
+                        // Cambiare ID qui rompeva tutti i client collegati e i QR code.
+                        console.warn(`[${tag}] ID ${targetId} occupato (probabile registrazione fantasma). Riprovo con lo STESSO ID...`);
                         if (display) {
-                            display.innerText = "ID OCCUPATO...";
+                            display.innerText = "ID OCCUPATO, RIPROVO...";
                             display.style.color = 'var(--danger-color)';
                         }
                         if (peerLocal && !peerLocal.destroyed) peerLocal.destroy();
                         if (peerCloud && !peerCloud.destroyed) peerCloud.destroy();
-                        state.settings.matchId = newId;
-                        scheduleReconnect(2000);
+                        scheduleReconnect(4000);
                     } else if (err.type === 'server-error' || p.destroyed) {
                         if (display) {
-                            display.innerText = "BAN SERVER - CAMBIA ID";
+                            display.innerText = "ERRORE SERVER, RIPROVO...";
                             display.style.fontSize = "0.7em";
                             display.style.color = 'var(--danger-color)';
                         }
-                        console.warn(`[${tag}] Attempting full Peer reset due to server error (possible IP/ID Ban)...`);
-                        
-                        // Fallback ID Strategy to bypass ban
-                        if (!targetId.includes("-FB-")) {
-                            const newFallbackId = targetId + "-FB-" + Math.floor(Math.random() * 99);
-                            state.settings.matchId = newFallbackId;
-                            console.warn(`[${tag}] Generating fallback ID:`, newFallbackId);
-                        }
-
+                        console.warn(`[${tag}] Server error. Riprovo con lo stesso ID tra 8s...`);
                         if (peerLocal && !peerLocal.destroyed) peerLocal.destroy();
                         if (peerCloud && !peerCloud.destroyed) peerCloud.destroy();
                         scheduleReconnect(8000); // 8s delay to avoid hammering banned server
@@ -2266,22 +2306,26 @@
                 });
 
                 p.on('open', (id) => {
+                    if (isStale()) return;
                     if (!id) {
                         console.error(`[${tag}] PeerJS open event fired but ID is undefined`);
                         if (tag === 'LOCAL') document.getElementById('my-peer-id').innerText = "ERRORE ID";
                         return;
                     }
                     if (reconnectTimeout) clearTimeout(reconnectTimeout);
-                    
-                    // Show only the numeric part to the user, based on the reliable local connection main ID.
-                    if (tag === 'LOCAL') {
-                        const displayId = id.replace("IPBA-" + "", "");
-                        document.getElementById('my-peer-id').innerText = displayId;
-                        document.getElementById('my-peer-id').style.color = 'var(--success-color)';
-                        log("Rete " + tag + " pronta. ID: " + displayId);
-                    } else {
-                        log("Rete " + tag + " pronta al Sync.");
+
+                    // Mostra l'ID (solo parte numerica) da QUALSIASI peer apra per primo:
+                    // locale e cloud usano lo stesso Match ID, quindi il valore è identico.
+                    // Prima l'ID veniva mostrato solo dal peer LOCALE: senza server locale
+                    // attivo la scritta restava su "Generazione..." per sempre.
+                    const displayId = id.replace("IPBA-", "");
+                    const disp = document.getElementById('my-peer-id');
+                    if (disp) {
+                        disp.innerText = displayId;
+                        disp.style.color = 'var(--success-color)';
+                        disp.style.fontSize = "";
                     }
+                    log("Rete " + tag + " pronta. ID: " + displayId);
                 });
 
                 p.on('connection', (conn) => {
@@ -2319,12 +2363,31 @@
                 if (reconnectTimeout) clearTimeout(reconnectTimeout);
                 if (pingInterval) clearInterval(pingInterval);
 
+                // I peer precedenti vanno SEMPRE distrutti prima di crearne di nuovi:
+                // un peer vivo tiene occupato il Match ID sul server e il nuovo peer
+                // riceverebbe "unavailable-id" all'infinito.
+                if (peerLocal && !peerLocal.destroyed) { try { peerLocal.destroy(); } catch (e) { } }
+                if (peerCloud && !peerCloud.destroyed) { try { peerCloud.destroy(); } catch (e) { } }
+                peerLocal = null;
+                peerCloud = null;
+
                 // Persistent ID logic
                 let targetId = state.settings.matchId;
 
-                if (!targetId || targetId === "undefined" || !targetId.startsWith("IPBA-")) {
+                // Ripulisce i suffissi "-FB-xx" generati dalle vecchie versioni in caso di errore server
+                if (targetId && targetId.includes("-FB-")) {
+                    targetId = targetId.split("-FB-")[0];
+                }
+
+                if (!targetId || targetId === "undefined") {
                     // Default to standard ID 1674 as requested
                     targetId = "IPBA-1674";
+                } else if (!targetId.startsWith("IPBA-")) {
+                    // Rispetta l'ID scelto dall'utente: aggiunge solo il prefisso, non lo sostituisce
+                    targetId = "IPBA-" + targetId;
+                }
+
+                if (targetId !== state.settings.matchId) {
                     state.settings.matchId = targetId;
                     localStorage.setItem('pm_settings', JSON.stringify(state.settings));
                 }
@@ -2372,6 +2435,7 @@
                         if (confirm("Riavviare la connessione di rete (locale e cloud)?")) {
                             if (peerLocal && !peerLocal.destroyed) peerLocal.destroy();
                             if (peerCloud && !peerCloud.destroyed) peerCloud.destroy();
+                            restartWsHost(); // riprende anche il relay (es. dopo "ALTRA REGIA ATTIVA")
                             scheduleReconnect(500);
                         }
                     };
@@ -2379,9 +2443,17 @@
                     peerIdDisplay.style.cursor = "pointer";
                 }
 
-                // ALWAYS BOOT LOCAL PEER
-                peerLocal = new Peer(targetId, localOptions);
-                bindPeer(peerLocal, 'LOCAL', targetId);
+                // LOCAL PEER (PeerJS): serve solo come riserva quando il relay
+                // WebSocket (server.js) non è attivo. Aspetta un attimo prima di
+                // crearlo: se il relay risponde (caso normale) non serve, e si
+                // evita un tentativo PeerJS destinato a fallire contro il relay.
+                const myInitGen = ++initPeerGeneration;
+                setTimeout(() => {
+                    if (myInitGen !== initPeerGeneration) return; // initPeer richiamato nel frattempo
+                    if (wsRelayActive || peerLocal) return;
+                    peerLocal = new Peer(targetId, localOptions);
+                    bindPeer(peerLocal, 'LOCAL', targetId);
+                }, 1500);
 
                 // BOOT CLOUD PEER IF ENABLED
                 const useCloud = document.getElementById('cloud-sync-toggle').checked;
@@ -2394,6 +2466,111 @@
 
                 // Start Ping Interval safely
                 pingInterval = setInterval(sendPings, 5000);
+            }
+
+            // ---------- RELAY WEBSOCKET (server.js) ----------
+            // Trasporto preferito: la Regia invia lo stato UNA sola volta al relay,
+            // che lo inoltra a tutti gli schermi (niente WebRTC, niente ID occupati).
+            // Se il relay non c'è, resta attivo il vecchio percorso PeerJS (initPeer).
+            let wsHost = null;
+            let wsRelayActive = false;
+            let wsClientCount = 0;
+            let wsRetryTimer = null;
+            let wsEvicted = false;
+            let initPeerGeneration = 0; // annulla le creazioni ritardate del peer locale
+
+            function relayUrl() {
+                const params = new URLSearchParams(window.location.search);
+                const override = params.get('relay'); // es. ?relay=localhost:9100 (per test)
+                if (override) {
+                    const parts = override.split(':');
+                    return 'ws://' + parts[0] + ':' + (parts[1] || '9000') + '/ws';
+                }
+                return 'ws://localhost:9000/ws';
+            }
+
+            function startWsHostLoop() {
+                if (wsRetryTimer) clearTimeout(wsRetryTimer);
+                if (wsEvicted) return; // un'altra Regia ha preso il controllo: riparti solo manualmente
+                let s;
+                try {
+                    s = new WebSocket(relayUrl());
+                } catch (e) {
+                    wsRetryTimer = setTimeout(startWsHostLoop, 5000);
+                    return;
+                }
+                wsHost = s;
+
+                s.onopen = () => {
+                    if (wsHost !== s) return;
+                    s.send(JSON.stringify({ type: 'hello', role: 'host', room: state.settings.matchId }));
+                };
+
+                s.onmessage = (ev) => {
+                    if (wsHost !== s) return;
+                    let d;
+                    try { d = JSON.parse(ev.data); } catch (e) { return; }
+                    if (!d || !d.type) return;
+
+                    if (d.type === '_welcome') {
+                        wsRelayActive = true;
+                        wsClientCount = d.count || 0;
+                        updateConnectionCount();
+                        // Col relay attivo il peer LOCALE PeerJS non serve più
+                        if (peerLocal && !peerLocal.destroyed) { try { peerLocal.destroy(); } catch (e) { } peerLocal = null; }
+                        const disp = document.getElementById('my-peer-id');
+                        if (disp) {
+                            disp.innerText = (state.settings.matchId || '').replace('IPBA-', '');
+                            disp.style.color = 'var(--success-color)';
+                            disp.style.fontSize = "";
+                        }
+                        log("Rete RELAY pronta. ID: " + (state.settings.matchId || '').replace('IPBA-', ''));
+                    } else if (d.type === '_roster') {
+                        wsClientCount = d.count || 0;
+                        updateConnectionCount();
+                    } else if (d.type === '_evicted') {
+                        // Un'altra Regia si è presentata con lo stesso Match ID:
+                        // non rubarle il posto in automatico (si farebbe ping-pong).
+                        wsEvicted = true;
+                        wsRelayActive = false;
+                        const disp = document.getElementById('my-peer-id');
+                        if (disp) {
+                            disp.innerText = "ALTRA REGIA ATTIVA!";
+                            disp.style.color = 'var(--danger-color)';
+                        }
+                        log("ATTENZIONE: un'altra Regia usa lo stesso Match ID. Clicca sull'ID per riprendere il controllo.");
+                    } else if (d.type === '_hb') {
+                        // heartbeat del server: nulla da fare
+                    } else {
+                        // Comandi dagli schermi (referee) arrivati via relay
+                        handleRemoteCommand(d);
+                    }
+                };
+
+                s.onclose = () => {
+                    if (wsHost !== s) return;
+                    const wasActive = wsRelayActive;
+                    wsRelayActive = false;
+                    wsClientCount = 0;
+                    wsHost = null;
+                    updateConnectionCount();
+                    if (wasActive) {
+                        // Relay caduto: riattiva subito il percorso PeerJS come riserva
+                        scheduleReconnect(1500);
+                    }
+                    wsRetryTimer = setTimeout(startWsHostLoop, 4000);
+                };
+
+                s.onerror = () => { /* segue sempre onclose */ };
+            }
+
+            function restartWsHost() {
+                // Ricollega il relay (es. dopo cambio Match ID o ripresa manuale)
+                wsEvicted = false;
+                const old = wsHost;
+                wsHost = null;
+                if (old) { try { old.close(); } catch (e) { } }
+                startWsHostLoop();
             }
 
             let connHealth = {}; // { peerId: { latencies: [], lastSeen: ts, type: 'referee'/'board'/etc } }
@@ -2469,7 +2646,8 @@
             function updateConnectionCount() {
                 const el = document.getElementById('conn-count');
                 if (el) {
-                    const count = connections.length;
+                    // connessioni PeerJS dirette + schermi collegati tramite il relay
+                    const count = connections.length + wsClientCount;
                     el.innerText = `Connessi: ${count}`;
                     el.style.color = count > 0 ? '#22c55e' : '#94a3b8';
                 }
@@ -2693,9 +2871,15 @@
                         // By stringifying it ONCE here, we bypass PeerJS's internal slow stringification.
                         const payloadString = JSON.stringify(packet);
 
-                        // PUBLIC SYNC STORAGE: Save to localStorage for public viewers to "poll" if they are local, 
+                        // PUBLIC SYNC STORAGE: Save to localStorage for public viewers to "poll" if they are local,
                         // or as a base for a future GitHub Action / Script that pushes this to a JSON file on GH.
                         localStorage.setItem('pm_last_state', payloadString);
+
+                        // RELAY WEBSOCKET: un solo invio, il server lo inoltra a tutti gli schermi
+                        // (molto più leggero dei send PeerJS uno-per-connessione qui sotto)
+                        if (wsRelayActive && wsHost && wsHost.readyState === 1) {
+                            try { wsHost.send(payloadString); } catch (e) { }
+                        }
 
                         // CLOUD SYNC BRIDGE (Python)
                         const cloudToggle = document.getElementById('cloud-sync-toggle');
@@ -5113,6 +5297,7 @@
 
             populateVoiceList();
             initPeer();
+            startWsHostLoop(); // relay WebSocket (server.js): trasporto preferito
             loadTournamentState(); // Load persistent tournament
             render();
 
@@ -5249,7 +5434,12 @@
                     localStorage.setItem('pm_team_style', JSON.stringify(TEAM_STYLE));
 
                     // If matchId changed, re-init Peer instead of reloading
-                    const newMatchId = document.getElementById('match-id-input').value.trim();
+                    let newMatchId = document.getElementById('match-id-input').value.trim().toUpperCase();
+                    // Normalizza il prefisso: prima un ID digitato senza "IPBA-" veniva
+                    // silenziosamente sostituito dal default 1674 dentro initPeer().
+                    if (newMatchId && !newMatchId.startsWith("IPBA-")) {
+                        newMatchId = "IPBA-" + newMatchId;
+                    }
                     if (newMatchId && newMatchId !== state.settings.matchId) {
                         state.settings.matchId = newMatchId;
                         localStorage.setItem('pm_settings', JSON.stringify(state.settings));
@@ -5259,6 +5449,7 @@
                         if (peerLocal && !peerLocal.destroyed) peerLocal.destroy();
                         if (peerCloud && !peerCloud.destroyed) peerCloud.destroy();
                         initPeer();
+                        restartWsHost(); // il relay si ricollega con il nuovo Match ID
                     }
 
                     broadcastState(); // Sync changes immediately
@@ -6580,8 +6771,9 @@
                 window.open(targetUrl, '_blank');
             }
 
-            // Initialize Peer on Load
-            initPeer();
+            // NOTA: initPeer() viene già chiamato nella sequenza di Auto-Init più sopra.
+            // La seconda chiamata che era qui creava DUE peer con lo stesso Match ID:
+            // il server rispondeva "unavailable-id" e l'ID veniva rigenerato in loop.
 
         </script>
     </div> <!-- End Scaler -->

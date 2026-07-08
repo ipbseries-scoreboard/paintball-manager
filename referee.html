@@ -5,15 +5,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Referee Field Control - IPBA</title>
-    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" crossorigin="anonymous"></script>
+    <script src="lib/peerjs.min.js"></script>
+    <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" crossorigin="anonymous"><\/script>');</script>
+    <script src="pm-client.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@700&family=Inter:wght@400;900&display=swap"
         rel="stylesheet">
     <script>
         window.onerror = function (msg, url, line, col, error) {
             const stack = error && error.stack ? ("\n\nStack: " + error.stack.split('\n').slice(0, 3).join('\n')) : "";
             const detail = `\nURL: ${url}\nPos: ${line}:${col}${stack}`;
+            // Niente alert: un popup bloccante sul tablet arbitro a metà gara
+            // è peggio dell'errore stesso. Tutto in console + barra di stato.
             console.error("CRITICAL ERROR:", msg, detail);
-            alert("ERRORE JS CRITICO:\n" + msg + detail);
+            try {
+                if (typeof setStatus === 'function') setStatus("Errore JS: " + msg, "var(--danger)");
+            } catch (e) { }
             return false;
         };
     </script>
@@ -533,7 +539,7 @@
     <div id="connect-ui">
         <h1 style="font-family: 'Oswald'; font-size: 40px; margin: 0;">REFEREE CONTROL</h1>
         <input type="text" id="host-id" placeholder="MATCH ID">
-        <div id="my-id-display" style="color: #475569; font-size: 11px;">Caricamento rete...</div>
+        <div id="my-id-display" style="color: #475569; font-size: 11px;">Inserisci il MATCH ID e premi CONNETTI</div>
 
         <div
             style="font-weight: 900; color: #94a3b8; margin-top: 10px; text-transform: uppercase; font-size: 14px; letter-spacing: 1px;">
@@ -646,7 +652,6 @@
             }
         };
 
-        let peer = null;
         let conn = null;
         let currentMode = 'IDLE';
         let pendingSide = null;
@@ -691,130 +696,36 @@
                 return;
             }
 
-            // Transparently add prefix if user typed only numbers
-            if (!idInput.startsWith("IPBA-")) {
-                idInput = "IPBA-" + idInput;
-            }
-
             const btnConnect = document.getElementById('btn-connect');
             btnConnect.disabled = true;
             btnConnect.innerText = "ATTENDI...";
             setStatus("Inizializzazione rete...", "var(--btn-accent)");
 
-            console.log("Starting PeerJS connection to:", idInput);
-
-            if (peer) peer.destroy();
-
-            const urlParams = new URLSearchParams(window.location.search);
-            const isLocal = urlParams.get('local') === '1';
-
-            const customIceConfig = {
-                config: {
-                    'iceServers': [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:stun.relay.metered.ca:80' },
-                        { urls: 'turn:global.relay.metered.ca:80', username: 'fe841146f64ad98d3f631f65', credential: '1RWiOOZ7GOYCgcBw' },
-                        { urls: 'turn:global.relay.metered.ca:443', username: 'fe841146f64ad98d3f631f65', credential: '1RWiOOZ7GOYCgcBw' }
-                    ]
-                }
-            };
-
-            let peerOptions = customIceConfig;
-            if (isLocal) {
-                peerOptions = {
-                    secure: false, // Localhost / Local IP usually isn't HTTPS
-                    host: window.location.hostname || 'localhost',
-                    port: 9000,
-                    path: '/',
-                    config: customIceConfig.config
-                };
-            }
-
-            try {
-                peer = new Peer(peerOptions);
-            } catch (e) {
-                setStatus("Errore inizializzazione Peer: " + e.message, "var(--danger)");
-                btnConnect.disabled = false;
-                btnConnect.innerText = "RIPROVA";
-                return;
-            }
-
-            const peerInitTimeout = setTimeout(() => {
-                if (!peer || !peer.id) {
-                    setStatus("Errore: Il server PeerJS non risponde. Controlla internet.", "var(--danger)");
-                    btnConnect.disabled = false;
-                    btnConnect.innerText = "RIPROVA";
-                }
-            }, 10000);
-
-            peer.on('open', (myId) => {
-                clearTimeout(peerInitTimeout);
-                const myIdEl = document.getElementById('my-id-display');
-                if (myIdEl) myIdEl.innerText = "IL TUO ID: " + myId;
-
-                setStatus("Connessione a " + idInput + "...", "var(--btn-accent)");
-
-                // Connection Timeout to help diagnose peer-unavailable
-                const connTimeout = setTimeout(() => {
-                    if (!conn || !conn.open) {
-                        setStatus("Timeout. Match ID errato o rete bloccata.", "var(--danger)");
+            // Il trasporto (retry, PING/PONG, fallback locale->cloud) è gestito da pm-client.js
+            if (conn) conn.destroy();
+            conn = PMClient.connect({
+                id: idInput,
+                onStatus: (msg, isError) => {
+                    setStatus(msg, isError ? "var(--danger)" : "var(--btn-accent)");
+                    if (isError) {
                         btnConnect.disabled = false;
                         btnConnect.innerText = "RIPROVA";
                     }
-                }, 15000);
-
-                // Connect to the host using the provided ID
-                conn = peer.connect(idInput);
-
-                conn.on('error', (err) => {
-                    setStatus("Errore Conn: " + err.type + " " + err.message, "var(--danger)");
-                });
-
-                if (conn.peerConnection) {
-                    conn.peerConnection.oniceconnectionstatechange = function () {
-                        setStatus("Stato ICE: " + conn.peerConnection.iceConnectionState, "var(--warning)");
-                    };
-                }
-
-                conn.on('open', () => {
-                    clearTimeout(connTimeout);
+                },
+                onOpen: () => {
                     setStatus("Connesso!", "var(--success)");
+                    const myIdEl = document.getElementById('my-id-display');
+                    if (myIdEl) myIdEl.innerText = "Collegato via " + conn.transport;
                     document.getElementById('connect-ui').style.display = 'none';
                     const app = document.getElementById('app');
                     app.className = `layout-${chosenLayout}`;
                     app.style.display = (chosenLayout === 'tablet') ? 'grid' : 'flex';
                     document.getElementById('connection-status').classList.add('online');
-                });
-
-                conn.on('data', (data) => {
-                    let packet = data;
-                    if (typeof data === 'string') {
-                        try { packet = JSON.parse(data); } catch (e) { return; }
-                    }
-                    updateUI(packet);
-                });
-
-                conn.on('close', () => {
-                    setStatus("Connessione persa. Riconnessione...", "var(--danger)");
+                },
+                onClose: () => {
                     document.getElementById('connection-status').classList.remove('online');
-                    setTimeout(() => connectToHost(), 2000);
-                });
-
-                conn.on('error', (err) => {
-                    setStatus("Errore Conn: " + err, "var(--danger)");
-                    setTimeout(() => connectToHost(), 5000);
-                });
-            });
-
-            peer.on('disconnected', () => {
-                peer.reconnect();
-            });
-
-            peer.on('error', (err) => {
-                setStatus("Errore Peer: " + err.type, "var(--danger)");
-                if (err.type === 'peer-unavailable') {
-                    setTimeout(() => connectToHost(), 5000);
-                }
+                },
+                onData: updateUI
             });
         }
 
@@ -1089,7 +1000,7 @@
         }
 
         const params = new URLSearchParams(window.location.search);
-        const id = params.get('id');
+        const id = params.get('id') || params.get('matchId');
         if (id) {
             document.getElementById('host-id').value = id;
             setTimeout(connectToHost, 500);

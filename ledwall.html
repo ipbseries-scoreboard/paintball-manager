@@ -6,7 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IPBA LED Wall Scoreboard</title>
     <!-- PeerJS CDN -->
-    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <script src="lib/peerjs.min.js"></script>
+    <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');</script>
+    <script src="pm-client.js"></script>
     <!-- Google Fonts -->
     <link
         href="https://fonts.googleapis.com/css2?family=Oswald:wght@700&family=Orbitron:wght@700&family=Bebas+Neue&family=Inter:wght@400;900&display=swap"
@@ -300,45 +302,22 @@
 
         function startClient(hostId) {
             if (!hostId) return;
-            if (!hostId.startsWith("IPBA-")) hostId = "IPBA-" + hostId;
             btn.innerText = "CONNESSIONE...";
 
-            const peerOptions = {
-                secure: false, // Localhost usually isn't HTTPS
-                host: 'localhost',
-                port: 9000,
-                path: '/',
-                config: {
-                    'iceServers': [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:stun.relay.metered.ca:80' }
-                    ]
-                }
-            };
-
-            const peer = new Peer(peerOptions);
-            peer.on('open', (id) => {
-                const conn = peer.connect(hostId);
-                clientConn = conn;
-                conn.on('open', () => {
-                    localStorage.setItem('last_match_id', hostId.replace('IPBA-', ''));
+            // Il trasporto (retry, PING/PONG, fallback locale->cloud) è gestito da pm-client.js
+            if (clientConn) clientConn.destroy();
+            clientConn = PMClient.connect({
+                id: hostId,
+                staleBadge: true,
+                onStatus: (msg) => { btn.innerText = msg; },
+                onOpen: () => {
+                    localStorage.setItem('last_match_id', PMClient.normalizeId(hostId).replace('IPBA-', ''));
                     ui.style.display = 'none';
                     sb.style.display = 'flex';
                     scaleBoard();
-                });
-                conn.on('data', (data) => {
-                    if (data && data.type === 'PING') {
-                        conn.send({ type: 'PONG', ts: data.ts });
-                        return;
-                    }
-                    let packet = data;
-                    if (typeof data === 'string') { try { packet = JSON.parse(data); } catch (e) { return; } }
-                    updateBoardFromPacket(packet);
-                });
-                conn.on('close', () => { setTimeout(() => startClient(hostId), 2000); });
-                conn.on('error', () => { setTimeout(() => startClient(hostId), 5000); });
+                },
+                onData: updateBoardFromPacket
             });
-            peer.on('error', (err) => { if (err.type === 'peer-unavailable') setTimeout(() => startClient(hostId), 10000); });
         }
 
         const syncChannel = new BroadcastChannel('pm_sync');
@@ -378,7 +357,7 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             const params = new URLSearchParams(window.location.search);
-            const id = params.get('id');
+            const id = params.get('id') || params.get('matchId');
             const lastId = localStorage.getItem('last_match_id');
             if (id) { input.value = id; startClient(id); }
             else if (lastId) { input.value = lastId; }

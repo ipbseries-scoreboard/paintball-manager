@@ -1,59 +1,102 @@
 ====================================================
-GUIDA ALL'AVVIO - PAINTBALL MANAGER (SISTEMA LOCALE)
+GUIDA ALL'AVVIO - PAINTBALL MANAGER v2 (RELAY LOCALE)
 ====================================================
 
-Per avviare il sistema con la nuova configurazione ultra-rapida e senza blocchi (Server Locale), segui questi passaggi nell'ordine esatto:
-
-FASE 1: AVVIARE IL SERVER LOCALE (FONDAMENTALE)
+COME FUNZIONA (in breve)
 -----------------------------------------------
-1. Apri il Prompt dei Comandi (cmd) o Powershell.
-2. Digita il comando per avviare il server PeerJS locale:
-   peerjs --port 9000 --key peerjs --path /
-   
-   (Se hai uno script o un file .bat apposito per avviare "Local PeerJS", avvia semplicemente quello).
-   Assicurati che rimanga aperto in background per tutta la durata del torneo. Se questa finestra viene chiusa, gli schermi locali si scollegheranno.
+Un unico server locale (porta 9000) fa due cose:
+ 1. serve le pagine web a tutti i dispositivi;
+ 2. fa da "relay": la Regia gli manda lo stato una volta sola
+    e lui lo inoltra a tutti gli schermi. I comandi degli
+    arbitri tornano alla Regia per la stessa strada.
+Niente piu' WebRTC/PeerJS per l'uso locale: piu' stabile,
+niente Match ID "occupati", meno problemi di rete.
+Il vecchio sistema PeerJS resta come RISERVA automatica
+(e per board.html visto da casa tramite cloud).
+
+
+FASE 1: AVVIARE IL SERVER (FONDAMENTALE)
+-----------------------------------------------
+1. Doppio click su "Avvia_Server_Locale.bat".
+   (al primo avvio scarica una piccola dipendenza: serve
+   internet SOLO quella volta)
+2. La finestra mostra gli indirizzi pronti per i tablet.
+3. LASCIA APERTA la finestra per tutta la durata del torneo.
+
+Requisito: Node.js installato (https://nodejs.org, versione LTS).
 
 
 FASE 2: AVVIARE LA REGIA (INDEX.HTML)
 -----------------------------------------------
-1. Apri il file "index.html" (Pannello di Controllo/Regia) sul computer principale.
-2. Noterai una nuova spunta "CLOUD" accanto al campo MATCH ID:
-   
-   [ ] CLOUD (Deselzionato) -> Usa il SERVER LOCALE (Consigliato per la stabilità, latenza zero)
-   [x] CLOUD (Selezionato)  -> Usa il SERVER GLOBALE (Da usare SOLO se devi far connettere "board.html" da un'altra rete/internet)
-
-3. Per l'uso standard (Ledwall, Arbitri, Pit, Streaming su vMix/OBS locale): 
-   LASCIA LA SPUNTA "CLOUD" DESELEZIONATA.
-
-4. Inserisci il tuo Match ID (es. 1234) e clicca "CONNETTI". 
-   (Dovrebbe connettersi istantaneamente e l'ID diventerà verde).
+1. Apri "index.html" sul PC principale (o http://localhost:9000).
+2. La Regia si collega DA SOLA al relay: il Match ID in alto
+   diventa VERDE (default: 1674).
+3. Per cambiare ID: Impostazioni -> campo MATCH ID (basta il
+   numero, il prefisso IPBA- si aggiunge da solo).
+4. Spunta "CLOUD": accendila SOLO se qualcuno deve guardare
+   board.html da casa (fuori dalla rete del campo).
 
 
 FASE 3: APRIRE GLI SCHERMI SECONDARI
 -----------------------------------------------
-Ora che la Regia è connessa in locale, puoi aprire tutti gli altri schermi sugli altri dispositivi/monitor connessi alla stessa rete WiFi/LAN:
+Le pagine trovano da sole il server giusto: prima il relay
+locale, poi il vecchio PeerJS, poi il cloud.
 
-- referee.html (Arbitro)
-- pit.html (Pit)
-- control.html
-- streaming.html (Streaming principale)
-- ledwall.html (Ledwall fisico)
-- vmix_bg.html (Sfondo vMix)
-- obs_bar.html (Barra OBS)
+SULLO STESSO PC della Regia (OBS, vMix, ledwall via HDMI):
+  apri direttamente il file, es. streaming.html?id=1674
 
-COSA FARE SUGLI SCHERMI SECONDARI:
-1. Aprilo.
-2. Se non si connette in automatico, inserisci lo STESSO Match ID che hai messo nella Regia.
-3. Clicca "CONNETTI". 
+SU TABLET O ALTRI PC della stessa rete WiFi/LAN:
+  usa l'indirizzo mostrato dalla finestra del server, es.
+  http://IP_DEL_PC_REGIA:9000/referee.html?id=1674
 
-Nota bene: questi schermi sono stati modificati per cercare SOLO il server locale sulla porta 9000. Non si scollegheranno più e non soffriranno di ban da parte di PeerJS.
+Pagine disponibili:
+- referee.html   (Tablet arbitro - invia i comandi)
+- pit.html       (Schermo Pit)
+- streaming.html (Overlay streaming principale)
+- ledwall.html   (Ledwall fisico)
+- vmix_bg.html   (Sfondo/ticker vMix)
+- obs_bar.html   (Barra punteggi OBS)
+- board.html     (Scoreboard pubblico - da casa serve la spunta CLOUD)
+
+Parametri URL utili:
+  ?id=1674           Match ID automatico
+  &host=192.x.x.x    forza un server specifico (anche host:porta)
+  &nocloud=1         non tentare mai il cloud
+  &norelay=1         salta il relay (solo vecchio PeerJS)
+
+NOVITA': se una pagina non riceve piu' dati per 15 secondi,
+compare il badge rosso "DATI NON AGGIORNATI" in alto a destra.
+Se lo vedi, controlla server e Regia: quello che c'e' sullo
+schermo potrebbe essere vecchio.
 
 
-CASO SPECIALE: LA BOARD PUBBLICA (board.html)
+RISOLUZIONE PROBLEMI
 -----------------------------------------------
-Se hai bisogno che il pubblico da casa (su reti diverse) veda i risultati tramite "board.html":
-1. Sulla Regia (index.html), metti la spunta su "CLOUD". La regia cambierà server e si connetterà a quello globale.
-2. Invia il link di "board.html" a chi deve vederlo da fuori.
+- Match ID che resta su "Generazione...":
+  il server non e' attivo. Avvia "Avvia_Server_Locale.bat"
+  e ricarica la Regia.
 
-ATTENZIONE: Se attivi la spunta "CLOUD", la regia si scollega dal server locale per mandare i dati su internet. Gli schermi locali (referee, pit, ledwall) potrebbero non ricevere più aggiornamenti, a meno che non implementiamo una doppia trasmissione (che attualmente non è attiva per evitare sovraccarichi). 
-Si consiglia di usare il sistema interamente in LOCALE (Spunta Cloud spenta) per le vere competizioni dal vivo per garantire la massima prestazione senza lag.
+- "ALTRA REGIA ATTIVA!":
+  un'altra finestra della Regia (anche una scheda dimenticata,
+  anche su un altro PC) ha preso il controllo dello stesso
+  Match ID. Chiudi il doppione e clicca sull'ID per riprendere
+  il controllo.
+
+- Il .bat si chiude subito:
+  leggi il messaggio: o manca Node.js, o la porta 9000 e' gia'
+  occupata da un server avviato prima, o manca internet per la
+  prima installazione.
+
+- Tablet che non si collega:
+  1) deve essere sulla STESSA rete WiFi del PC Regia;
+  2) usa l'indirizzo http://IP:9000/... mostrato dal server;
+  3) se la rete WiFi isola i dispositivi tra loro (AP isolation),
+     attiva la spunta CLOUD sulla Regia e usa il cloud.
+
+- Badge rosso "DATI NON AGGIORNATI" su uno schermo:
+  la pagina non riceve dati da piu' di 15 secondi. Controlla
+  che il server e la Regia siano accesi e collegati.
+
+- Funziona anche SENZA internet: tutte le librerie sono state
+  copiate in locale (cartella "lib"). Internet serve solo per
+  il primo avvio del .bat e per l'eventuale cloud.
