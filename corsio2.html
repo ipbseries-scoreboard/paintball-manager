@@ -1,0 +1,1 @@
+{"error":"Server-side requests are not allowed on your plan. Upgrade at https://corsproxy.io/pricing/"}

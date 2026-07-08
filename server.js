@@ -27,6 +27,7 @@
 'use strict';
 
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -52,11 +53,48 @@ const MIME = {
     '.txt': 'text/plain; charset=utf-8'
 };
 
+// ---------- PROXY IPBA ----------
+// La pagina evento di ipba.it non manda header CORS, quindi il browser non può
+// scaricarla direttamente da index.html. Questo endpoint la scarica lato server:
+//   GET /ipba?url=https://www.ipba.it/evento.aspx?id=369
+// Ammessi solo URL del dominio ipba.it (niente proxy aperto).
+function proxyIpba(req, res) {
+    const fail = (msg, code) => {
+        if (!res.headersSent) res.writeHead(code || 502, { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+        res.end(msg);
+    };
+    let target = null;
+    try { target = new URL(new URL(req.url, 'http://localhost').searchParams.get('url') || ''); } catch (e) { }
+    if (!target || !/(^|\.)ipba\.it$/i.test(target.hostname)) { fail('URL non valido: ammessi solo link ipba.it', 400); return; }
+
+    const fetchRemote = (u, depth) => {
+        const lib = u.protocol === 'http:' ? http : https;
+        const rq = lib.get(u, { headers: { 'User-Agent': 'Mozilla/5.0 (PaintballManager)' } }, (rs) => {
+            // Segue eventuali redirect (max 3)
+            if (rs.statusCode >= 300 && rs.statusCode < 400 && rs.headers.location && depth < 3) {
+                rs.resume();
+                try { fetchRemote(new URL(rs.headers.location, u), depth + 1); } catch (e) { fail('Redirect non valido'); }
+                return;
+            }
+            res.writeHead(rs.statusCode || 502, {
+                'Content-Type': rs.headers['content-type'] || 'text/html; charset=utf-8',
+                'Access-Control-Allow-Origin': '*',
+                'Cache-Control': 'no-store'
+            });
+            rs.pipe(res);
+        });
+        rq.on('error', (e) => fail('Errore proxy: ' + e.message));
+        rq.setTimeout(15000, () => rq.destroy(new Error('timeout')));
+    };
+    fetchRemote(target, 0);
+}
+
 // ---------- WEB SERVER (pagine statiche) ----------
 const server = http.createServer((req, res) => {
     try {
         let urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
         if (urlPath === '/' || urlPath === '') urlPath = '/index.html';
+        if (urlPath === '/ipba') { proxyIpba(req, res); return; }
         const filePath = path.join(ROOT, path.normalize(urlPath));
         if (!filePath.startsWith(ROOT)) { res.writeHead(403); res.end('Accesso negato'); return; }
         fs.readFile(filePath, (err, buf) => {

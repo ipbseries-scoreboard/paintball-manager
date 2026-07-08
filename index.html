@@ -1372,6 +1372,22 @@
         <div id="tournament-modal" class="overlay">
             <div class="modal-content">
                 <h2>🏆 Dati Torneo & Palinsesto</h2>
+
+                <div class="form-group"
+                    style="padding: 10px; background: rgba(59,130,246,0.08); border-radius: 5px; border: 1px solid rgba(59,130,246,0.35);">
+                    <label>🔗 Importa Evento da ipba.it</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="tourney-event-url" class="form-control" style="flex: 1;"
+                            placeholder="https://www.ipba.it/evento.aspx?id=369">
+                        <button id="btn-import-evento" class="btn"
+                            style="white-space: nowrap; border-color: #3b82f6; color: #3b82f6; background: rgba(59,130,246,0.15);">📥
+                            IMPORTA</button>
+                    </div>
+                    <small style="color: #94a3b8;">Compila in automatico nome, data, luogo e palinsesto delle partite
+                        dalla pagina dell'evento.</small>
+                    <div id="evento-import-status" style="margin-top: 6px; font-size: 0.85rem; color: #94a3b8;"></div>
+                </div>
+
                 <div style="display: flex; flex-direction: column; gap: 15px;">
 
                     <div class="form-group">
@@ -5741,9 +5757,7 @@
                     handleTeamAction(side, 'action');
                 }
             }
-            document.getElementById('load-tournament-btn').addEventListener('click', () => {
-                if (!confirm("ATTENZIONE:\nQuesta azione cancellerà tutti i punteggi e riavvierà il torneo dalla prima partita.\n\nSei sicuro di voler procedere?")) return;
-
+            function loadTournamentFromInput() {
                 const m = parseTournament(document.getElementById('tournament-input').value);
                 if (m.length) {
                     state.tournament.matches = m;
@@ -5753,6 +5767,11 @@
                     log("NUOVO TORNEO CARICATO - RESET TOTALE");
                     saveTournamentState();
                 }
+                return m.length;
+            }
+            document.getElementById('load-tournament-btn').addEventListener('click', () => {
+                if (!confirm("ATTENZIONE:\nQuesta azione cancellerà tutti i punteggi e riavvierà il torneo dalla prima partita.\n\nSei sicuro di voler procedere?")) return;
+                loadTournamentFromInput();
             });
 
             // SKIP SLOT LOGIC
@@ -5798,6 +5817,190 @@
                 saveTournamentState();
                 document.getElementById('tournament-modal').style.display = 'none';
             });
+
+            // ===== IMPORT EVENTO DA IPBA.IT =====
+            // Scarica la pagina evento (es. https://www.ipba.it/evento.aspx?id=369) e
+            // compila nome/data/luogo + palinsesto. ipba.it non manda header CORS,
+            // quindi si prova prima il proxy del server locale (/ipba di server.js),
+            // poi il fetch diretto, infine dei proxy CORS pubblici (per GitHub Pages).
+            const MESI_IT = {
+                GENNAIO: '01', FEBBRAIO: '02', MARZO: '03', APRILE: '04', MAGGIO: '05', GIUGNO: '06',
+                LUGLIO: '07', AGOSTO: '08', SETTEMBRE: '09', OTTOBRE: '10', NOVEMBRE: '11', DICEMBRE: '12'
+            };
+
+            function setEventoImportStatus(msg, isError) {
+                const el = document.getElementById('evento-import-status');
+                if (el) { el.innerText = msg || ''; el.style.color = isError ? '#ef4444' : '#94a3b8'; }
+            }
+
+            async function fetchEventoIpba(eventoUrl) {
+                const tryFetch = async (url) => {
+                    const ctrl = new AbortController();
+                    const t = setTimeout(() => ctrl.abort(), 12000);
+                    try {
+                        const res = await fetch(url, { signal: ctrl.signal });
+                        if (!res.ok) throw new Error('HTTP ' + res.status);
+                        return await res.text();
+                    } finally { clearTimeout(t); }
+                };
+                const looksValid = (html) => typeof html === 'string' && html.length > 3000 && /calendario gare|small-box/i.test(html);
+
+                const enc = encodeURIComponent(eventoUrl);
+                const candidates = [];
+                if (location.protocol === 'http:' || location.protocol === 'https:') {
+                    candidates.push(location.origin + '/ipba?url=' + enc); // proxy di server.js (stessa origine)
+                }
+                candidates.push('http://localhost:9000/ipba?url=' + enc);  // server locale, app aperta da altrove
+                candidates.push(eventoUrl);                                 // diretto (se un giorno ipba.it abilita CORS)
+                candidates.push('https://api.allorigins.win/raw?url=' + enc);
+                candidates.push('https://api.codetabs.com/v1/proxy?quest=' + enc);
+
+                let lastErr = null;
+                for (const u of [...new Set(candidates)]) {
+                    try {
+                        const html = await tryFetch(u);
+                        if (looksValid(html)) return html;
+                        lastErr = new Error('risposta non valida');
+                    } catch (e) { lastErr = e; }
+                }
+                throw new Error('pagina evento non scaricabile (' + (lastErr ? lastErr.message : '?') + '). Avvia il server locale (Avvia_Server_Locale.bat) e riprova.');
+            }
+
+            function parseEventoIpba(html) {
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+                const out = { name: '', description: '', location: '', date: '', system: '', matchTime: '', pods: '', matches: [] };
+
+                // Intestazione: <div class="small-box"><h3>nome</h3><p>descrizione <b>luogo - 21 GIUGNO 2026</b></p>
+                const inner = doc.querySelector('.small-box .inner');
+                if (inner) {
+                    const h3 = inner.querySelector('h3');
+                    if (h3) out.name = h3.textContent.replace(/\s+/g, ' ').trim();
+                    const p = inner.querySelector('p');
+                    if (p) {
+                        const b = p.querySelector('b');
+                        const headline = b ? b.textContent.replace(/\s+/g, ' ').trim() : '';
+                        const clone = p.cloneNode(true);
+                        clone.querySelectorAll('b').forEach(x => x.remove());
+                        out.description = clone.textContent.replace(/\s+/g, ' ').trim();
+
+                        for (const m of headline.matchAll(/(\d{1,2})(?:\s*[\/\-–]\s*\d{1,2})?\s+([A-Za-zÀ-ù]+)\s+(\d{4})/g)) {
+                            const mese = MESI_IT[m[2].toUpperCase()];
+                            if (!mese) continue;
+                            out.date = m[3] + '-' + mese + '-' + String(m[1]).padStart(2, '0');
+                            let loc = headline.slice(0, m.index).replace(/[-\s,]+$/, '').trim();
+                            loc = loc.replace(/^(.{10,}?),\s*\1/, '$1'); // il sito spesso duplica l'indirizzo
+                            out.location = loc;
+                            break;
+                        }
+                        if (!out.location) out.location = headline;
+                    }
+                }
+
+                // Box "Calendario gare e risultati in diretta"
+                let calRoot = doc;
+                for (const t of doc.querySelectorAll('.box-title')) {
+                    if (/calendario gare/i.test(t.textContent)) { calRoot = t.closest('.box') || doc; break; }
+                }
+                const calText = (calRoot.textContent || '');
+                const sys = calText.match(/Sistema gioco:\s*(.*?)\s*(?=Match time|Limite POD|Pit A|$)/);
+                if (sys) out.system = sys[1].trim();
+                const mt = calText.match(/Match time:\s*(\d+)/);
+                if (mt) out.matchTime = mt[1];
+                const pod = calText.match(/Limite POD:\s*(\d+)/);
+                if (pod) out.pods = pod[1];
+
+                // Partite: ogni riga è <div>9.00 - mercy 5 - 15 min - 3 pod</div> seguito da
+                // <table><tr><td><a href=team.aspx>TeamA</a></td><td>3 : 6</td><td><a>TeamB</a></td></tr></table>
+                const ownText = (el) => {
+                    let s = '';
+                    for (const n of el.childNodes) if (n.nodeType === 3) s += n.textContent + ' ';
+                    return s.replace(/\s+/g, ' ').trim();
+                };
+                let pendingTime = '00:00';
+                let currentPhase = '';
+                calRoot.querySelectorAll('div, tr, h4, h5, b, strong').forEach(el => {
+                    if (el.tagName === 'TR') {
+                        const links = el.querySelectorAll("a[href*='team.aspx']");
+                        if (links.length >= 2) {
+                            const clean = (s) => s.replace(/\s+/g, ' ').trim();
+                            out.matches.push({
+                                time: pendingTime,
+                                teamA: clean(links[0].textContent),
+                                teamB: clean(links[links.length - 1].textContent),
+                                phase: currentPhase
+                            });
+                        }
+                        return;
+                    }
+                    const txt = ownText(el);
+                    if (!txt) return;
+                    const tm = txt.match(/^(\d{1,2})[.:](\d{2})\b/);
+                    if (tm) { pendingTime = tm[1] + ':' + tm[2]; return; }
+                    // Intestazioni di fase (Semifinali, Finale...) — parseTournament le usa per saltare i knockout
+                    if (txt.length < 40 && /^(girone|pool|ottavi|quarti|semifinal|final|playout)/i.test(txt)) currentPhase = txt.toUpperCase();
+                });
+
+                return out;
+            }
+
+            async function importEventoIpba() {
+                const raw = (document.getElementById('tourney-event-url').value || '').trim();
+                const idMatch = raw.match(/id=(\d+)/) || raw.match(/^(\d+)$/);
+                if (!idMatch) {
+                    alert("Incolla il link dell'evento IPBA (es. https://www.ipba.it/evento.aspx?id=369) oppure solo il numero dell'evento.");
+                    return;
+                }
+                const eventoUrl = 'https://www.ipba.it/evento.aspx?id=' + idMatch[1];
+
+                const btn = document.getElementById('btn-import-evento');
+                btn.disabled = true;
+                setEventoImportStatus('Scarico i dati da ipba.it...');
+                try {
+                    const html = await fetchEventoIpba(eventoUrl);
+                    const ev = parseEventoIpba(html);
+                    if (!ev.name && ev.matches.length === 0) throw new Error('nessun dato riconosciuto nella pagina evento.');
+
+                    if (ev.name) { state.tournament.name = ev.name; document.getElementById('tourney-name').value = ev.name; }
+                    if (ev.date) { state.tournament.date = ev.date; document.getElementById('tourney-date').value = ev.date; }
+                    if (ev.location) { state.tournament.location = ev.location; document.getElementById('tourney-location').value = ev.location; }
+                    state.tournament.description = ev.description || '';
+                    state.tournament.eventUrl = eventoUrl;
+
+                    const lines = [];
+                    let lastPhase = null;
+                    ev.matches.forEach(m => {
+                        if (m.phase && m.phase !== lastPhase) { lines.push(m.phase); lastPhase = m.phase; }
+                        lines.push(m.time + ' - ' + m.teamA + ', ' + m.teamB);
+                    });
+                    if (lines.length) document.getElementById('tournament-input').value = lines.join('\n');
+
+                    saveTournamentState();
+                    const extra = [
+                        ev.system ? 'Sistema: ' + ev.system : '',
+                        ev.matchTime ? 'Match time: ' + ev.matchTime + ' min' : '',
+                        ev.pods ? 'Limite POD: ' + ev.pods : ''
+                    ].filter(Boolean).join(' | ');
+                    setEventoImportStatus('✅ Importato: ' + (ev.name || eventoUrl) + ' — ' + ev.matches.length + ' match trovati.' + (extra ? ' (' + extra + ')' : ''));
+                    log('EVENTO IPBA IMPORTATO: ' + (ev.name || eventoUrl) + ' (' + ev.matches.length + ' match)');
+
+                    if (ev.matches.length > 0) {
+                        if (confirm('Importato "' + (ev.name || 'Evento') + '"\n' + ev.matches.length + ' match trovati' + (extra ? '\n' + extra : '') + '\n\nVuoi CARICARE SUBITO il palinsesto?\n(azzera i punteggi e riparte dalla prima partita)')) {
+                            loadTournamentFromInput();
+                        } else {
+                            alert('Dati intestazione salvati.\nIl palinsesto è pronto nella casella "Lista Match": premi "CARICA TORNEO & AZZERA" quando vuoi.');
+                        }
+                    } else {
+                        alert('Dati evento importati, ma nessun match trovato nel calendario gare.\n(Su ipba.it il palinsesto compare solo dopo la pubblicazione.)');
+                    }
+                } catch (err) {
+                    console.error('Import evento IPBA:', err);
+                    setEventoImportStatus('❌ Errore: ' + err.message, true);
+                    alert('Import non riuscito: ' + err.message);
+                } finally {
+                    btn.disabled = false;
+                }
+            }
+            document.getElementById('btn-import-evento').addEventListener('click', importEventoIpba);
             document.getElementById('close-history-btn').addEventListener('click', () => {
                 document.getElementById('history-modal').style.display = 'none';
                 document.getElementById('history-edit-area').style.display = 'none';
