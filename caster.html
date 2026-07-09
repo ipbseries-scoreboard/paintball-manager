@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPBA Caster Notes - Note per la Telecronaca</title>
+    <!-- PeerJS CDN -->
+    <script src="lib/peerjs.min.js"></script>
+    <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');</script>
+    <script src="pm-client.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Roboto:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0b1220;
+            --card: #111b2e;
+            --card2: #16233b;
+            --accent: #22d3ee;
+            --amber: #fbbf24;
+            --green: #4ade80;
+            --red: #f87171;
+            --text: #f1f5f9;
+            --muted: #94a3b8;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 18px;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Roboto', sans-serif;
+            min-height: 100vh;
+        }
+
+        h1, h2, .oswald { font-family: 'Oswald', sans-serif; }
+
+        #topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 15px;
+            border-bottom: 3px solid var(--accent);
+            padding-bottom: 8px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+        }
+
+        #topbar h1 { margin: 0; font-size: 1.5rem; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; }
+        #tourney-name { font-size: 1.1rem; color: var(--text); }
+        #conn-note { font-size: 0.8rem; color: var(--muted); }
+
+        #grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 14px;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid #223252;
+            border-left: 4px solid var(--accent);
+            border-radius: 10px;
+            padding: 14px 16px;
+        }
+
+        .card h2 {
+            margin: 0 0 10px 0;
+            font-size: 0.95rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--amber);
+        }
+
+        .span6 { grid-column: span 6; }
+        .span4 { grid-column: span 4; }
+        .span8 { grid-column: span 8; }
+        .span12 { grid-column: span 12; }
+
+        @media (max-width: 1100px) {
+            .span6, .span4, .span8 { grid-column: span 12; }
+        }
+
+        /* MATCH IN CORSO */
+        #live-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 22px;
+            font-family: 'Oswald', sans-serif;
+        }
+
+        #live-row .tname { font-size: 1.9rem; font-weight: 700; flex: 1; }
+        #live-row .tname.left { text-align: right; }
+        #live-row .tname.right { text-align: left; }
+        #live-score { font-size: 2.6rem; font-weight: 700; color: var(--accent); white-space: nowrap; }
+        #live-sub { text-align: center; color: var(--muted); margin-top: 4px; font-size: 1rem; }
+        #live-sub b { color: var(--text); }
+
+        /* H2H */
+        #h2h-main-line { font-size: 1.25rem; text-align: center; margin: 6px 0 10px; }
+        #h2h-bar { display: flex; height: 26px; border-radius: 6px; overflow: hidden; font-size: 0.85rem; font-weight: 700; }
+        #h2h-bar div { display: flex; align-items: center; justify-content: center; min-width: 30px; }
+        #h2h-bar .wa { background: #0ea5e9; color: #06222f; }
+        #h2h-bar .dr { background: #475569; color: #cbd5e1; }
+        #h2h-bar .wb { background: #f59e0b; color: #3d2a03; }
+        .callout { margin-top: 10px; padding: 8px 12px; border-radius: 8px; background: var(--card2); font-size: 1rem; }
+        .callout.hot { border: 1px solid var(--amber); }
+        .muted { color: var(--muted); }
+
+        /* TEAM CARDS */
+        .team-card h2 { color: var(--accent); }
+        .stat-line { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed #223252; font-size: 0.95rem; }
+        .stat-line span:last-child { font-weight: 700; }
+        .chips { display: flex; gap: 5px; margin: 6px 0; }
+        .chip { width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.9rem; }
+        .chip.V { background: rgba(74, 222, 128, .18); color: var(--green); border: 1px solid var(--green); }
+        .chip.S { background: rgba(248, 113, 113, .15); color: var(--red); border: 1px solid var(--red); }
+        .chip.P { background: rgba(148, 163, 184, .15); color: var(--muted); border: 1px solid var(--muted); }
+        ul.wins { margin: 6px 0 0; padding-left: 18px; font-size: 0.9rem; color: var(--text); }
+        ul.wins li { margin: 2px 0; }
+
+        /* LISTE STATISTICHE */
+        .fact { padding: 6px 0; border-bottom: 1px dashed #223252; font-size: 0.98rem; }
+        .fact:last-child { border-bottom: none; }
+        .fact .em { margin-right: 6px; }
+        .fact b { color: var(--text); }
+        .fact .val { color: var(--accent); font-weight: 700; }
+
+        /* CLASSIFICA */
+        table.standings { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+        table.standings th { text-align: left; color: var(--muted); font-weight: 500; padding: 4px 6px; border-bottom: 1px solid #223252; }
+        table.standings td { padding: 5px 6px; border-bottom: 1px dashed #1c2b47; }
+        table.standings tr:first-child td { color: var(--amber); font-weight: 700; }
+        .num { text-align: center; }
+
+        #empty-note { text-align: center; color: var(--muted); padding: 40px 0; font-size: 1.1rem; }
+    </style>
+</head>
+
+<body>
+    <div id="topbar">
+        <h1>🎙️ Note per la telecronaca</h1>
+        <div id="tourney-name">—</div>
+        <div id="conn-note">In attesa di dati dalla Regia...</div>
+    </div>
+
+    <div id="grid" style="display:none;">
+
+        <!-- MATCH IN CORSO -->
+        <div class="card span12">
+            <h2>Match in corso</h2>
+            <div id="live-row">
+                <div class="tname left" id="live-a">—</div>
+                <div id="live-score">0 : 0</div>
+                <div class="tname right" id="live-b">—</div>
+            </div>
+            <div id="live-sub">—</div>
+        </div>
+
+        <!-- SCONTRI DIRETTI -->
+        <div class="card span12">
+            <h2>⚔️ Scontri diretti</h2>
+            <div id="h2h-main-line">—</div>
+            <div id="h2h-bar" style="display:none;"></div>
+            <div id="h2h-notes"></div>
+        </div>
+
+        <!-- TEAM A -->
+        <div class="card span6 team-card">
+            <h2 id="ta-title">Squadra A</h2>
+            <div class="stat-line"><span>Forma (ultime 5, tutti gli eventi)</span><span></span></div>
+            <div class="chips" id="ta-forma"></div>
+            <div id="ta-stats"></div>
+        </div>
+
+        <!-- TEAM B -->
+        <div class="card span6 team-card">
+            <h2 id="tb-title">Squadra B</h2>
+            <div class="stat-line"><span>Forma (ultime 5, tutti gli eventi)</span><span></span></div>
+            <div class="chips" id="tb-forma"></div>
+            <div id="tb-stats"></div>
+        </div>
+
+        <!-- PROSSIMO MATCH -->
+        <div class="card span12">
+            <h2>⏭️ Prossimo match</h2>
+            <div id="next-content" class="fact">—</div>
+        </div>
+
+        <!-- STATISTICHE TORNEO -->
+        <div class="card span6">
+            <h2>📊 Statistiche del torneo</h2>
+            <div id="tourney-facts"><div class="fact muted">Nessun match completato finora.</div></div>
+        </div>
+
+        <!-- CLASSIFICA -->
+        <div class="card span6">
+            <h2>🏁 Classifica</h2>
+            <table class="standings">
+                <thead>
+                    <tr><th>#</th><th>Squadra</th><th class="num">P</th><th class="num">V</th><th class="num">S</th><th class="num">Diff</th><th class="num">Pen</th></tr>
+                </thead>
+                <tbody id="standings-body"><tr><td colspan="7" class="muted">—</td></tr></tbody>
+            </table>
+        </div>
+
+        <!-- ARCHIVIO STORICO -->
+        <div class="card span12">
+            <h2>📚 Archivio storico (ultime 3 stagioni)</h2>
+            <div style="display:flex; gap:30px; flex-wrap:wrap;">
+                <div style="flex:1; min-width:260px;">
+                    <div class="fact"><b>🏆 Albo d'oro (eventi vinti)</b></div>
+                    <div id="arch-albo" class="muted">—</div>
+                </div>
+                <div style="flex:1; min-width:260px;">
+                    <div class="fact"><b>🎖️ Veterane (partite giocate)</b></div>
+                    <div id="arch-vet" class="muted">—</div>
+                </div>
+                <div style="flex:1; min-width:260px;">
+                    <div class="fact"><b>ℹ️ Dati archivio</b></div>
+                    <div id="arch-info" class="muted">Nessun archivio: nella Regia premi "⚔️ AGGIORNA STORICO SCONTRI".</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="empty-note">In attesa della Regia... (apri questa pagina con ?id=MATCHID oppure inserisci l'ID richiesto)</div>
+
+    <script>
+        let conn = null;
+        let currentData = {};
+        let lastRender = 0;
+
+        let matchId = PMClient.getUrlId();
+        if (!matchId) matchId = prompt("Inserisci il Match ID della Regia:", "1674");
+        if (matchId) {
+            conn = PMClient.connect({
+                id: matchId,
+                staleBadge: true,
+                onStatus: (msg) => { const el = document.getElementById('conn-note'); if (el) el.innerText = msg; },
+                onData: handleData
+            });
+        }
+
+        const norm = (n) => (n || '').trim().toUpperCase().replace(/\s+/g, ' ');
+        const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+        const MESI = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+        const meseAnno = (iso) => {
+            if (!iso || iso.length < 7) return '';
+            const m = parseInt(iso.slice(5, 7), 10);
+            return (MESI[m - 1] || '') + ' ' + iso.slice(0, 4);
+        };
+
+        function handleData(data) {
+            if (!data) return;
+            if (data.type === 'PING' && conn) { conn.send({ type: 'PONG', ts: data.ts }); return; }
+            try { if (typeof data === 'string') data = JSON.parse(data); } catch (e) { return; }
+            Object.assign(currentData, data);
+
+            // punteggio/timer aggiornati sempre (leggeri), il resto max 2 volte al secondo
+            renderLive();
+            const now = Date.now();
+            if (now - lastRender > 500) { lastRender = now; renderAll(); }
+        }
+
+        function renderLive() {
+            const d = currentData;
+            if (!d.teamLeft || !d.teamRight) return;
+            document.getElementById('grid').style.display = 'grid';
+            document.getElementById('empty-note').style.display = 'none';
+            document.getElementById('live-a').innerText = d.teamLeft.name || '—';
+            document.getElementById('live-b').innerText = d.teamRight.name || '—';
+            document.getElementById('live-score').innerText = (d.teamLeft.score || 0) + ' : ' + (d.teamRight.score || 0);
+            const parts = [];
+            if (d.timer) parts.push('⏱ <b>' + esc(d.timer) + '</b>');
+            if (d.statusText) parts.push(esc(d.statusText));
+            if (d.phase) parts.push('Fase: <b>' + esc(d.phase) + '</b>');
+            document.getElementById('live-sub').innerHTML = parts.join(' &nbsp;•&nbsp; ') || '—';
+        }
+
+        function renderAll() {
+            const d = currentData;
+            if (d.tournament && d.tournament.active) {
+                document.getElementById('tourney-name').innerText = (d.tournament.name || '');
+            }
+            renderH2H(d);
+            renderTeams(d);
+            renderNext(d);
+            renderTourneyFacts(d);
+            renderStandings(d);
+            renderArchivio(d);
+        }
+
+        function renderH2H(d) {
+            const line = document.getElementById('h2h-main-line');
+            const bar = document.getElementById('h2h-bar');
+            const notes = document.getElementById('h2h-notes');
+            const h = d.h2h ? d.h2h.current : null;
+            if (!h) {
+                line.innerHTML = '<span class="muted">Nessun archivio storico (Regia: "⚔️ AGGIORNA STORICO SCONTRI") o nomi squadra non reali.</span>';
+                bar.style.display = 'none'; notes.innerHTML = ''; return;
+            }
+            if (!h.count) {
+                line.innerHTML = `🆕 <b>${esc(h.teamA)}</b> e <b>${esc(h.teamB)}</b> non si sono <b>mai affrontate</b> nelle ultime stagioni: sfida inedita!`;
+                bar.style.display = 'none'; notes.innerHTML = ''; return;
+            }
+            const vit = (n) => n === 1 ? '1 vittoria' : n + ' vittorie';
+            line.innerHTML = `<b>${esc(h.teamA)}</b> vs <b>${esc(h.teamB)}</b>: <span style="color:var(--accent); font-weight:700">${h.count} ${h.count === 1 ? 'precedente' : 'precedenti'}</span> — ` +
+                `${vit(h.winsA)} ${esc(h.teamA)}, ${vit(h.winsB)} ${esc(h.teamB)}` + (h.draws ? `, ${h.draws} ${h.draws === 1 ? 'pareggio' : 'pareggi'}` : '');
+            const wa = Math.round(100 * h.winsA / h.count), dr = Math.round(100 * h.draws / h.count);
+            bar.style.display = 'flex';
+            bar.innerHTML =
+                `<div class="wa" style="width:${wa}%">${h.winsA > 0 ? h.winsA : ''}</div>` +
+                `<div class="dr" style="width:${dr}%">${h.draws > 0 ? h.draws : ''}</div>` +
+                `<div class="wb" style="flex:1">${h.winsB > 0 ? h.winsB : ''}</div>`;
+
+            let nt = '';
+            if (h.last) {
+                nt += `<div class="callout">Ultimo incontro: <b>${h.last.scoreA}-${h.last.scoreB}</b>` +
+                    (h.last.event ? ` · ${esc(h.last.event)}` : '') +
+                    (h.last.date ? ` <span class="muted">(${meseAnno(h.last.date)})</span>` : '') + `</div>`;
+                if (h.last.date) {
+                    const giorni = (Date.now() - new Date(h.last.date).getTime()) / 86400000;
+                    if (giorni > 60) nt += `<div class="callout">⏳ Non si affrontavano da <b>${meseAnno(h.last.date)}</b></div>`;
+                }
+            }
+            if (h.count >= 4) {
+                const wMax = Math.max(h.winsA, h.winsB);
+                if (wMax / h.count >= 0.7) {
+                    const boss = h.winsA > h.winsB ? h.teamA : h.teamB;
+                    const preda = h.winsA > h.winsB ? h.teamB : h.teamA;
+                    nt += `<div class="callout hot">👑 <b>${esc(boss)}</b> è la bestia nera di <b>${esc(preda)}</b>: ${wMax} vittorie su ${h.count}</div>`;
+                }
+            }
+            notes.innerHTML = nt;
+        }
+
+        function chips(forma) {
+            if (!forma || !forma.length) return '<span class="muted">—</span>';
+            return forma.map(e => `<div class="chip ${esc(e)}">${esc(e)}</div>`).join('');
+        }
+
+        function teamStatsHtml(nome, d) {
+            const th = (d.teamHistory || {})[norm(nome)];
+            const st = d.standingsData && d.standingsData.standings
+                ? d.standingsData.standings.find(s => norm(s.name) === norm(nome)) : null;
+            let html = '';
+            if (th) {
+                html += `<div class="stat-line"><span>Partite IPBA (3 stagioni)</span><span>${th.played}</span></div>`;
+                html += `<div class="stat-line"><span>Bilancio</span><span><span style="color:var(--green)">${th.wins}V</span> · <span style="color:var(--red)">${th.losses}S</span>${th.draws ? ' · ' + th.draws + 'P' : ''}</span></div>`;
+                if (th.eventiVinti && th.eventiVinti.length) {
+                    html += `<div class="stat-line"><span>🏆 Eventi vinti</span><span>${th.eventiVinti.length}</span></div>`;
+                    html += `<ul class="wins">` + th.eventiVinti.slice(-3).reverse().map(e =>
+                        `<li>${esc(e.name)}${e.date ? ` <span class="muted">(${meseAnno(e.date)})</span>` : ''}</li>`).join('') + `</ul>`;
+                }
+            } else {
+                html += `<div class="stat-line"><span class="muted">Nessun dato in archivio</span><span></span></div>`;
+            }
+            if (st) {
+                const diff = (st.rw || 0) - (st.rl || 0);
+                html += `<div class="stat-line" style="margin-top:8px"><span><b>Oggi nel torneo</b></span><span>${st.played}G · ${st.wins}V · ${st.losses}S · diff ${diff > 0 ? '+' : ''}${diff}${st.pen ? ' · ' + st.pen + ' pen' : ''}</span></div>`;
+            }
+            return html;
+        }
+
+        function renderTeams(d) {
+            const a = d.teamLeft ? d.teamLeft.name : null;
+            const b = d.teamRight ? d.teamRight.name : null;
+            if (!a || !b) return;
+            document.getElementById('ta-title').innerText = a;
+            document.getElementById('tb-title').innerText = b;
+            const tha = (d.teamHistory || {})[norm(a)];
+            const thb = (d.teamHistory || {})[norm(b)];
+            document.getElementById('ta-forma').innerHTML = chips(tha && tha.forma);
+            document.getElementById('tb-forma').innerHTML = chips(thb && thb.forma);
+            document.getElementById('ta-stats').innerHTML = teamStatsHtml(a, d);
+            document.getElementById('tb-stats').innerHTML = teamStatsHtml(b, d);
+        }
+
+        function renderNext(d) {
+            const el = document.getElementById('next-content');
+            if (!d.nextMatch) { el.innerHTML = '<span class="muted">Nessun altro match in programma.</span>'; return; }
+            let html = `<b>${esc(d.nextMatch.teamA)}</b> vs <b>${esc(d.nextMatch.teamB)}</b>` +
+                (d.nextMatch.time ? ` <span class="muted">(ore ${esc(d.nextMatch.time)})</span>` : '');
+            const hn = d.h2h ? d.h2h.next : null;
+            if (hn) {
+                if (!hn.count) {
+                    html += `<div class="callout">🆕 Sfida inedita: mai affrontate nelle ultime stagioni.</div>`;
+                } else {
+                    html += `<div class="callout">⚔️ ${hn.count} precedenti — ${hn.winsA} ${esc(hn.teamA)}, ${hn.winsB} ${esc(hn.teamB)}` +
+                        (hn.draws ? `, ${hn.draws} pareggi` : '') +
+                        (hn.last ? ` <span class="muted">(ultimo: ${hn.last.scoreA}-${hn.last.scoreB}${hn.last.event ? ' · ' + esc(hn.last.event) : ''})</span>` : '') + `</div>`;
+                }
+            }
+            [d.nextMatch.teamA, d.nextMatch.teamB].forEach(n => {
+                const th = (d.teamHistory || {})[norm(n)];
+                if (th && th.forma && th.forma.length) {
+                    html += `<div style="display:flex; align-items:center; gap:8px; margin-top:6px;"><span class="muted" style="min-width:170px">Forma ${esc(th.name)}:</span><span class="chips" style="margin:0">${chips(th.forma)}</span></div>`;
+                }
+            });
+            el.innerHTML = html;
+        }
+
+        function renderTourneyFacts(d) {
+            const sd = d.standingsData;
+            const box = document.getElementById('tourney-facts');
+            if (!sd || !sd.standings || !sd.standings.some(s => (s.played || 0) > 0)) {
+                box.innerHTML = '<div class="fact muted">Nessun match completato finora.</div>'; return;
+            }
+            const played = sd.standings.filter(s => (s.played || 0) > 0);
+            const F = [];
+            if (sd.records && sd.records[0]) F.push(`<span class="em">⚡</span><b>Punto più veloce:</b> ${esc(sd.records[0].team)} <span class="val">${Math.round(sd.records[0].duration)}s</span>${sd.records[0].match ? ' <span class="muted">(' + esc(sd.records[0].match) + ')</span>' : ''}`);
+            if (sd.averageTimes && sd.averageTimes[0]) F.push(`<span class="em">🎯</span><b>Punto medio più rapido:</b> ${esc(sd.averageTimes[0].team)} <span class="val">${Math.round(sd.averageTimes[0].avg)}s</span>`);
+            if (sd.slowestRounds && sd.slowestRounds[0]) F.push(`<span class="em">🐌</span><b>Punto più combattuto:</b> ${esc(sd.slowestRounds[0].team)} <span class="val">${Math.round(sd.slowestRounds[0].duration)}s</span>`);
+            if (sd.mercyKillers && sd.mercyKillers[0]) F.push(`<span class="em">💀</span><b>Re del mercy:</b> ${esc(sd.mercyKillers[0].team)} <span class="val">${sd.mercyKillers[0].count}</span>`);
+            if (sd.badBoys && sd.badBoys[0]) F.push(`<span class="em">🚨</span><b>Più penalizzata:</b> ${esc(sd.badBoys[0].team)} <span class="val">${sd.badBoys[0].count}</span>`);
+            else F.push(`<span class="em">🤝</span><b>Fair play:</b> nessuna penalità finora`);
+            const att = [...played].sort((x, y) => (y.rw || 0) - (x.rw || 0))[0];
+            if (att && att.rw > 0) F.push(`<span class="em">🔥</span><b>Miglior attacco:</b> ${esc(att.name)} <span class="val">${att.rw} punti</span>`);
+            const def = [...played].sort((x, y) => ((x.rl || 0) - (y.rl || 0)) || ((y.played || 0) - (x.played || 0)))[0];
+            if (def) F.push(`<span class="em">🛡️</span><b>Miglior difesa:</b> ${esc(def.name)} <span class="val">${def.rl} subiti</span>`);
+            const totPunti = played.reduce((t, s) => t + (s.rw || 0), 0);
+            let progress = '';
+            if (d.tournament && d.tournament.matches && d.tournament.matches.length) {
+                const fin = d.tournament.matches.filter(m => m.savedState && m.savedState.finished).length;
+                progress = `${fin}/${d.tournament.matches.length} match · `;
+            }
+            F.push(`<span class="em">📊</span><b>Il torneo:</b> <span class="val">${progress}${totPunti} punti totali</span>`);
+            box.innerHTML = F.map(f => `<div class="fact">${f}</div>`).join('');
+        }
+
+        function renderStandings(d) {
+            const tb = document.getElementById('standings-body');
+            const sd = d.standingsData;
+            if (!sd || !sd.standings || !sd.standings.length) { tb.innerHTML = '<tr><td colspan="7" class="muted">—</td></tr>'; return; }
+            tb.innerHTML = sd.standings.slice(0, 8).map((s, i) => {
+                const diff = (s.rw || 0) - (s.rl || 0);
+                return `<tr><td>${i + 1}</td><td>${esc(s.name)}</td><td class="num">${s.played || 0}</td><td class="num">${s.wins || 0}</td><td class="num">${s.losses || 0}</td><td class="num">${diff > 0 ? '+' : ''}${diff}</td><td class="num">${s.pen || 0}</td></tr>`;
+            }).join('');
+        }
+
+        function renderArchivio(d) {
+            const at = d.archivioTop;
+            if (!at) return;
+            const lista = (arr, unit) => (arr && arr.length)
+                ? arr.map((x, i) => `<div class="fact">${i + 1}. <b>${esc(x.team)}</b> <span class="val">${x.count} ${unit}</span></div>`).join('')
+                : '<div class="fact muted">—</div>';
+            document.getElementById('arch-albo').innerHTML = lista(at.alboOro, 'eventi vinti');
+            document.getElementById('arch-vet').innerHTML = lista(at.veterane, 'partite');
+            document.getElementById('arch-info').innerHTML =
+                `<div class="fact">${at.eventi} eventi · ${at.partite} partite con risultato` +
+                (at.updatedAt ? ` <span class="muted">(aggiornato ${esc(at.updatedAt.slice(0, 10))})</span>` : '') + `</div>`;
+        }
+    </script>
+</body>
+
+</html>

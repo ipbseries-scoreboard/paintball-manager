@@ -324,28 +324,234 @@
                 modeString = "PARTITA CONCLUSA! RISULTATO IN AGGIORNAMENTO... ";
             }
 
-            let finalScrollText = "";
-            if (modeString) finalScrollText += modeString + "  &nbsp;&nbsp;&bull;&nbsp;&nbsp;  ";
-            if (nmString) finalScrollText += nmString + "  &nbsp;&nbsp;&bull;&nbsp;&nbsp;  ";
+            const SEP = ' &nbsp;&nbsp;&bull;&nbsp;&nbsp; ';
 
-            // Aggiungi Storico Partite Giocate (Risultati)
-            if (currentData.tournament && currentData.tournament.matches) {
-                const pastMatches = currentData.tournament.matches.filter(m => m.savedState && m.savedState.finished);
-                if (pastMatches.length > 0) {
-                    finalScrollText += "RISULTATI RECENTI: &nbsp;&nbsp;";
-                    // Prendiamo le ultime 10 giocate (le piu recenti in fondo)
-                    const recentMatches = pastMatches.slice(-10);
-                    recentMatches.forEach(m => {
-                        let scoreA = m.savedState.scoreA || 0;
-                        let scoreB = m.savedState.scoreB || 0;
-                        finalScrollText += `<span style="color:#e2e8f0">${m.teamA}</span> <span style="color:var(--accent-color)">[${scoreA} - ${scoreB}]</span> <span style="color:#e2e8f0">${m.teamB}</span> &nbsp;&nbsp;&bull;&nbsp;&nbsp; `;
-                    });
+            let finalScrollText = "";
+            if (modeString) finalScrollText += modeString + SEP;
+            if (nmString) finalScrollText += nmString + SEP;
+
+            // Scontri diretti (archivio storico ipba scaricato dalla Regia)
+            if (currentData.h2h) {
+                const hc = currentData.h2h.current;
+                const hn = currentData.h2h.next;
+                const stessaCoppia = hc && hn && hc.teamA === hn.teamA && hc.teamB === hn.teamB;
+                const sc = h2hTicker(hc, 'MATCH IN CORSO');
+                if (sc) finalScrollText += sc + SEP;
+                const bn = bestiaNeraTicker(hc);
+                if (bn) finalScrollText += bn + SEP;
+                if (!stessaCoppia) {
+                    const sn = h2hTicker(hn, 'PROSSIMO MATCH');
+                    if (sn) finalScrollText += sn + SEP;
+                    const bnn = bestiaNeraTicker(hn);
+                    if (bnn) finalScrollText += bnn + SEP;
                 }
-            } else {
-                if (finalScrollText === "") finalScrollText += "BENVENUTI AL TORNEO! IN ATTESA DELL'INIZIO...";
             }
 
-            tickerEl.innerHTML = finalScrollText;
+            // Forma recente delle squadre in campo (archivio + oggi)
+            if (currentData.teamHistory && currentData.h2h && currentData.h2h.current) {
+                [currentData.h2h.current.teamA, currentData.h2h.current.teamB].forEach(nome => {
+                    const th = currentData.teamHistory[tkNorm(nome)];
+                    const f = formaTicker(th);
+                    if (f) finalScrollText += f + SEP;
+                });
+            }
+
+            // Aggiungi Storico Partite Giocate (Risultati)
+            // I punteggi veri stanno in standingsData.matchHistory: il clone "light" di
+            // tournament.matches trasmesso dalla Regia contiene solo il flag finished.
+            const sd = currentData.standingsData;
+            if (sd && sd.matchHistory && sd.matchHistory.length > 0) {
+                finalScrollText += "RISULTATI RECENTI: &nbsp;&nbsp;";
+                // matchHistory arriva dal più recente: lo giriamo in ordine di gioco
+                [...sd.matchHistory].reverse().forEach(m => {
+                    finalScrollText += `<span style="color:#e2e8f0">${m.teamA}</span> <span style="color:var(--accent-color)">[${m.scoreA || 0} - ${m.scoreB || 0}]</span> <span style="color:#e2e8f0">${m.teamB}</span>` + SEP;
+                });
+            }
+
+            // Statistiche curiose del torneo (calcolate dalla Regia in standingsData)
+            finalScrollText += buildStatsTicker(sd, currentData.tournament);
+
+            // Classifiche "di sempre" dall'archivio storico (albo d'oro, veterane)
+            finalScrollText += archivioTicker(currentData.archivioTop);
+
+            if (finalScrollText === "") finalScrollText = "BENVENUTI AL TORNEO! IN ATTESA DELL'INIZIO...";
+
+            // Aggiorna il DOM solo se il testo è cambiato (i pacchetti arrivano a 5Hz)
+            // e adatta la durata dell'animazione: velocità costante ~110 px/s
+            // anche quando il testo si allunga con le statistiche.
+            if (tickerEl.dataset.lastText !== finalScrollText) {
+                tickerEl.dataset.lastText = finalScrollText;
+                tickerEl.innerHTML = finalScrollText;
+                tickerEl.style.animationDuration = Math.max(35, Math.round((1920 + tickerEl.scrollWidth) / 110)) + 's';
+            }
+        }
+
+        // Formatta il bilancio scontri diretti (packet.h2h dalla Regia):
+        // "⚔️ PRECEDENTI X vs Y: 5 sfide — 4 X, 1 Y (ultimo: 3-6 · Evento)"
+        function h2hTicker(h, prefix) {
+            if (!h) return '';
+            const hi = (t) => `<span style="color:#e2e8f0">${t}</span>`;
+            const acc = (t) => `<span style="color:var(--accent-color)">${t}</span>`;
+            const lab = (emoji, t) => `<span style="color:#fbbf24;font-weight:bold">${emoji} ${t}:</span>`;
+
+            if (!h.count) {
+                return lab('🆕', (prefix ? prefix + ' — ' : '') + 'SFIDA INEDITA') + ' ' +
+                    hi(h.teamA) + ' e ' + hi(h.teamB) + ' ' + acc('non si sono mai affrontate nelle ultime stagioni');
+            }
+            let s = lab('⚔️', (prefix ? prefix + ' — ' : '') + 'PRECEDENTI') + ' ' +
+                hi(h.teamA) + ' vs ' + hi(h.teamB) + ': ' + acc(h.count + (h.count === 1 ? ' sfida' : ' sfide'));
+            const bits = [];
+            if (h.winsA) bits.push(acc(h.winsA) + ' ' + hi(h.teamA));
+            if (h.winsB) bits.push(acc(h.winsB) + ' ' + hi(h.teamB));
+            if (h.draws) bits.push(acc(h.draws) + ' ' + hi(h.draws === 1 ? 'pareggio' : 'pareggi'));
+            if (bits.length) s += ' — ' + bits.join(', ');
+            if (h.last) {
+                s += ` <span style="color:#94a3b8">(ultimo: ${h.last.scoreA}-${h.last.scoreB}${h.last.event ? ' · ' + h.last.event : ''})</span>`;
+            }
+            return s;
+        }
+
+        // Stessa normalizzazione nomi usata dalla Regia (chiavi di packet.teamHistory)
+        const tkNorm = (n) => (n || '').trim().toUpperCase().replace(/\s+/g, ' ');
+
+        // "👑 BESTIA NERA": una delle due domina lo scontro diretto (≥70% su almeno 4 sfide)
+        function bestiaNeraTicker(h) {
+            if (!h || h.count < 4) return '';
+            const wMax = Math.max(h.winsA, h.winsB);
+            if (wMax / h.count < 0.7) return '';
+            const boss = h.winsA > h.winsB ? h.teamA : h.teamB;
+            const preda = h.winsA > h.winsB ? h.teamB : h.teamA;
+            return `<span style="color:#fbbf24;font-weight:bold">👑 BESTIA NERA:</span> ` +
+                `<span style="color:#e2e8f0">${boss}</span> ha battuto <span style="color:#e2e8f0">${preda}</span> ` +
+                `<span style="color:var(--accent-color)">${wMax} volte su ${h.count}</span>`;
+        }
+
+        // "📈 FORMA": esiti delle ultime 5 partite giocate (tutti gli eventi + oggi)
+        function formaTicker(th) {
+            if (!th || !th.forma || !th.forma.length) return '';
+            const chip = (e) => e === 'V' ? '<span style="color:#4ade80;font-weight:bold">V</span>'
+                : (e === 'S' ? '<span style="color:#f87171;font-weight:bold">S</span>'
+                    : '<span style="color:#94a3b8;font-weight:bold">P</span>');
+            const vitt = th.forma.filter(e => e === 'V').length;
+            return `<span style="color:#fbbf24;font-weight:bold">📈 FORMA ${th.name}:</span> ` +
+                th.forma.map(chip).join('&thinsp;') +
+                ` <span style="color:var(--accent-color)">(${vitt}/${th.forma.length} vinte, ${th.played} partite IPBA in totale)</span>`;
+        }
+
+        // "🏆 ALBO D'ORO" e "🎖️ VETERANA" dalle classifiche di sempre dell'archivio
+        function archivioTicker(at) {
+            const SEP = ' &nbsp;&nbsp;&bull;&nbsp;&nbsp; ';
+            if (!at) return '';
+            let s = '';
+            if (at.alboOro && at.alboOro[0]) {
+                const a = at.alboOro[0];
+                s += `<span style="color:#fbbf24;font-weight:bold">🏆 ALBO D'ORO:</span> ` +
+                    `<span style="color:#e2e8f0">${a.team}</span> <span style="color:var(--accent-color)">${a.count} eventi vinti</span>` +
+                    ` <span style="color:#94a3b8">(record ultime 3 stagioni)</span>` + SEP;
+            }
+            if (at.veterane && at.veterane[0]) {
+                const v = at.veterane[0];
+                s += `<span style="color:#fbbf24;font-weight:bold">🎖️ VETERANA:</span> ` +
+                    `<span style="color:#e2e8f0">${v.team}</span> <span style="color:var(--accent-color)">${v.count} partite IPBA giocate</span>` +
+                    ` <span style="color:#94a3b8">(più di tutte)</span>` + SEP;
+            }
+            return s;
+        }
+
+        // Costruisce il segmento "STATISTICHE TORNEO" del ticker dai dati
+        // già trasmessi dalla Regia (calculateTournamentStats → standingsData).
+        function buildStatsTicker(sd, tour) {
+            if (!sd || !sd.standings || !sd.standings.length) return '';
+            const played = sd.standings.filter(s => (s.played || 0) > 0);
+            if (!played.length) return '';
+
+            const SEP = ' &nbsp;&nbsp;&bull;&nbsp;&nbsp; ';
+            const hi = (t) => `<span style="color:#e2e8f0">${t}</span>`;
+            const acc = (t) => `<span style="color:var(--accent-color)">${t}</span>`;
+            const lab = (emoji, t) => `<span style="color:#fbbf24;font-weight:bold">${emoji} ${t}:</span>`;
+            const secs = (v) => Math.round(v) + 's';
+            const parts = [];
+
+            // Podio classifica
+            const top3 = sd.standings.slice(0, 3).filter(s => s.wins > 0 || s.played > 0);
+            if (top3.length) {
+                parts.push(lab('🏆', 'CLASSIFICA') + ' ' + top3.map((s, i) => acc((i + 1) + '.') + ' ' + hi(s.name)).join(' '));
+            }
+
+            // Capolista con numeri
+            const top = sd.standings[0];
+            if (top && top.wins > 0) {
+                const diff = (top.rw || 0) - (top.rl || 0);
+                parts.push(lab('🥇', 'CAPOLISTA') + ' ' + hi(top.name) + ' ' + acc(top.wins + 'V, diff ' + (diff > 0 ? '+' : '') + diff));
+            }
+
+            // Squadre ancora imbattute (oltre alla capolista)
+            const unbeaten = played.filter(s => s.losses === 0 && s.wins > 0).map(s => s.name);
+            if (unbeaten.length > 1) {
+                parts.push(lab('💪', 'ANCORA IMBATTUTE') + ' ' + hi(unbeaten.join(', ')));
+            }
+
+            // Punto più veloce del torneo
+            if (sd.records && sd.records[0]) {
+                const r = sd.records[0];
+                parts.push(lab('⚡', 'PUNTO PIÙ VELOCE') + ' ' + hi(r.team) + ' ' + acc(secs(r.duration)) + (r.match ? ' (' + r.match + ')' : ''));
+            }
+
+            // Squadra col punto medio più rapido
+            if (sd.averageTimes && sd.averageTimes[0]) {
+                const a = sd.averageTimes[0];
+                parts.push(lab('🎯', 'PUNTO MEDIO PIÙ RAPIDO') + ' ' + hi(a.team) + ' ' + acc(secs(a.avg)));
+            }
+
+            // Punto più combattuto (il più lungo)
+            if (sd.slowestRounds && sd.slowestRounds[0]) {
+                const sl = sd.slowestRounds[0];
+                parts.push(lab('🐌', 'PUNTO PIÙ COMBATTUTO') + ' ' + hi(sl.team) + ' ' + acc(secs(sl.duration)) + (sl.match ? ' (' + sl.match + ')' : ''));
+            }
+
+            // Re del mercy
+            if (sd.mercyKillers && sd.mercyKillers[0]) {
+                const mk = sd.mercyKillers[0];
+                parts.push(lab('💀', 'RE DEL MERCY') + ' ' + hi(mk.team) + ' ' + acc(mk.count + ' mercy'));
+            }
+
+            // Penalità (o fair play se nessuna)
+            if (sd.badBoys && sd.badBoys[0]) {
+                const bb = sd.badBoys[0];
+                parts.push(lab('🚨', 'PIÙ PENALIZZATA') + ' ' + hi(bb.team) + ' ' + acc(bb.count + (bb.count === 1 ? ' penalità' : ' penalità')));
+            } else {
+                parts.push(lab('🤝', 'FAIR PLAY') + ' ' + hi('nessuna penalità finora!'));
+            }
+
+            // Miglior attacco / miglior difesa
+            const att = [...played].sort((a, b) => (b.rw || 0) - (a.rw || 0))[0];
+            if (att && att.rw > 0) {
+                parts.push(lab('🔥', 'MIGLIOR ATTACCO') + ' ' + hi(att.name) + ' ' + acc(att.rw + ' punti fatti'));
+            }
+            const def = [...played].sort((a, b) => ((a.rl || 0) - (b.rl || 0)) || ((b.played || 0) - (a.played || 0)))[0];
+            if (def) {
+                parts.push(lab('🛡️', 'MIGLIOR DIFESA') + ' ' + hi(def.name) + ' ' + acc(def.rl + ' punti subiti'));
+            }
+
+            // Timeout tecnici
+            if (sd.techUsage && sd.techUsage.length) {
+                const tech = [...sd.techUsage].sort((a, b) => (b.tech || 0) - (a.tech || 0))[0];
+                if (tech && tech.tech > 0) {
+                    parts.push(lab('🔧', 'TECH TIMEOUT') + ' ' + hi(tech.name) + ' ' + acc(tech.tech));
+                }
+            }
+
+            // Numeri del torneo
+            const totPoints = played.reduce((t, s) => t + (s.rw || 0), 0);
+            let progress = '';
+            if (tour && tour.matches && tour.matches.length) {
+                const fin = tour.matches.filter(m => m.savedState && m.savedState.finished).length;
+                progress = acc(fin + '/' + tour.matches.length + ' match') + ' — ';
+            }
+            parts.push(lab('📊', 'IL TORNEO') + ' ' + progress + acc(totPoints + ' punti totali segnati'));
+
+            if (!parts.length) return '';
+            return '<span style="color:#fbbf24;font-weight:bold;letter-spacing:1px">STATISTICHE TORNEO</span> &nbsp;&nbsp; ' + parts.join(SEP) + SEP;
         }
 
     </script>

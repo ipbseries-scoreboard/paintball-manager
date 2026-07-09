@@ -1386,6 +1386,14 @@
                     <small style="color: #94a3b8;">Compila in automatico nome, data, luogo e palinsesto delle partite
                         dalla pagina dell'evento.</small>
                     <div id="evento-import-status" style="margin-top: 6px; font-size: 0.85rem; color: #94a3b8;"></div>
+                    <div style="display: flex; gap: 8px; align-items: center; margin-top: 10px;">
+                        <button id="btn-h2h-update" class="btn"
+                            style="white-space: nowrap; border-color: #a855f7; color: #a855f7; background: rgba(168,85,247,0.15);">⚔️
+                            AGGIORNA STORICO SCONTRI</button>
+                        <small style="color: #94a3b8;">Scarica i risultati delle ultime 3 stagioni da ipba.it per gli
+                            "scontri diretti" nel ticker.</small>
+                    </div>
+                    <div id="h2h-status" style="margin-top: 6px; font-size: 0.85rem; color: #94a3b8;"></div>
                 </div>
 
                 <div style="display: flex; flex-direction: column; gap: 15px;">
@@ -2870,6 +2878,26 @@
 
                         packet.tournament = lightTournament || state.tournament;
                         packet.standingsData = statsData;
+
+                        // Scontri diretti (archivio ipba + torneo in corso) per match attuale e prossimo,
+                        // storia delle squadre coinvolte e classifiche "di sempre" dell'archivio
+                        try {
+                            packet.h2h = {
+                                current: getH2H(state.teams.A.name, state.teams.B.name),
+                                next: nextMatchInfo ? getH2H(nextMatchInfo.teamA, nextMatchInfo.teamB) : null
+                            };
+                            packet.teamHistory = {};
+                            const nomiCoinvolti = [state.teams.A.name, state.teams.B.name];
+                            if (nextMatchInfo) nomiCoinvolti.push(nextMatchInfo.teamA, nextMatchInfo.teamB);
+                            nomiCoinvolti.forEach(n => {
+                                const k = h2hNorm(n);
+                                if (k && !packet.teamHistory[k]) {
+                                    const th = getTeamHistory(n);
+                                    if (th) packet.teamHistory[k] = th;
+                                }
+                            });
+                            packet.archivioTop = getArchivioTop();
+                        } catch (e) { packet.h2h = packet.h2h || null; }
                         // Cache the fastest round so we can send it on every sync without recalculating
                         state.lastFastestRound = statsData ? (statsData.records[0] || null) : null;
                         lastFullSyncTime = now;
@@ -5833,7 +5861,7 @@
                 if (el) { el.innerText = msg || ''; el.style.color = isError ? '#ef4444' : '#94a3b8'; }
             }
 
-            async function fetchEventoIpba(eventoUrl) {
+            async function fetchViaProxy(targetUrl, looksValid) {
                 const tryFetch = async (url) => {
                     const ctrl = new AbortController();
                     const t = setTimeout(() => ctrl.abort(), 12000);
@@ -5843,32 +5871,45 @@
                         return await res.text();
                     } finally { clearTimeout(t); }
                 };
-                const looksValid = (html) => typeof html === 'string' && html.length > 3000 && /calendario gare|small-box/i.test(html);
 
-                const enc = encodeURIComponent(eventoUrl);
+                const enc = encodeURIComponent(targetUrl);
                 const candidates = [];
                 if (location.protocol === 'http:' || location.protocol === 'https:') {
                     candidates.push(location.origin + '/ipba?url=' + enc); // proxy di server.js (stessa origine)
                 }
                 candidates.push('http://localhost:9000/ipba?url=' + enc);  // server locale, app aperta da altrove
-                candidates.push(eventoUrl);                                 // diretto (se un giorno ipba.it abilita CORS)
+                candidates.push(targetUrl);                                 // diretto (se il sito manda CORS)
                 candidates.push('https://api.allorigins.win/raw?url=' + enc);
                 candidates.push('https://api.codetabs.com/v1/proxy?quest=' + enc);
 
                 let lastErr = null;
                 for (const u of [...new Set(candidates)]) {
                     try {
-                        const html = await tryFetch(u);
-                        if (looksValid(html)) return html;
+                        const body = await tryFetch(u);
+                        if (looksValid(body)) return body;
                         lastErr = new Error('risposta non valida');
                     } catch (e) { lastErr = e; }
                 }
-                throw new Error('pagina evento non scaricabile (' + (lastErr ? lastErr.message : '?') + '). Avvia il server locale (Avvia_Server_Locale.bat) e riprova.');
+                throw new Error(lastErr ? lastErr.message : '?');
+            }
+
+            async function fetchEventoIpba(eventoUrl) {
+                try {
+                    return await fetchViaProxy(eventoUrl,
+                        (html) => typeof html === 'string' && html.length > 3000 && /calendario gare|small-box/i.test(html));
+                } catch (e) {
+                    throw new Error('pagina evento non scaricabile (' + e.message + '). Avvia il server locale (Avvia_Server_Locale.bat) e riprova.');
+                }
             }
 
             function parseEventoIpba(html) {
                 const doc = new DOMParser().parseFromString(html, 'text/html');
-                const out = { name: '', description: '', location: '', date: '', system: '', matchTime: '', pods: '', matches: [] };
+                const out = { name: '', description: '', location: '', date: '', system: '', matchTime: '', pods: '', gunzupUrl: '', matches: [] };
+
+                // Link "LAYOUT GUNZUP" tra gli allegati dell'evento
+                const gzLinks = [...doc.querySelectorAll("a[href*='gunzup.com']")];
+                const gzPick = gzLinks.find(a => /layout/i.test(a.textContent)) || gzLinks[0];
+                if (gzPick) out.gunzupUrl = gzPick.getAttribute('href');
 
                 // Intestazione: <div class="small-box"><h3>nome</h3><p>descrizione <b>luogo - 21 GIUGNO 2026</b></p>
                 const inner = doc.querySelector('.small-box .inner');
@@ -5923,11 +5964,20 @@
                         const links = el.querySelectorAll("a[href*='team.aspx']");
                         if (links.length >= 2) {
                             const clean = (s) => s.replace(/\s+/g, ' ').trim();
+                            // Punteggio: la cella centrale senza link squadra ("2&nbsp;:&nbsp;0")
+                            let scoreA = null, scoreB = null;
+                            for (const td of el.querySelectorAll('td')) {
+                                if (td.querySelector("a[href*='team.aspx']")) continue;
+                                const sm = (td.textContent || '').replace(/\u00a0/g, ' ').match(/(\d+)\s*:\s*(\d+)/);
+                                if (sm) { scoreA = parseInt(sm[1]); scoreB = parseInt(sm[2]); break; }
+                            }
                             out.matches.push({
                                 time: pendingTime,
                                 teamA: clean(links[0].textContent),
                                 teamB: clean(links[links.length - 1].textContent),
-                                phase: currentPhase
+                                phase: currentPhase,
+                                scoreA: scoreA,
+                                scoreB: scoreB
                             });
                         }
                         return;
@@ -5937,6 +5987,11 @@
                     const tm = txt.match(/^(\d{1,2})[.:](\d{2})\b/);
                     if (tm) {
                         pendingTime = tm[1] + ':' + tm[2];
+                        // La fase spesso sta nella stessa riga dell'orario:
+                        // "15:50 - Semifinale H - Mercy rule 2", "16.10 - Finale 1°/2° posto"
+                        const resto = txt.slice(tm[0].length).replace(/^[\s\-–]+/, '');
+                        const fm = resto.match(/^(girone[^-]*|pool[^-]*|ottavi[^-]*|quarti[^-]*|semifinal[^-]*|final[^-]*|playout[^-]*)/i);
+                        if (fm) currentPhase = fm[1].trim().toUpperCase();
                         // Fallback: se manca il riepilogo in testa, le stesse regole sono
                         // ripetute su ogni riga ("9.00 - mercy 5 - 15 min - 3 pod")
                         if (!out.system) { const m = txt.match(/mercy\s*(?:to\s*)?(\d+)/i); if (m) out.system = 'Mercy to ' + m[1]; }
@@ -5949,6 +6004,31 @@
                 });
 
                 return out;
+            }
+
+            // Dal link di lega gunzup.com (es. https://gunzup.com/league/ipba-ipbs/) ricava
+            // lo screenshot JPG del layout agganciato all'evento IPBA. La pagina gunzup non
+            // si può mettere in un iframe (X-Frame-Options: DENY), l'immagine sì.
+            async function fetchLayoutGunzup(gunzupUrl, eventoId, eventoDate) {
+                const slugM = (gunzupUrl || '').match(/\/league\/([^\/?#]+)/i);
+                if (!slugM) return '';
+                const api = 'https://gunzup.com/api/league/detailsandevents/' + slugM[1] + '/';
+                const raw = await fetchViaProxy(api, (t) => typeof t === 'string' && t.includes('event_layouts'));
+                const data = JSON.parse(raw);
+                const events = data.events_details || [];
+                const layouts = data.event_layouts || [];
+
+                // Gli eventi gunzup di IPBA riportano il link di iscrizione a evento.aspx:
+                // il match sull'id è esatto; la data è la riserva.
+                let evGz = events.find(e => (((e.event_reg_url || '').match(/id=(\d+)/) || [])[1]) === String(eventoId));
+                if (!evGz && eventoDate) evGz = events.find(e => e['event-from-date'] === eventoDate);
+                if (!evGz) return '';
+
+                let lay = layouts.find(l => l._id === evGz['attach-layout']);
+                if (!lay) lay = layouts.find(l => l['attach-to-event'] === evGz._id && l.published === '1');
+                if (!lay) return '';
+                const shot = lay.screenshot || (lay.screenshots && lay.screenshots[0]) || '';
+                return shot ? 'https://gunzup.com/uploads/screenshots/' + shot : '';
             }
 
             async function importEventoIpba() {
@@ -5998,8 +6078,24 @@
                     if (applied.length) {
                         localStorage.setItem('pm_settings', JSON.stringify(state.settings));
                         log('REGOLE DA EVENTO IPBA: ' + applied.join(', '));
-                        broadcastState();
                     }
+
+                    // Layout campo dall'evento gunzup collegato (non blocca l'import se fallisce)
+                    let layoutTrovato = false;
+                    if (ev.gunzupUrl) {
+                        setEventoImportStatus('Cerco il layout campo su gunzup.com...');
+                        try {
+                            const layoutUrl = await fetchLayoutGunzup(ev.gunzupUrl, idMatch[1], ev.date);
+                            if (layoutUrl) {
+                                state.tournament.layoutUrl = layoutUrl;
+                                const layIn = document.getElementById('tourney-layout-url');
+                                if (layIn) layIn.value = layoutUrl;
+                                layoutTrovato = true;
+                                log('LAYOUT CAMPO DA GUNZUP: ' + layoutUrl);
+                            }
+                        } catch (e) { console.warn('Layout gunzup non trovato:', e); }
+                    }
+                    broadcastState();
 
                     const lines = [];
                     let lastPhase = null;
@@ -6014,7 +6110,8 @@
                         ev.system ? 'Sistema: ' + ev.system : '',
                         ev.matchTime ? 'Match time: ' + ev.matchTime + ' min' : '',
                         ev.pods ? 'Limite POD: ' + ev.pods : '',
-                        applied.length ? '⚙️ regole applicate' : ''
+                        applied.length ? '⚙️ regole applicate' : '',
+                        layoutTrovato ? '📐 layout campo' : ''
                     ].filter(Boolean).join(' | ');
                     setEventoImportStatus('✅ Importato: ' + (ev.name || eventoUrl) + ' — ' + ev.matches.length + ' match trovati.' + (extra ? ' (' + extra + ')' : ''));
                     log('EVENTO IPBA IMPORTATO: ' + (ev.name || eventoUrl) + ' (' + ev.matches.length + ' match)');
@@ -6037,6 +6134,209 @@
                 }
             }
             document.getElementById('btn-import-evento').addEventListener('click', importEventoIpba);
+
+            // ===== STORICO SCONTRI DIRETTI (H2H) =====
+            // Archivio locale dei risultati degli eventi ipba.it (ultime 3 stagioni),
+            // usato per gli "scontri diretti" nel ticker di vmix_bg.html.
+            let h2hDb = null;
+            try { h2hDb = JSON.parse(localStorage.getItem('pm_h2h_db') || 'null'); } catch (e) { h2hDb = null; }
+
+            function setH2hStatus(msg, isError) {
+                const el = document.getElementById('h2h-status');
+                if (el) { el.innerText = msg || ''; el.style.color = isError ? '#ef4444' : '#94a3b8'; }
+            }
+
+            function h2hRiepilogo() {
+                if (!h2hDb || !h2hDb.events) return '';
+                const nEv = Object.keys(h2hDb.events).length;
+                const nMatch = Object.values(h2hDb.events).reduce((t, e) => t + (e.matches ? e.matches.length : 0), 0);
+                return nEv + ' eventi, ' + nMatch + ' partite in archivio' + (h2hDb.updatedAt ? ' (agg. ' + h2hDb.updatedAt.slice(0, 10) + ')' : '');
+            }
+            if (h2hDb) setH2hStatus('📚 ' + h2hRiepilogo());
+
+            const h2hNorm = (n) => (n || '').trim().toUpperCase().replace(/\s+/g, ' ');
+
+            // Bilancio degli scontri diretti tra due squadre: archivio ipba + torneo in corso.
+            // Ritorna null se non c'è archivio o i nomi non sono reali (TEAM A/B).
+            function getH2H(a, b) {
+                const A = h2hNorm(a), B = h2hNorm(b);
+                if (!A || !B || A === B || /^TEAM [AB]$/.test(A) || /^TEAM [AB]$/.test(B)) return null;
+                if (!h2hDb || !h2hDb.events || !Object.keys(h2hDb.events).length) return null;
+
+                const curId = (((state.tournament && state.tournament.eventUrl) || '').match(/id=(\d+)/) || [])[1] || null;
+                const res = { teamA: a, teamB: b, count: 0, winsA: 0, winsB: 0, draws: 0, last: null };
+                const add = (ta, tb, sa, sb, label, date) => {
+                    const na = h2hNorm(ta), nb = h2hNorm(tb);
+                    let myA, myB;
+                    if (na === A && nb === B) { myA = sa; myB = sb; }
+                    else if (na === B && nb === A) { myA = sb; myB = sa; }
+                    else return;
+                    res.count++;
+                    if (myA > myB) res.winsA++; else if (myB > myA) res.winsB++; else res.draws++;
+                    if (!res.last || (date || '') >= (res.last.date || '')) res.last = { scoreA: myA, scoreB: myB, event: label, date: date || '' };
+                };
+                Object.values(h2hDb.events).forEach(ev => {
+                    if (curId && String(ev.id) === String(curId)) return; // il torneo attivo lo conto dal vivo qui sotto
+                    (ev.matches || []).forEach(m => add(m[0], m[1], m[2], m[3], ev.name, ev.date));
+                });
+                if (state.tournament && state.tournament.matches) {
+                    state.tournament.matches.forEach(m => {
+                        if (m.savedState && m.savedState.finished) {
+                            add(m.teamA, m.teamB, m.savedState.scoreA || 0, m.savedState.scoreB || 0, state.tournament.name || 'Torneo in corso', state.tournament.date || '');
+                        }
+                    });
+                }
+                return res;
+            }
+
+            // Riconosce la finale "vera": la fase deve INIZIARE con "final" (così restano
+            // fuori "Quarti di finale"/"Semifinale") e non essere un piazzamento
+            // (3°/4°, 5°/6°... qualsiasi cifra oltre 1 e 2) né un playout.
+            const isFinale = (phase) => /^FINAL/i.test((phase || '').trim()) && !/SEMI|PLAYOUT/i.test(phase || '') && !/[3-9]/.test(phase || '');
+
+            // Storia completa di una squadra: bilancio totale, forma recente (ultime 5),
+            // eventi vinti (finale vinta). Archivio ipba + torneo in corso.
+            function getTeamHistory(nome) {
+                const N = h2hNorm(nome);
+                if (!N || /^TEAM [AB]$/.test(N) || !h2hDb || !h2hDb.events) return null;
+                const curId = (((state.tournament && state.tournament.eventUrl) || '').match(/id=(\d+)/) || [])[1] || null;
+                const out = { name: nome, played: 0, wins: 0, losses: 0, draws: 0, forma: [], eventiVinti: [] };
+                const cronologia = [];
+
+                const evs = Object.values(h2hDb.events).slice().sort((a, b) => (a.date || '') < (b.date || '') ? -1 : 1);
+                evs.forEach(ev => {
+                    if (curId && String(ev.id) === String(curId)) return; // il torneo attivo è contato dal vivo
+                    (ev.matches || []).forEach(m => {
+                        // Un evento può avere più finali (una per serie): vinta una = evento vinto
+                        if (isFinale(m[4]) && m[2] !== m[3]) {
+                            const vincitrice = m[2] > m[3] ? m[0] : m[1];
+                            if (h2hNorm(vincitrice) === N && !out.eventiVinti.some(e => e.name === ev.name)) {
+                                out.eventiVinti.push({ name: ev.name, date: ev.date || '' });
+                            }
+                        }
+                        const na = h2hNorm(m[0]), nb = h2hNorm(m[1]);
+                        if (na !== N && nb !== N) return;
+                        const mio = na === N ? m[2] : m[3];
+                        const suo = na === N ? m[3] : m[2];
+                        cronologia.push(mio > suo ? 'V' : (mio < suo ? 'S' : 'P'));
+                    });
+                });
+                if (state.tournament && state.tournament.matches) {
+                    state.tournament.matches.forEach(m => {
+                        if (!m.savedState || !m.savedState.finished) return;
+                        const na = h2hNorm(m.teamA), nb = h2hNorm(m.teamB);
+                        if (na !== N && nb !== N) return;
+                        const mio = na === N ? (m.savedState.scoreA || 0) : (m.savedState.scoreB || 0);
+                        const suo = na === N ? (m.savedState.scoreB || 0) : (m.savedState.scoreA || 0);
+                        cronologia.push(mio > suo ? 'V' : (mio < suo ? 'S' : 'P'));
+                    });
+                }
+                cronologia.forEach(e => { out.played++; if (e === 'V') out.wins++; else if (e === 'S') out.losses++; else out.draws++; });
+                out.forma = cronologia.slice(-5);
+                return out.played ? out : null;
+            }
+
+            // Classifiche "di sempre" dell'archivio: chi ha vinto più eventi (albo d'oro)
+            // e chi ha giocato più partite (veterane). Calcolate una volta per archivio.
+            let archivioTopCache = null;
+            function getArchivioTop() {
+                if (archivioTopCache) return archivioTopCache;
+                if (!h2hDb || !h2hDb.events || !Object.keys(h2hDb.events).length) return null;
+                const giocate = {}, vinte = {}, display = {};
+                let totPartite = 0;
+                Object.values(h2hDb.events).forEach(ev => {
+                    (ev.matches || []).forEach(m => {
+                        totPartite++;
+                        [m[0], m[1]].forEach(n => { const k = h2hNorm(n); display[k] = n; giocate[k] = (giocate[k] || 0) + 1; });
+                        // Ogni finale vinta conta per l'albo d'oro (più finali = più serie)
+                        if (isFinale(m[4]) && m[2] !== m[3]) {
+                            const k = h2hNorm(m[2] > m[3] ? m[0] : m[1]);
+                            vinte[k] = (vinte[k] || 0) + 1;
+                        }
+                    });
+                });
+                const topN = (obj, n) => Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n)
+                    .map(e => ({ team: display[e[0]] || e[0], count: e[1] }));
+                archivioTopCache = {
+                    veterane: topN(giocate, 3),
+                    alboOro: topN(vinte, 3),
+                    eventi: Object.keys(h2hDb.events).length,
+                    partite: totPartite,
+                    updatedAt: h2hDb.updatedAt || ''
+                };
+                return archivioTopCache;
+            }
+
+            async function aggiornaStoricoH2H() {
+                const btn = document.getElementById('btn-h2h-update');
+                btn.disabled = true;
+                try {
+                    // 1. Stagioni disponibili: dalla tendina della pagina eventi (la selected è la corrente)
+                    setH2hStatus('Leggo l\'elenco eventi da ipba.it...');
+                    const listHtml = await fetchViaProxy('https://www.ipba.it/eventi.aspx',
+                        (h) => typeof h === 'string' && /evento\.aspx\?id=|txtStagione/i.test(h));
+                    let curSeason = 0;
+                    const ldoc = new DOMParser().parseFromString(listHtml, 'text/html');
+                    ldoc.querySelectorAll('#txtStagione option').forEach(o => {
+                        const v = parseInt(o.value);
+                        if (!isNaN(v)) curSeason = Math.max(curSeason, v);
+                    });
+
+                    // 2. Id evento delle ultime 3 stagioni. ATTENZIONE: serve sempre il
+                    // parametro stagione esplicito — la pagina base (senza parametro)
+                    // NASCONDE gli eventi già disputati della stagione corrente.
+                    const ids = new Set();
+                    for (const s of [curSeason, curSeason - 1, curSeason - 2]) {
+                        if (s < 1) continue;
+                        try {
+                            const h = await fetchViaProxy('https://www.ipba.it/eventi.aspx?stagione=' + s,
+                                (x) => typeof x === 'string' && /evento\.aspx\?id=/i.test(x));
+                            [...h.matchAll(/evento\.aspx\?id=(\d+)/g)].forEach(m => ids.add(m[1]));
+                        } catch (e) { console.warn('Stagione ' + s + ' non scaricata:', e.message); }
+                    }
+                    if (!ids.size) throw new Error('nessun evento trovato nelle liste stagione.');
+
+                    // 3. Scarico solo il necessario: gli eventi vecchi già in archivio non cambiano più
+                    // (v3: ogni partita salva anche la fase, letta dalla riga orario — per l'albo d'oro)
+                    const db = (h2hDb && h2hDb.events && h2hDb.version === 3) ? h2hDb : { version: 3, events: {} };
+                    const oggi = Date.now();
+                    const daScaricare = [...ids].filter(id => {
+                        const ev = db.events[id];
+                        if (!ev || !ev.date) return true;
+                        if (!ev.matches || !ev.matches.length) return true;       // magari ora i risultati ci sono
+                        return (oggi - new Date(ev.date).getTime()) < 45 * 86400000; // recente: può essere cambiato
+                    });
+
+                    let fatti = 0;
+                    for (const id of daScaricare) {
+                        fatti++;
+                        setH2hStatus('Scarico evento ' + fatti + '/' + daScaricare.length + ' (id ' + id + ')...');
+                        try {
+                            const html = await fetchEventoIpba('https://www.ipba.it/evento.aspx?id=' + id);
+                            const ev = parseEventoIpba(html);
+                            const giocate = ev.matches
+                                .filter(m => m.scoreA !== null && m.scoreB !== null && (m.scoreA + m.scoreB) > 0)
+                                .map(m => [m.teamA, m.teamB, m.scoreA, m.scoreB, m.phase || '']);
+                            db.events[id] = { id: id, name: ev.name || ('Evento ' + id), date: ev.date || '', matches: giocate };
+                        } catch (e) { console.warn('Evento ' + id + ' saltato:', e.message); }
+                        await new Promise(r => setTimeout(r, 250)); // gentilezza verso ipba.it
+                    }
+
+                    db.updatedAt = new Date().toISOString();
+                    h2hDb = db;
+                    archivioTopCache = null; // le classifiche "di sempre" vanno ricalcolate
+                    localStorage.setItem('pm_h2h_db', JSON.stringify(db));
+                    setH2hStatus('✅ ' + h2hRiepilogo());
+                    log('STORICO H2H: ' + h2hRiepilogo());
+                    broadcastState(true); // manda subito gli scontri diretti agli schermi
+                } catch (err) {
+                    console.error('Aggiornamento storico H2H:', err);
+                    setH2hStatus('❌ Errore: ' + err.message, true);
+                } finally {
+                    btn.disabled = false;
+                }
+            }
+            document.getElementById('btn-h2h-update').addEventListener('click', aggiornaStoricoH2H);
             document.getElementById('close-history-btn').addEventListener('click', () => {
                 document.getElementById('history-modal').style.display = 'none';
                 document.getElementById('history-edit-area').style.display = 'none';

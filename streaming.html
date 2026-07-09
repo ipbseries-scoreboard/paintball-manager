@@ -784,6 +784,7 @@
         #stats-overlay,
         #schedule-overlay,
         #layout-overlay,
+        #caster-overlay,
         #roster-overlay {
             position: absolute;
             top: 0;
@@ -808,6 +809,29 @@
             margin-top: 20px;
             padding-right: 10px;
         }
+
+        /* --- INFO MATCH (CASTER) OVERLAY --- */
+        #caster-content { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-content: start; }
+        .ci-card { background: rgba(30, 41, 59, 0.75); border: 1px solid rgba(34, 211, 238, 0.25); border-left: 5px solid var(--accent-color); border-radius: 12px; padding: 18px 22px; }
+        .ci-card h3 { margin: 0 0 12px; font-size: 24px; text-transform: uppercase; letter-spacing: 2px; color: #fbbf24; font-family: 'Oswald', sans-serif; }
+        .ci-fact { padding: 7px 0; border-bottom: 1px dashed rgba(148, 163, 184, 0.25); font-size: 21px; }
+        .ci-fact:last-child { border-bottom: none; }
+        .ci-fact .val { color: var(--accent-color); font-weight: 700; }
+        .ci-muted { color: #94a3b8; }
+        .ci-callout { margin-top: 10px; padding: 9px 14px; border-radius: 8px; background: rgba(15, 23, 42, 0.8); font-size: 21px; }
+        .ci-callout.hot { border: 1px solid #fbbf24; }
+        #ci-h2h-bar { display: flex; height: 30px; border-radius: 8px; overflow: hidden; font-size: 18px; font-weight: 700; margin-top: 10px; }
+        #ci-h2h-bar div { display: flex; align-items: center; justify-content: center; min-width: 34px; }
+        .ci-chips { display: inline-flex; gap: 6px; vertical-align: middle; }
+        .ci-chip { width: 30px; height: 30px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px; }
+        .ci-chip.V { background: rgba(74, 222, 128, .18); color: #4ade80; border: 1px solid #4ade80; }
+        .ci-chip.S { background: rgba(248, 113, 113, .15); color: #f87171; border: 1px solid #f87171; }
+        .ci-chip.P { background: rgba(148, 163, 184, .15); color: #94a3b8; border: 1px solid #94a3b8; }
+        table.ci-standings { width: 100%; border-collapse: collapse; font-size: 20px; }
+        table.ci-standings th { text-align: left; color: #94a3b8; font-weight: 500; padding: 5px 8px; border-bottom: 1px solid rgba(148,163,184,.3); }
+        table.ci-standings td { padding: 6px 8px; border-bottom: 1px dashed rgba(148,163,184,.15); }
+        table.ci-standings tr:first-child td { color: #fbbf24; font-weight: 700; }
+        .ci-num { text-align: center; }
 
         /* Custom scrollbar for better aesthetics */
         .stats-scroll-area::-webkit-scrollbar,
@@ -1257,6 +1281,7 @@
                     <button class="btn-extra" onclick="toggleBracket()">🏆 BRACKET</button>
                     <button class="btn-extra" onclick="toggleSchedule()">🗓️ LIST</button>
                     <button class="btn-extra" onclick="toggleLayout()">📐 LAYOUT</button>
+                    <button class="btn-extra" onclick="toggleCasterInfo()">⚔️ INFO</button>
                 </div>
             </div>
 
@@ -1441,6 +1466,22 @@
                 <div class="stats-title">LAYOUT CAMPO</div>
                 <iframe id="layout-iframe" src="" frameborder="0"
                     style="width:100%; height:calc(100% - 200px); border-radius:20px; background:white; margin-top:20px;"></iframe>
+                <img id="layout-img" alt="Layout campo"
+                    style="display:none; width:100%; height:calc(100% - 200px); object-fit:contain; border-radius:20px; background:white; margin-top:20px;">
+            </div>
+
+            <!-- INFO MATCH (CASTER) OVERLAY -->
+            <div id="caster-overlay">
+                <button class="close-overlay-btn" id="close-caster-btn">CHIUDI X</button>
+                <div class="stats-title">⚔️ INFO MATCH & STORICO</div>
+                <div class="stats-scroll-area">
+                    <div id="caster-content">
+                        <div class="ci-card" style="grid-column: span 2;">
+                            <div class="ci-fact ci-muted">In attesa dei dati dalla Regia... (per lo storico: nella
+                                Regia premi "⚔️ AGGIORNA STORICO SCONTRI")</div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- ROSTER OVERLAY -->
@@ -1860,15 +1901,27 @@
                 topBarRec.style.display = 'none';
             }
 
-            // Layout URL
+            // Layout URL — un'immagine diretta (es. screenshot gunzup) va in <img>
+            // per adattarla al riquadro; le pagine web restano nell'iframe
             if (d.layoutUrl) {
                 const iframe = document.getElementById('layout-iframe');
-                if (iframe && iframe.src !== d.layoutUrl) iframe.src = d.layoutUrl;
+                const img = document.getElementById('layout-img');
+                const isImage = img && /\.(jpe?g|png|gif|webp)([?#]|$)/i.test(d.layoutUrl);
+                if (isImage) {
+                    if (img.src !== d.layoutUrl) img.src = d.layoutUrl;
+                    img.style.display = 'block';
+                    if (iframe) { iframe.style.display = 'none'; if (iframe.getAttribute('src')) iframe.removeAttribute('src'); }
+                } else if (iframe) {
+                    if (iframe.src !== d.layoutUrl) iframe.src = d.layoutUrl;
+                    iframe.style.display = 'block';
+                    if (img) img.style.display = 'none';
+                }
             }
 
             // Overlays update if open
             if (showSchedule) renderScheduleTable();
             if (showBracket && d.standingsData && d.standingsData.bracket) renderBracket(d.standingsData.bracket);
+            if (showCasterInfo) renderCasterInfo();
         }
 
         function updateTechInd(id, used) {
@@ -2394,6 +2447,182 @@
             showLayout = false;
             document.getElementById('layout-overlay').style.display = 'none';
         });
+
+        // --- INFO MATCH (CASTER) HANDLER ---
+        // Scheda per la telecronaca: scontri diretti, forma, albo d'oro, statistiche.
+        // Si ridisegna da sola quando cambiano i dati (fingerprint sulle sezioni usate).
+        let showCasterInfo = false;
+        let lastCasterFp = '';
+
+        function toggleCasterInfo() {
+            showCasterInfo = !showCasterInfo;
+            document.getElementById('caster-overlay').style.display = showCasterInfo ? 'flex' : 'none';
+            if (showCasterInfo) {
+                lastCasterFp = ''; // forza il ridisegno all'apertura
+                renderCasterInfo();
+                // chiedi subito un FULL_SYNC per avere h2h/storico freschi
+                if (typeof clientConn !== 'undefined' && clientConn && clientConn.open) {
+                    clientConn.send({ type: 'FORCE_SYNC' });
+                }
+            }
+        }
+        document.getElementById('close-caster-btn').addEventListener('click', () => {
+            showCasterInfo = false;
+            document.getElementById('caster-overlay').style.display = 'none';
+        });
+
+        const ciEsc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+        const ciNorm = (n) => (n || '').trim().toUpperCase().replace(/\s+/g, ' ');
+        const CI_MESI = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+        const ciMeseAnno = (iso) => {
+            if (!iso || iso.length < 7) return '';
+            const m = parseInt(iso.slice(5, 7), 10);
+            return (CI_MESI[m - 1] || '') + ' ' + iso.slice(0, 4);
+        };
+        const ciChips = (forma) => (forma && forma.length)
+            ? '<span class="ci-chips">' + forma.map(e => `<span class="ci-chip ${ciEsc(e)}">${ciEsc(e)}</span>`).join('') + '</span>'
+            : '<span class="ci-muted">—</span>';
+
+        function ciH2hHtml(h, titolo) {
+            if (!h) return '';
+            if (!h.count) {
+                return `<div class="ci-fact">🆕 <b>${ciEsc(h.teamA)}</b> e <b>${ciEsc(h.teamB)}</b> non si sono <b>mai affrontate</b> nelle ultime stagioni: sfida inedita!</div>`;
+            }
+            let s = `<div class="ci-fact"><b>${ciEsc(h.teamA)}</b> vs <b>${ciEsc(h.teamB)}</b>: <span class="val">${h.count} precedenti</span> — ` +
+                `${h.winsA} ${ciEsc(h.teamA)}, ${h.winsB} ${ciEsc(h.teamB)}` + (h.draws ? `, ${h.draws} pareggi` : '') + `</div>`;
+            const wa = Math.round(100 * h.winsA / h.count), dr = Math.round(100 * h.draws / h.count);
+            s += `<div id="ci-h2h-bar">` +
+                `<div style="width:${wa}%; background:#0ea5e9; color:#06222f;">${h.winsA || ''}</div>` +
+                `<div style="width:${dr}%; background:#475569; color:#cbd5e1;">${h.draws || ''}</div>` +
+                `<div style="flex:1; background:#f59e0b; color:#3d2a03;">${h.winsB || ''}</div></div>`;
+            if (h.last) {
+                s += `<div class="ci-callout">Ultimo incontro: <b>${h.last.scoreA}-${h.last.scoreB}</b>` +
+                    (h.last.event ? ` · ${ciEsc(h.last.event)}` : '') +
+                    (h.last.date ? ` <span class="ci-muted">(${ciMeseAnno(h.last.date)})</span>` : '') + `</div>`;
+                if (h.last.date && (Date.now() - new Date(h.last.date).getTime()) / 86400000 > 60) {
+                    s += `<div class="ci-callout">⏳ Non si affrontavano da <b>${ciMeseAnno(h.last.date)}</b></div>`;
+                }
+            }
+            if (h.count >= 4) {
+                const wMax = Math.max(h.winsA, h.winsB);
+                if (wMax / h.count >= 0.7) {
+                    const boss = h.winsA > h.winsB ? h.teamA : h.teamB;
+                    const preda = h.winsA > h.winsB ? h.teamB : h.teamA;
+                    s += `<div class="ci-callout hot">👑 <b>${ciEsc(boss)}</b> è la bestia nera di <b>${ciEsc(preda)}</b>: ${wMax} vittorie su ${h.count}</div>`;
+                }
+            }
+            return s;
+        }
+
+        function ciTeamHtml(nome, d) {
+            const th = (d.teamHistory || {})[ciNorm(nome)];
+            const st = d.standingsData && d.standingsData.standings
+                ? d.standingsData.standings.find(s => ciNorm(s.name) === ciNorm(nome)) : null;
+            let s = `<div class="ci-fact"><b style="color:var(--accent-color)">${ciEsc(nome)}</b></div>`;
+            if (th) {
+                s += `<div class="ci-fact">Forma (ultime 5): ${ciChips(th.forma)}</div>`;
+                s += `<div class="ci-fact">Partite IPBA (3 stagioni): <span class="val">${th.played}</span> — ` +
+                    `<span style="color:#4ade80">${th.wins}V</span> · <span style="color:#f87171">${th.losses}S</span>${th.draws ? ' · ' + th.draws + 'P' : ''}</div>`;
+                if (th.eventiVinti && th.eventiVinti.length) {
+                    const ultimi = th.eventiVinti.slice(-2).reverse()
+                        .map(e => ciEsc(e.name) + (e.date ? ` <span class="ci-muted">(${ciMeseAnno(e.date)})</span>` : '')).join(' · ');
+                    s += `<div class="ci-fact">🏆 Eventi vinti: <span class="val">${th.eventiVinti.length}</span> <span class="ci-muted">— ultimi:</span> ${ultimi}</div>`;
+                }
+            } else {
+                s += `<div class="ci-fact ci-muted">Nessun dato in archivio per questa squadra.</div>`;
+            }
+            if (st) {
+                const diff = (st.rw || 0) - (st.rl || 0);
+                s += `<div class="ci-fact">Oggi nel torneo: <span class="val">${st.played}G · ${st.wins}V · ${st.losses}S · diff ${diff > 0 ? '+' : ''}${diff}</span>${st.pen ? ' · ' + st.pen + ' pen' : ''}</div>`;
+            }
+            return s;
+        }
+
+        function renderCasterInfo() {
+            const d = currentData || {};
+            const box = document.getElementById('caster-content');
+            if (!box) return;
+            const fp = JSON.stringify([d.h2h, d.teamHistory, d.archivioTop, d.nextMatch,
+                d.standingsData && d.standingsData.standings,
+                d.teamLeft && d.teamLeft.name, d.teamRight && d.teamRight.name]);
+            if (fp === lastCasterFp) return;
+            lastCasterFp = fp;
+
+            const nomeA = d.teamLeft ? d.teamLeft.name : null;
+            const nomeB = d.teamRight ? d.teamRight.name : null;
+            const cards = [];
+
+            // SCONTRI DIRETTI
+            const hc = d.h2h ? d.h2h.current : null;
+            cards.push(`<div class="ci-card" style="grid-column: span 2;"><h3>⚔️ Scontri diretti</h3>` +
+                (hc ? ciH2hHtml(hc)
+                    : `<div class="ci-fact ci-muted">Nessun archivio storico: nella Regia premi "⚔️ AGGIORNA STORICO SCONTRI".</div>`) + `</div>`);
+
+            // LE DUE SQUADRE
+            if (nomeA && nomeB) {
+                cards.push(`<div class="ci-card">${ciTeamHtml(nomeA, d)}</div>`);
+                cards.push(`<div class="ci-card">${ciTeamHtml(nomeB, d)}</div>`);
+            }
+
+            // PROSSIMO MATCH
+            if (d.nextMatch) {
+                let nx = `<div class="ci-fact"><b>${ciEsc(d.nextMatch.teamA)}</b> vs <b>${ciEsc(d.nextMatch.teamB)}</b>` +
+                    (d.nextMatch.time ? ` <span class="ci-muted">(ore ${ciEsc(d.nextMatch.time)})</span>` : '') + `</div>`;
+                const hn = d.h2h ? d.h2h.next : null;
+                if (hn) nx += ciH2hHtml(hn);
+                [d.nextMatch.teamA, d.nextMatch.teamB].forEach(n => {
+                    const th = (d.teamHistory || {})[ciNorm(n)];
+                    if (th && th.forma && th.forma.length) {
+                        nx += `<div class="ci-fact">Forma ${ciEsc(th.name)}: ${ciChips(th.forma)}</div>`;
+                    }
+                });
+                cards.push(`<div class="ci-card" style="grid-column: span 2;"><h3>⏭️ Prossimo match</h3>${nx}</div>`);
+            }
+
+            // STATISTICHE TORNEO
+            const sd = d.standingsData;
+            if (sd && sd.standings && sd.standings.some(s => (s.played || 0) > 0)) {
+                const played = sd.standings.filter(s => (s.played || 0) > 0);
+                const F = [];
+                if (sd.records && sd.records[0]) F.push(`⚡ <b>Punto più veloce:</b> ${ciEsc(sd.records[0].team)} <span class="val">${Math.round(sd.records[0].duration)}s</span>`);
+                if (sd.averageTimes && sd.averageTimes[0]) F.push(`🎯 <b>Punto medio più rapido:</b> ${ciEsc(sd.averageTimes[0].team)} <span class="val">${Math.round(sd.averageTimes[0].avg)}s</span>`);
+                if (sd.slowestRounds && sd.slowestRounds[0]) F.push(`🐌 <b>Punto più combattuto:</b> ${ciEsc(sd.slowestRounds[0].team)} <span class="val">${Math.round(sd.slowestRounds[0].duration)}s</span>`);
+                if (sd.mercyKillers && sd.mercyKillers[0]) F.push(`💀 <b>Re del mercy:</b> ${ciEsc(sd.mercyKillers[0].team)} <span class="val">${sd.mercyKillers[0].count}</span>`);
+                if (sd.badBoys && sd.badBoys[0]) F.push(`🚨 <b>Più penalizzata:</b> ${ciEsc(sd.badBoys[0].team)} <span class="val">${sd.badBoys[0].count}</span>`);
+                else F.push(`🤝 <b>Fair play:</b> nessuna penalità finora`);
+                const att = [...played].sort((x, y) => (y.rw || 0) - (x.rw || 0))[0];
+                if (att && att.rw > 0) F.push(`🔥 <b>Miglior attacco:</b> ${ciEsc(att.name)} <span class="val">${att.rw} punti</span>`);
+                const def = [...played].sort((x, y) => ((x.rl || 0) - (y.rl || 0)) || ((y.played || 0) - (x.played || 0)))[0];
+                if (def) F.push(`🛡️ <b>Miglior difesa:</b> ${ciEsc(def.name)} <span class="val">${def.rl} subiti</span>`);
+                cards.push(`<div class="ci-card"><h3>📊 Statistiche torneo</h3>` +
+                    F.map(f => `<div class="ci-fact">${f}</div>`).join('') + `</div>`);
+
+                // CLASSIFICA
+                const rows = sd.standings.slice(0, 8).map((s, i) => {
+                    const diff = (s.rw || 0) - (s.rl || 0);
+                    return `<tr><td>${i + 1}</td><td>${ciEsc(s.name)}</td><td class="ci-num">${s.played || 0}</td><td class="ci-num">${s.wins || 0}</td><td class="ci-num">${s.losses || 0}</td><td class="ci-num">${diff > 0 ? '+' : ''}${diff}</td><td class="ci-num">${s.pen || 0}</td></tr>`;
+                }).join('');
+                cards.push(`<div class="ci-card"><h3>🏁 Classifica</h3><table class="ci-standings">` +
+                    `<tr><th>#</th><th>Squadra</th><th class="ci-num">P</th><th class="ci-num">V</th><th class="ci-num">S</th><th class="ci-num">Diff</th><th class="ci-num">Pen</th></tr>` +
+                    rows + `</table></div>`);
+            }
+
+            // ARCHIVIO STORICO
+            if (d.archivioTop) {
+                const at = d.archivioTop;
+                const lista = (arr, unit) => (arr && arr.length)
+                    ? arr.map((x, i) => `<div class="ci-fact">${i + 1}. <b>${ciEsc(x.team)}</b> <span class="val">${x.count} ${unit}</span></div>`).join('')
+                    : `<div class="ci-fact ci-muted">—</div>`;
+                cards.push(`<div class="ci-card" style="grid-column: span 2;"><h3>📚 Archivio (ultime 3 stagioni)</h3>` +
+                    `<div style="display:flex; gap:40px; flex-wrap:wrap;">` +
+                    `<div style="flex:1; min-width:300px;"><div class="ci-fact"><b>🏆 Albo d'oro</b></div>${lista(at.alboOro, 'eventi vinti')}</div>` +
+                    `<div style="flex:1; min-width:300px;"><div class="ci-fact"><b>🎖️ Veterane</b></div>${lista(at.veterane, 'partite')}</div>` +
+                    `</div><div class="ci-fact ci-muted">${at.eventi} eventi · ${at.partite} partite` +
+                    (at.updatedAt ? ` · aggiornato ${ciEsc(at.updatedAt.slice(0, 10))}` : '') + `</div></div>`);
+            }
+
+            box.innerHTML = cards.join('');
+        }
 
         // Render Functions 
         function renderStandingsTable(data) {
