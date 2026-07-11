@@ -1323,6 +1323,28 @@
                         🔄 SINCRONIZZA SQUADRE DA TORNEO
                     </button>
 
+                    <!-- ARCHIVIO STORICO SCONTRI (autonomo, non serve la Regia) -->
+                    <div style="margin-top:20px; padding:14px; border:1px solid #a855f7; border-radius:8px; background:rgba(168,85,247,0.08);">
+                        <div style="color:#c4b5fd; font-weight:bold; margin-bottom:8px;">⚔️ ARCHIVIO STORICO SCONTRI</div>
+                        <p style="color:#94a3b8; font-size:0.82rem; margin:0 0 10px;">Scarica i risultati di tutti gli
+                            eventi ipba.it (tutte le stagioni) per far apparire scontri diretti e statistiche storiche nel
+                            tasto ⚔️ INFO — senza dover toccare la Regia. Il primo download è lungo (~5 min); poi aggiorna
+                            solo gli eventi nuovi.</p>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <button id="str-h2h-update"
+                                style="flex:1; min-width:180px; border:2px solid #a855f7; background:rgba(168,85,247,0.15); color:#c4b5fd; padding:10px; font-weight:bold;">⚔️
+                                AGGIORNA STORICO SCONTRI</button>
+                            <button id="str-h2h-export"
+                                style="border:2px solid #22c55e; background:rgba(34,197,94,0.12); color:#4ade80; padding:10px;">💾
+                                ESPORTA</button>
+                            <button id="str-h2h-import"
+                                style="border:2px solid #38bdf8; background:rgba(56,189,248,0.12); color:#7dd3fc; padding:10px;">📁
+                                IMPORTA</button>
+                            <input type="file" id="str-h2h-file" accept="application/json,.json" style="display:none;">
+                        </div>
+                        <div id="str-h2h-status" style="margin-top:8px; font-size:0.82rem; color:#94a3b8;"></div>
+                    </div>
+
                     <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:center;">
                         <button onclick="clearAllClans()"
                             style="background:#991b1b; color:white; font-size:1rem; padding:8px 15px; border-radius: 4px;">🗑️
@@ -2521,7 +2543,7 @@
             let s = `<div class="ci-fact"><b style="color:var(--accent-color)">${ciEsc(nome)}</b></div>`;
             if (th) {
                 s += `<div class="ci-fact">Forma (ultime 5): ${ciChips(th.forma)}</div>`;
-                s += `<div class="ci-fact">Partite IPBA (3 stagioni): <span class="val">${th.played}</span> — ` +
+                s += `<div class="ci-fact">Partite IPBA (tutte le stagioni): <span class="val">${th.played}</span> — ` +
                     `<span style="color:#4ade80">${th.wins}V</span> · <span style="color:#f87171">${th.losses}S</span>${th.draws ? ' · ' + th.draws + 'P' : ''}</div>`;
                 if (th.eventiVinti && th.eventiVinti.length) {
                     const ultimi = th.eventiVinti.slice(-2).reverse()
@@ -2539,6 +2561,10 @@
         }
 
         function renderCasterInfo() {
+            // Se streaming.html ha un archivio locale, calcola qui scontri diretti /
+            // statistiche storiche (così non serve la Regia). Altrimenti usa quelli
+            // che arrivano dal pacchetto della Regia (retrocompatibile).
+            iniettaStatsLocali();
             const d = currentData || {};
             const box = document.getElementById('caster-content');
             if (!box) return;
@@ -2613,7 +2639,7 @@
                 const lista = (arr, unit) => (arr && arr.length)
                     ? arr.map((x, i) => `<div class="ci-fact">${i + 1}. <b>${ciEsc(x.team)}</b> <span class="val">${x.count} ${unit}</span></div>`).join('')
                     : `<div class="ci-fact ci-muted">—</div>`;
-                cards.push(`<div class="ci-card" style="grid-column: span 2;"><h3>📚 Archivio (ultime 3 stagioni)</h3>` +
+                cards.push(`<div class="ci-card" style="grid-column: span 2;"><h3>📚 Archivio (tutte le stagioni)</h3>` +
                     `<div style="display:flex; gap:40px; flex-wrap:wrap;">` +
                     `<div style="flex:1; min-width:300px;"><div class="ci-fact"><b>🏆 Albo d'oro</b></div>${lista(at.alboOro, 'eventi vinti')}</div>` +
                     `<div style="flex:1; min-width:300px;"><div class="ci-fact"><b>🎖️ Veterane</b></div>${lista(at.veterane, 'partite')}</div>` +
@@ -2624,7 +2650,332 @@
             box.innerHTML = cards.join('');
         }
 
-        // Render Functions 
+        // ============================================================
+        //  ARCHIVIO STORICO SCONTRI — versione autonoma di streaming.html
+        //  Scarica/calcola gli scontri diretti e le statistiche storiche
+        //  in locale, senza dipendere dalla Regia. Stesso formato/localStorage
+        //  della Regia (pm_h2h_db): se stanno sulla stessa origine, l'archivio
+        //  è condiviso. I risultati del torneo in corso arrivano già pronti
+        //  dal pacchetto (standingsData.matchHistory, con punteggi veri).
+        // ============================================================
+        const MESI_IT = {
+            GENNAIO: '01', FEBBRAIO: '02', MARZO: '03', APRILE: '04', MAGGIO: '05', GIUGNO: '06',
+            LUGLIO: '07', AGOSTO: '08', SETTEMBRE: '09', OTTOBRE: '10', NOVEMBRE: '11', DICEMBRE: '12'
+        };
+        let h2hDb = null;
+        try { h2hDb = JSON.parse(localStorage.getItem('pm_h2h_db') || 'null'); } catch (e) { h2hDb = null; }
+        let archivioTopCache = null;
+        const h2hNorm = (n) => (n || '').trim().toUpperCase().replace(/\s+/g, ' ');
+        const isFinale = (phase) => /^FINAL/i.test((phase || '').trim()) && !/SEMI|PLAYOUT/i.test(phase || '') && !/[3-9]/.test(phase || '');
+
+        function setStrH2hStatus(msg, isError) {
+            const el = document.getElementById('str-h2h-status');
+            if (el) { el.innerText = msg || ''; el.style.color = isError ? '#ef4444' : '#94a3b8'; }
+        }
+        function h2hRiepilogo() {
+            if (!h2hDb || !h2hDb.events) return '';
+            const nEv = Object.keys(h2hDb.events).length;
+            const nMatch = Object.values(h2hDb.events).reduce((t, e) => t + (e.matches ? e.matches.length : 0), 0);
+            return nEv + ' eventi, ' + nMatch + ' partite in archivio' + (h2hDb.updatedAt ? ' (agg. ' + h2hDb.updatedAt.slice(0, 10) + ')' : '');
+        }
+
+        async function fetchViaProxy(targetUrl, looksValid) {
+            const tryFetch = async (url) => {
+                const ctrl = new AbortController();
+                const t = setTimeout(() => ctrl.abort(), 12000);
+                try {
+                    const res = await fetch(url, { signal: ctrl.signal });
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return await res.text();
+                } finally { clearTimeout(t); }
+            };
+            const enc = encodeURIComponent(targetUrl);
+            const candidates = [];
+            if (location.protocol === 'http:' || location.protocol === 'https:') candidates.push(location.origin + '/ipba?url=' + enc);
+            candidates.push('http://localhost:9000/ipba?url=' + enc);
+            candidates.push(targetUrl);
+            candidates.push('https://api.allorigins.win/raw?url=' + enc);
+            candidates.push('https://api.codetabs.com/v1/proxy?quest=' + enc);
+            let lastErr = null;
+            for (const u of [...new Set(candidates)]) {
+                try { const body = await tryFetch(u); if (looksValid(body)) return body; lastErr = new Error('risposta non valida'); }
+                catch (e) { lastErr = e; }
+            }
+            throw new Error(lastErr ? lastErr.message : '?');
+        }
+        async function fetchEventoIpba(eventoUrl) {
+            try {
+                return await fetchViaProxy(eventoUrl, (html) => typeof html === 'string' && html.length > 3000 && /calendario gare|small-box/i.test(html));
+            } catch (e) { throw new Error('pagina evento non scaricabile (' + e.message + '). Avvia il server locale e riprova.'); }
+        }
+        function parseEventoIpba(html) {
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            const out = { name: '', date: '', matches: [] };
+            const inner = doc.querySelector('.small-box .inner');
+            if (inner) {
+                const h3 = inner.querySelector('h3');
+                if (h3) out.name = h3.textContent.replace(/\s+/g, ' ').trim();
+                const p = inner.querySelector('p');
+                if (p) {
+                    const b = p.querySelector('b');
+                    const headline = b ? b.textContent.replace(/\s+/g, ' ').trim() : '';
+                    for (const m of headline.matchAll(/(\d{1,2})(?:\s*[\/\-–]\s*\d{1,2})?\s+([A-Za-zÀ-ù]+)\s+(\d{4})/g)) {
+                        const mese = MESI_IT[m[2].toUpperCase()];
+                        if (!mese) continue;
+                        out.date = m[3] + '-' + mese + '-' + String(m[1]).padStart(2, '0');
+                        break;
+                    }
+                }
+            }
+            let calRoot = doc;
+            for (const t of doc.querySelectorAll('.box-title')) {
+                if (/calendario gare/i.test(t.textContent)) { calRoot = t.closest('.box') || doc; break; }
+            }
+            const ownText = (el) => { let s = ''; for (const n of el.childNodes) if (n.nodeType === 3) s += n.textContent + ' '; return s.replace(/\s+/g, ' ').trim(); };
+            let currentPhase = '';
+            calRoot.querySelectorAll('div, tr, h4, h5, b, strong').forEach(el => {
+                if (el.tagName === 'TR') {
+                    const links = el.querySelectorAll("a[href*='team.aspx']");
+                    if (links.length >= 2) {
+                        const clean = (s) => s.replace(/\s+/g, ' ').trim();
+                        let scoreA = null, scoreB = null;
+                        for (const td of el.querySelectorAll('td')) {
+                            if (td.querySelector("a[href*='team.aspx']")) continue;
+                            const sm = (td.textContent || '').replace(/ /g, ' ').match(/(\d+)\s*:\s*(\d+)/);
+                            if (sm) { scoreA = parseInt(sm[1]); scoreB = parseInt(sm[2]); break; }
+                        }
+                        out.matches.push({ teamA: clean(links[0].textContent), teamB: clean(links[links.length - 1].textContent), phase: currentPhase, scoreA, scoreB });
+                    }
+                    return;
+                }
+                const txt = ownText(el);
+                if (!txt) return;
+                const tm = txt.match(/^(\d{1,2})[.:](\d{2})\b/);
+                if (tm) {
+                    const resto = txt.slice(tm[0].length).replace(/^[\s\-–]+/, '');
+                    const fm = resto.match(/^(girone[^-]*|pool[^-]*|ottavi[^-]*|quarti[^-]*|semifinal[^-]*|final[^-]*|playout[^-]*)/i);
+                    if (fm) currentPhase = fm[1].trim().toUpperCase();
+                    return;
+                }
+                if (txt.length < 40 && /^(girone|pool|ottavi|quarti|semifinal|final|playout)/i.test(txt)) currentPhase = txt.toUpperCase();
+            });
+            return out;
+        }
+
+        // Nome (normalizzato) del torneo in corso: per non contare due volte l'evento
+        // attivo (l'archivio potrebbe averlo, ma lo contiamo dal vivo da matchHistory).
+        function attivoNorm() {
+            return (currentData && currentData.tournament && currentData.tournament.name) ? h2hNorm(currentData.tournament.name) : null;
+        }
+        function liveMatchHistory() {
+            return (currentData && currentData.standingsData && currentData.standingsData.matchHistory) || null;
+        }
+
+        function getH2H(a, b) {
+            const A = h2hNorm(a), B = h2hNorm(b);
+            if (!A || !B || A === B || /^TEAM [AB]$/.test(A) || /^TEAM [AB]$/.test(B)) return null;
+            if (!h2hDb || !h2hDb.events || !Object.keys(h2hDb.events).length) return null;
+            const attivo = attivoNorm();
+            const res = { teamA: a, teamB: b, count: 0, winsA: 0, winsB: 0, draws: 0, last: null };
+            const add = (ta, tb, sa, sb, label, date) => {
+                const na = h2hNorm(ta), nb = h2hNorm(tb);
+                let myA, myB;
+                if (na === A && nb === B) { myA = sa; myB = sb; }
+                else if (na === B && nb === A) { myA = sb; myB = sa; }
+                else return;
+                res.count++;
+                if (myA > myB) res.winsA++; else if (myB > myA) res.winsB++; else res.draws++;
+                if (!res.last || (date || '') >= (res.last.date || '')) res.last = { scoreA: myA, scoreB: myB, event: label, date: date || '' };
+            };
+            Object.values(h2hDb.events).forEach(ev => {
+                if (attivo && h2hNorm(ev.name) === attivo) return;
+                (ev.matches || []).forEach(m => add(m[0], m[1], m[2], m[3], ev.name, ev.date));
+            });
+            const mh = liveMatchHistory();
+            if (mh) {
+                const label = (currentData.tournament && currentData.tournament.name) || 'Torneo in corso';
+                const date = (currentData.tournament && currentData.tournament.date) || new Date().toISOString().slice(0, 10);
+                mh.forEach(m => add(m.teamA, m.teamB, m.scoreA, m.scoreB, label, date));
+            }
+            return res;
+        }
+
+        function getTeamHistory(nome) {
+            const N = h2hNorm(nome);
+            if (!N || /^TEAM [AB]$/.test(N) || !h2hDb || !h2hDb.events) return null;
+            const attivo = attivoNorm();
+            const out = { name: nome, played: 0, wins: 0, losses: 0, draws: 0, forma: [], eventiVinti: [] };
+            const cronologia = [];
+            const evs = Object.values(h2hDb.events).slice().sort((a, b) => (a.date || '') < (b.date || '') ? -1 : 1);
+            evs.forEach(ev => {
+                if (attivo && h2hNorm(ev.name) === attivo) return;
+                (ev.matches || []).forEach(m => {
+                    if (isFinale(m[4]) && m[2] !== m[3]) {
+                        const vincitrice = m[2] > m[3] ? m[0] : m[1];
+                        if (h2hNorm(vincitrice) === N && !out.eventiVinti.some(e => e.name === ev.name)) out.eventiVinti.push({ name: ev.name, date: ev.date || '' });
+                    }
+                    const na = h2hNorm(m[0]), nb = h2hNorm(m[1]);
+                    if (na !== N && nb !== N) return;
+                    const mio = na === N ? m[2] : m[3];
+                    const suo = na === N ? m[3] : m[2];
+                    cronologia.push(mio > suo ? 'V' : (mio < suo ? 'S' : 'P'));
+                });
+            });
+            const mh = liveMatchHistory();
+            if (mh) {
+                [...mh].reverse().forEach(m => {
+                    const na = h2hNorm(m.teamA), nb = h2hNorm(m.teamB);
+                    if (na !== N && nb !== N) return;
+                    const mio = na === N ? (m.scoreA || 0) : (m.scoreB || 0);
+                    const suo = na === N ? (m.scoreB || 0) : (m.scoreA || 0);
+                    cronologia.push(mio > suo ? 'V' : (mio < suo ? 'S' : 'P'));
+                });
+            }
+            cronologia.forEach(e => { out.played++; if (e === 'V') out.wins++; else if (e === 'S') out.losses++; else out.draws++; });
+            out.forma = cronologia.slice(-5);
+            return out.played ? out : null;
+        }
+
+        function getArchivioTop() {
+            if (archivioTopCache) return archivioTopCache;
+            if (!h2hDb || !h2hDb.events || !Object.keys(h2hDb.events).length) return null;
+            const giocate = {}, vinte = {}, display = {};
+            let totPartite = 0;
+            Object.values(h2hDb.events).forEach(ev => {
+                (ev.matches || []).forEach(m => {
+                    totPartite++;
+                    [m[0], m[1]].forEach(n => { const k = h2hNorm(n); display[k] = n; giocate[k] = (giocate[k] || 0) + 1; });
+                    if (isFinale(m[4]) && m[2] !== m[3]) { const k = h2hNorm(m[2] > m[3] ? m[0] : m[1]); vinte[k] = (vinte[k] || 0) + 1; }
+                });
+            });
+            const topN = (obj, n) => Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n).map(e => ({ team: display[e[0]] || e[0], count: e[1] }));
+            archivioTopCache = { veterane: topN(giocate, 3), alboOro: topN(vinte, 3), eventi: Object.keys(h2hDb.events).length, partite: totPartite, updatedAt: h2hDb.updatedAt || '' };
+            return archivioTopCache;
+        }
+
+        // Se c'è un archivio locale, calcola qui i dati e li mette in currentData
+        // (sovrascrive quelli eventualmente arrivati dalla Regia).
+        function iniettaStatsLocali() {
+            if (!h2hDb || !h2hDb.events || !Object.keys(h2hDb.events).length) return;
+            const d = currentData || {};
+            const aL = d.teamLeft && d.teamLeft.name, bL = d.teamRight && d.teamRight.name;
+            d.h2h = { current: (aL && bL) ? getH2H(aL, bL) : null, next: d.nextMatch ? getH2H(d.nextMatch.teamA, d.nextMatch.teamB) : null };
+            const th = {};
+            [aL, bL, d.nextMatch && d.nextMatch.teamA, d.nextMatch && d.nextMatch.teamB].forEach(n => {
+                if (!n) return; const k = h2hNorm(n); if (!th[k]) { const x = getTeamHistory(n); if (x) th[k] = x; }
+            });
+            d.teamHistory = th;
+            d.archivioTop = getArchivioTop();
+        }
+
+        function rinfrescaCaster() {
+            lastCasterFp = ''; // forza il ridisegno
+            if (showCasterInfo) renderCasterInfo();
+        }
+
+        async function aggiornaStoricoStr() {
+            const btn = document.getElementById('str-h2h-update');
+            btn.disabled = true;
+            try {
+                setStrH2hStatus('Leggo l\'elenco stagioni da ipba.it...');
+                const listHtml = await fetchViaProxy('https://www.ipba.it/eventi.aspx', (h) => typeof h === 'string' && /evento\.aspx\?id=|txtStagione/i.test(h));
+                const ldoc = new DOMParser().parseFromString(listHtml, 'text/html');
+                const stagioni = [];
+                ldoc.querySelectorAll('#txtStagione option').forEach(o => { const v = parseInt(o.value); if (!isNaN(v)) stagioni.push(v); });
+                if (!stagioni.length) stagioni.push(12);
+                const ids = new Set();
+                let sFatte = 0;
+                for (const s of stagioni) {
+                    sFatte++;
+                    setStrH2hStatus('Leggo elenco eventi stagione ' + sFatte + '/' + stagioni.length + '...');
+                    try {
+                        const h = await fetchViaProxy('https://www.ipba.it/eventi.aspx?stagione=' + s, (x) => typeof x === 'string' && /evento\.aspx\?id=/i.test(x));
+                        [...h.matchAll(/evento\.aspx\?id=(\d+)/g)].forEach(m => ids.add(m[1]));
+                    } catch (e) { console.warn('Stagione ' + s + ' non scaricata:', e.message); }
+                }
+                if (!ids.size) throw new Error('nessun evento trovato.');
+                const db = (h2hDb && h2hDb.events && h2hDb.version === 3) ? h2hDb : { version: 3, events: {} };
+                const oggi = Date.now();
+                const daScaricare = [...ids].filter(id => {
+                    const ev = db.events[id];
+                    if (!ev || !ev.date) return true;
+                    if (!ev.matches || !ev.matches.length) return true;
+                    return (oggi - new Date(ev.date).getTime()) < 45 * 86400000;
+                });
+                let fatti = 0;
+                for (const id of daScaricare) {
+                    fatti++;
+                    setStrH2hStatus('Scarico evento ' + fatti + '/' + daScaricare.length + ' (id ' + id + ')...');
+                    try {
+                        const html = await fetchEventoIpba('https://www.ipba.it/evento.aspx?id=' + id);
+                        const ev = parseEventoIpba(html);
+                        const giocate = ev.matches.filter(m => m.scoreA !== null && m.scoreB !== null && (m.scoreA + m.scoreB) > 0).map(m => [m.teamA, m.teamB, m.scoreA, m.scoreB, m.phase || '']);
+                        db.events[id] = { id: id, name: ev.name || ('Evento ' + id), date: ev.date || '', matches: giocate };
+                    } catch (e) { console.warn('Evento ' + id + ' saltato:', e.message); }
+                    await new Promise(r => setTimeout(r, 250));
+                }
+                db.updatedAt = new Date().toISOString();
+                h2hDb = db;
+                archivioTopCache = null;
+                localStorage.setItem('pm_h2h_db', JSON.stringify(db));
+                setStrH2hStatus('✅ ' + h2hRiepilogo());
+                rinfrescaCaster();
+            } catch (err) {
+                console.error('Aggiornamento storico (streaming):', err);
+                setStrH2hStatus('❌ Errore: ' + err.message, true);
+            } finally { btn.disabled = false; }
+        }
+
+        function esportaStoricoStr() {
+            if (!h2hDb || !h2hDb.events || !Object.keys(h2hDb.events).length) { setStrH2hStatus('⚠️ Nessun archivio da esportare: premi prima "⚔️ AGGIORNA".', true); return; }
+            try {
+                const blob = new Blob([JSON.stringify(h2hDb)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = 'ipba_storico_' + new Date().toISOString().slice(0, 10) + '.json';
+                document.body.appendChild(a); a.click();
+                setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+                setStrH2hStatus('💾 Archivio esportato (' + h2hRiepilogo() + ').');
+            } catch (e) { setStrH2hStatus('❌ Errore esportazione: ' + e.message, true); }
+        }
+
+        function importaStoricoStr(file) {
+            const reader = new FileReader();
+            reader.onload = () => {
+                try {
+                    const imp = JSON.parse(reader.result);
+                    if (!imp || !imp.events || typeof imp.events !== 'object') throw new Error('file non valido (manca "events").');
+                    const base = (h2hDb && h2hDb.events && h2hDb.version === imp.version) ? h2hDb : { version: imp.version || 3, events: {} };
+                    let nuovi = 0, aggiornati = 0;
+                    Object.entries(imp.events).forEach(([id, ev]) => {
+                        const cur = base.events[id];
+                        if (!cur) { base.events[id] = ev; nuovi++; }
+                        else if ((ev.date || '') >= (cur.date || '') && (ev.matches || []).length >= (cur.matches || []).length) { base.events[id] = ev; aggiornati++; }
+                    });
+                    base.updatedAt = imp.updatedAt || new Date().toISOString();
+                    h2hDb = base; archivioTopCache = null;
+                    localStorage.setItem('pm_h2h_db', JSON.stringify(base));
+                    setStrH2hStatus('📁 Importato: ' + nuovi + ' nuovi, ' + aggiornati + ' aggiornati — ' + h2hRiepilogo());
+                    rinfrescaCaster();
+                } catch (e) { setStrH2hStatus('❌ Errore importazione: ' + e.message, true); }
+            };
+            reader.onerror = () => setStrH2hStatus('❌ Impossibile leggere il file.', true);
+            reader.readAsText(file);
+        }
+
+        (function wireArchivioStr() {
+            const up = document.getElementById('str-h2h-update');
+            const ex = document.getElementById('str-h2h-export');
+            const im = document.getElementById('str-h2h-import');
+            const fi = document.getElementById('str-h2h-file');
+            if (up) up.addEventListener('click', aggiornaStoricoStr);
+            if (ex) ex.addEventListener('click', esportaStoricoStr);
+            if (im) im.addEventListener('click', () => fi && fi.click());
+            if (fi) fi.addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) importaStoricoStr(f); e.target.value = ''; });
+            if (h2hDb) setStrH2hStatus('📚 ' + h2hRiepilogo());
+        })();
+
+        // Render Functions
         function renderStandingsTable(data) {
             if (!data || !data.standings) return;
             const tbody = document.getElementById('board-standings-body');

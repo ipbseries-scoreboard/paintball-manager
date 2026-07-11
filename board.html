@@ -1550,6 +1550,8 @@
             <div class="stats-title">LAYOUT CAMPO</div>
             <iframe id="layout-iframe" src="" frameborder="0"
                 style="width: 100%; height: calc(100% - 200px); border-radius: 20px; background: white; margin-top: 20px;"></iframe>
+            <img id="layout-img" alt="Layout campo"
+                style="display: none; width: 100%; height: calc(100% - 200px); object-fit: contain; border-radius: 20px; background: white; margin-top: 20px;">
         </div>
 
         <div id="roster-overlay">
@@ -2190,11 +2192,20 @@
                     topBar.style.display = 'none';
                 }
 
-                // IPBA Layout URL Sync
+                // IPBA Layout URL Sync — un'immagine diretta (es. screenshot gunzup)
+                // va in <img> per adattarla al riquadro; le pagine web restano nell'iframe
                 if (d.layoutUrl) {
                     const iframe = document.getElementById('layout-iframe');
-                    if (iframe.src !== d.layoutUrl) {
-                        iframe.src = d.layoutUrl;
+                    const img = document.getElementById('layout-img');
+                    const isImage = img && /\.(jpe?g|png|gif|webp)([?#]|$)/i.test(d.layoutUrl);
+                    if (isImage) {
+                        if (img.src !== d.layoutUrl) img.src = d.layoutUrl;
+                        img.style.display = 'block';
+                        if (iframe) { iframe.style.display = 'none'; if (iframe.getAttribute('src')) iframe.removeAttribute('src'); }
+                    } else if (iframe) {
+                        if (iframe.src !== d.layoutUrl) iframe.src = d.layoutUrl;
+                        iframe.style.display = 'block';
+                        if (img) img.style.display = 'none';
                     }
                 }
 

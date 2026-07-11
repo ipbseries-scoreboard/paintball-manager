@@ -1386,13 +1386,22 @@
                     <small style="color: #94a3b8;">Compila in automatico nome, data, luogo e palinsesto delle partite
                         dalla pagina dell'evento.</small>
                     <div id="evento-import-status" style="margin-top: 6px; font-size: 0.85rem; color: #94a3b8;"></div>
-                    <div style="display: flex; gap: 8px; align-items: center; margin-top: 10px;">
+                    <div style="display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap;">
                         <button id="btn-h2h-update" class="btn"
                             style="white-space: nowrap; border-color: #a855f7; color: #a855f7; background: rgba(168,85,247,0.15);">⚔️
                             AGGIORNA STORICO SCONTRI</button>
-                        <small style="color: #94a3b8;">Scarica i risultati delle ultime 3 stagioni da ipba.it per gli
-                            "scontri diretti" nel ticker.</small>
+                        <button id="btn-h2h-export" class="btn" title="Salva l'archivio in un file .json"
+                            style="white-space: nowrap; border-color: #22c55e; color: #22c55e; background: rgba(34,197,94,0.12);">💾
+                            ESPORTA</button>
+                        <button id="btn-h2h-import" class="btn" title="Carica un archivio da file .json"
+                            style="white-space: nowrap; border-color: #38bdf8; color: #38bdf8; background: rgba(56,189,248,0.12);">📁
+                            IMPORTA</button>
+                        <input type="file" id="h2h-file-input" accept="application/json,.json" style="display: none;">
                     </div>
+                    <small style="display: block; margin-top: 6px; color: #94a3b8;">Scarica i risultati di
+                        <b>tutti</b> gli eventi ipba.it (tutte le stagioni) per scontri diretti e statistiche storiche.
+                        Il primo download è lungo (~5 min); poi aggiorna solo gli eventi nuovi. Con 💾 ESPORTA salvi
+                        l'archivio in un file da ricaricare con 📁 IMPORTA (così non riparti mai da zero).</small>
                     <div id="h2h-status" style="margin-top: 6px; font-size: 0.85rem; color: #94a3b8;"></div>
                 </div>
 
@@ -2865,6 +2874,9 @@
                                 delay: state.tournament.delay,
                                 layoutUrl: state.tournament.layoutUrl,
                                 settings: state.tournament.settings,
+                                name: state.tournament.name,   // per gli schermi (titolo + esclusione evento in corso dallo storico)
+                                date: state.tournament.date,
+                                eventUrl: state.tournament.eventUrl,
                                 matches: state.tournament.matches ? state.tournament.matches.map(m => ({
                                     time: m.time,
                                     teamA: m.teamA,
@@ -6136,8 +6148,10 @@
             document.getElementById('btn-import-evento').addEventListener('click', importEventoIpba);
 
             // ===== STORICO SCONTRI DIRETTI (H2H) =====
-            // Archivio locale dei risultati degli eventi ipba.it (ultime 3 stagioni),
-            // usato per gli "scontri diretti" nel ticker di vmix_bg.html.
+            // Archivio locale dei risultati di TUTTI gli eventi ipba.it (tutte le stagioni),
+            // usato per gli "scontri diretti" e le statistiche storiche. Salvato in
+            // localStorage e aggiornabile in modo incrementale (solo eventi nuovi/recenti);
+            // esportabile/importabile come file .json per non ripartire mai da zero.
             let h2hDb = null;
             try { h2hDb = JSON.parse(localStorage.getItem('pm_h2h_db') || 'null'); } catch (e) { h2hDb = null; }
 
@@ -6271,23 +6285,26 @@
                 const btn = document.getElementById('btn-h2h-update');
                 btn.disabled = true;
                 try {
-                    // 1. Stagioni disponibili: dalla tendina della pagina eventi (la selected è la corrente)
-                    setH2hStatus('Leggo l\'elenco eventi da ipba.it...');
+                    // 1. Stagioni disponibili: TUTTI i valori della tendina della pagina eventi.
+                    setH2hStatus('Leggo l\'elenco stagioni da ipba.it...');
                     const listHtml = await fetchViaProxy('https://www.ipba.it/eventi.aspx',
                         (h) => typeof h === 'string' && /evento\.aspx\?id=|txtStagione/i.test(h));
-                    let curSeason = 0;
                     const ldoc = new DOMParser().parseFromString(listHtml, 'text/html');
+                    const stagioni = [];
                     ldoc.querySelectorAll('#txtStagione option').forEach(o => {
                         const v = parseInt(o.value);
-                        if (!isNaN(v)) curSeason = Math.max(curSeason, v);
+                        if (!isNaN(v)) stagioni.push(v);
                     });
+                    if (!stagioni.length) stagioni.push(12); // riserva: almeno la stagione corrente
 
-                    // 2. Id evento delle ultime 3 stagioni. ATTENZIONE: serve sempre il
+                    // 2. Id evento di TUTTE le stagioni. ATTENZIONE: serve sempre il
                     // parametro stagione esplicito — la pagina base (senza parametro)
                     // NASCONDE gli eventi già disputati della stagione corrente.
                     const ids = new Set();
-                    for (const s of [curSeason, curSeason - 1, curSeason - 2]) {
-                        if (s < 1) continue;
+                    let sFatte = 0;
+                    for (const s of stagioni) {
+                        sFatte++;
+                        setH2hStatus('Leggo elenco eventi stagione ' + sFatte + '/' + stagioni.length + '...');
                         try {
                             const h = await fetchViaProxy('https://www.ipba.it/eventi.aspx?stagione=' + s,
                                 (x) => typeof x === 'string' && /evento\.aspx\?id=/i.test(x));
@@ -6337,6 +6354,70 @@
                 }
             }
             document.getElementById('btn-h2h-update').addEventListener('click', aggiornaStoricoH2H);
+
+            // Esporta l'archivio storico in un file .json (backup / trasferimento su altro PC)
+            function esportaStoricoH2H() {
+                if (!h2hDb || !h2hDb.events || !Object.keys(h2hDb.events).length) {
+                    setH2hStatus('⚠️ Nessun archivio da esportare: premi prima "⚔️ AGGIORNA STORICO SCONTRI".', true);
+                    return;
+                }
+                try {
+                    const blob = new Blob([JSON.stringify(h2hDb)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'ipba_storico_' + new Date().toISOString().slice(0, 10) + '.json';
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+                    setH2hStatus('💾 Archivio esportato (' + h2hRiepilogo() + ').');
+                } catch (e) {
+                    setH2hStatus('❌ Errore esportazione: ' + e.message, true);
+                }
+            }
+
+            // Importa un archivio da file .json. Se ne esiste già uno, unisce gli eventi
+            // (l'evento con la data più recente vince) invece di sovrascrivere tutto.
+            function importaStoricoH2H(file) {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    try {
+                        const imp = JSON.parse(reader.result);
+                        if (!imp || !imp.events || typeof imp.events !== 'object') {
+                            throw new Error('file non valido (manca "events").');
+                        }
+                        const base = (h2hDb && h2hDb.events && h2hDb.version === imp.version) ? h2hDb : { version: imp.version || 3, events: {} };
+                        let nuovi = 0, aggiornati = 0;
+                        Object.entries(imp.events).forEach(([id, ev]) => {
+                            const cur = base.events[id];
+                            if (!cur) { base.events[id] = ev; nuovi++; }
+                            else if ((ev.date || '') >= (cur.date || '') && (ev.matches || []).length >= (cur.matches || []).length) {
+                                base.events[id] = ev; aggiornati++;
+                            }
+                        });
+                        base.updatedAt = imp.updatedAt || new Date().toISOString();
+                        h2hDb = base;
+                        archivioTopCache = null;
+                        localStorage.setItem('pm_h2h_db', JSON.stringify(base));
+                        setH2hStatus('📁 Importato: ' + nuovi + ' nuovi, ' + aggiornati + ' aggiornati — ' + h2hRiepilogo());
+                        log('STORICO H2H IMPORTATO: ' + h2hRiepilogo());
+                        broadcastState(true);
+                    } catch (e) {
+                        setH2hStatus('❌ Errore importazione: ' + e.message, true);
+                    }
+                };
+                reader.onerror = () => setH2hStatus('❌ Impossibile leggere il file.', true);
+                reader.readAsText(file);
+            }
+
+            document.getElementById('btn-h2h-export').addEventListener('click', esportaStoricoH2H);
+            document.getElementById('btn-h2h-import').addEventListener('click', () => document.getElementById('h2h-file-input').click());
+            document.getElementById('h2h-file-input').addEventListener('change', (e) => {
+                const f = e.target.files && e.target.files[0];
+                if (f) importaStoricoH2H(f);
+                e.target.value = ''; // permette di re-importare lo stesso file
+            });
+
             document.getElementById('close-history-btn').addEventListener('click', () => {
                 document.getElementById('history-modal').style.display = 'none';
                 document.getElementById('history-edit-area').style.display = 'none';

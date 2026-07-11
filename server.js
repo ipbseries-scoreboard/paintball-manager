@@ -65,7 +65,7 @@ function proxyIpba(req, res) {
     };
     let target = null;
     try { target = new URL(new URL(req.url, 'http://localhost').searchParams.get('url') || ''); } catch (e) { }
-    if (!target || !/(^|\.)ipba\.it$/i.test(target.hostname)) { fail('URL non valido: ammessi solo link ipba.it', 400); return; }
+    if (!target || !/(^|\.)(ipba\.it|gunzup\.com)$/i.test(target.hostname)) { fail('URL non valido: ammessi solo link ipba.it o gunzup.com', 400); return; }
 
     const fetchRemote = (u, depth) => {
         const lib = u.protocol === 'http:' ? http : https;

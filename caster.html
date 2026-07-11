@@ -209,7 +209,7 @@
 
         <!-- ARCHIVIO STORICO -->
         <div class="card span12">
-            <h2>📚 Archivio storico (ultime 3 stagioni)</h2>
+            <h2>📚 Archivio storico (tutte le stagioni)</h2>
             <div style="display:flex; gap:30px; flex-wrap:wrap;">
                 <div style="flex:1; min-width:260px;">
                     <div class="fact"><b>🏆 Albo d'oro (eventi vinti)</b></div>
@@ -349,7 +349,7 @@
                 ? d.standingsData.standings.find(s => norm(s.name) === norm(nome)) : null;
             let html = '';
             if (th) {
-                html += `<div class="stat-line"><span>Partite IPBA (3 stagioni)</span><span>${th.played}</span></div>`;
+                html += `<div class="stat-line"><span>Partite IPBA (tutte le stagioni)</span><span>${th.played}</span></div>`;
                 html += `<div class="stat-line"><span>Bilancio</span><span><span style="color:var(--green)">${th.wins}V</span> · <span style="color:var(--red)">${th.losses}S</span>${th.draws ? ' · ' + th.draws + 'P' : ''}</span></div>`;
                 if (th.eventiVinti && th.eventiVinti.length) {
                     html += `<div class="stat-line"><span>🏆 Eventi vinti</span><span>${th.eventiVinti.length}</span></div>`;
