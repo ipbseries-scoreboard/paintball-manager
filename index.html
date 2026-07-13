@@ -1949,6 +1949,7 @@
         <!-- jsPDF: copia locale, CDN come riserva -->
         <script src="lib/jspdf.umd.min.js"></script>
         <script>window.jspdf || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>');</script>
+        <script src="double-pit.js"></script>
 
         <!-- SCRIPT -->
         <script>
@@ -2207,7 +2208,8 @@
 
                     if (matches.length > 0) {
                         // Stringify with Time for display/save
-                        const newText = matches.map(m => `${m.time} - ${m.teamA}, ${m.teamB}`).join('\n');
+                        DoublePit.prepare(matches);
+                        const newText = matches.map(m => `${m.time} - ${m.teamA}, ${m.teamB} ||| Pit ${m.pit}`).join('\n');
                         document.getElementById('tournament-input').value = newText;
                         alert(`Trovati ${matches.length} match! (Supporto Slot & Doppia Pit attivo)`);
                     } else {
@@ -2750,22 +2752,11 @@
                 if (!state.tournament.active || state.tournament.currentIndex === -1) return null;
                 const currIdx = state.tournament.currentIndex;
                 const matches = state.tournament.matches;
-                const currentMatch = matches[currIdx];
-                let nextMatch = null;
-                if (matches[currIdx - 1] && matches[currIdx - 1].time === currentMatch.time && (!matches[currIdx - 1].savedState || !matches[currIdx - 1].savedState.finished)) {
-                    nextMatch = matches[currIdx - 1];
-                } else if (matches[currIdx + 1] && matches[currIdx + 1].time === currentMatch.time && (!matches[currIdx + 1].savedState || !matches[currIdx + 1].savedState.finished)) {
-                    nextMatch = matches[currIdx + 1];
-                }
-                if (!nextMatch) {
-                    for (let i = currIdx + 1; i < matches.length; i++) {
-                        if (!currentMatch.pit || matches[i].pit === currentMatch.pit) {
-                            nextMatch = matches[i];
-                            break;
-                        }
-                    }
-                }
-                return nextMatch;
+                const peerIdx = DoublePit.getPeerIndex(matches, currIdx, true);
+                if (peerIdx !== -1) return matches[peerIdx];
+
+                const nextIdx = DoublePit.getNextPendingIndex(matches, currIdx);
+                return nextIdx !== -1 ? matches[nextIdx] : null;
             }
 
             let lastBroadcastTime = 0;
@@ -3813,18 +3804,7 @@
                 // 2. Find Next Step
                 // Check Peer Interleaved Match (Active?)
                 const matches = state.tournament.matches;
-                const currentM = matches[currIdx];
-                const currentMTime = (currentM.time || "").trim();
-                let nextSlotIdx = -1;
-
-                // Check Forward Peer
-                if (matches[currIdx + 1] && (matches[currIdx + 1].time || "").trim() === currentMTime && currentMTime !== "" && (!matches[currIdx + 1].savedState || !matches[currIdx + 1].savedState.finished)) {
-                    nextSlotIdx = currIdx + 1;
-                }
-                // Check Backward Peer
-                else if (matches[currIdx - 1] && (matches[currIdx - 1].time || "").trim() === currentMTime && currentMTime !== "" && (!matches[currIdx - 1].savedState || !matches[currIdx - 1].savedState.finished)) {
-                    nextSlotIdx = currIdx - 1;
-                }
+                const nextSlotIdx = DoublePit.getPeerIndex(matches, currIdx, true);
 
                 if (nextSlotIdx !== -1) {
                     // Interleaved Match is active -> Go there directly
@@ -3845,13 +3825,9 @@
                         }
                     } else {
                         // Standard Next Match (same phase)
-                        let targetNextIdx = currIdx + 1;
-                        // Skip peers that are already finished
-                        while (targetNextIdx < matches.length && (matches[targetNextIdx].time || "").trim() === currentMTime && currentMTime !== "") {
-                            targetNextIdx++;
-                        }
+                        const targetNextIdx = DoublePit.getNextPendingIndex(matches, currIdx);
 
-                        if (targetNextIdx < matches.length) {
+                        if (targetNextIdx !== -1) {
                             log("MATCH TERMINATO -> CARICAMENTO PROSSIMO SLOT");
                             loadMatch(targetNextIdx);
                             startInter('slot');
@@ -3896,21 +3872,8 @@
                     // Check Peer Logic
                     const currIdx = state.tournament.currentIndex;
                     const matches = state.tournament.matches;
-                    const currentM = matches[currIdx];
-                    let nextSlotIdx = -1;
-
-                    // Check Peer (Same logic as rotateMatch)
-                    if (matches[currIdx + 1] && matches[currIdx + 1].time === currentM.time) nextSlotIdx = currIdx + 1;
-                    else if (matches[currIdx - 1] && matches[currIdx - 1].time === currentM.time) nextSlotIdx = currIdx - 1;
-
-                    // If Peer exists AND is NOT finished
-                    let peerActive = false;
-                    if (nextSlotIdx !== -1) {
-                        const peer = matches[nextSlotIdx];
-                        if (!peer.savedState || !peer.savedState.finished) {
-                            peerActive = true;
-                        }
-                    }
+                    const nextSlotIdx = DoublePit.getPeerIndex(matches, currIdx, true);
+                    const peerActive = nextSlotIdx !== -1;
 
                     if (peerActive) {
                         log("PEER MATCH ATTIVO - SCAMBIO SLOT PER GOLDEN POINT FUTURO");
@@ -4139,21 +4102,29 @@
                     if (!l.includes(',')) return;
                     if (knockoutPhases.includes(currentPhase)) return;
 
-                    const parts = l.split('-');
-                    const timeParts = l.split('-');
-                    const extractedTime = timeParts.length > 1 && timeParts[0].includes(':') ? timeParts[0].trim() : "00:00";
+                    const columnParts = l.split('|||');
+                    const mainPart = columnParts[0];
+                    const pitPart = columnParts[1] || '';
+                    const parts = mainPart.split('-');
+                    const timeParts = mainPart.split('-');
+                    const rawTime = timeParts.length > 1 ? timeParts[0].trim() : "00:00";
+                    const extractedTime = DoublePit.normalizeTime(rawTime);
 
-                    const teams = (parts.length > 1 ? parts.slice(1).join('-') : l).split(',');
+                    const teams = (parts.length > 1 ? parts.slice(1).join('-') : mainPart).split(',');
                     if (teams.length < 2) return;
+
+                    const pitText = pitPart.trim().toUpperCase();
+                    const pit = pitText.includes('PIT B') ? 'B' : (pitText.includes('PIT A') ? 'A' : undefined);
 
                     result.push({
                         time: extractedTime,
                         teamA: cleanName(teams[0]),
                         teamB: cleanName(teams[1]),
-                        phase: currentPhase
+                        phase: currentPhase,
+                        pit: pit
                     });
                 });
-                return result;
+                return DoublePit.prepare(result);
             }
             // State Persistence
             function saveMatchState(idx, finished = false, shouldSwapNext = true) {
@@ -4218,6 +4189,9 @@
                     try {
                         const data = JSON.parse(saved);
                         state.tournament = data.tournament;
+                        if (state.tournament && Array.isArray(state.tournament.matches)) {
+                            DoublePit.prepare(state.tournament.matches);
+                        }
                         if (data.teams) state.teams = data.teams;
                         if (data.matchLog) state.matchLog = data.matchLog;
                         if (data.currentMatchEvents) state.currentMatchEvents = data.currentMatchEvents;
@@ -4470,21 +4444,7 @@
                 // 2. Identify Current Slot Context
                 const currIdx = state.tournament.currentIndex;
                 const matches = state.tournament.matches;
-                const currentM = matches[currIdx];
-
-                // Check Peer (Next or Prev with same time)
-                let nextSlotIdx = -1;
-
-                // Look forward
-                if (matches[currIdx + 1] && matches[currIdx + 1].time === currentM.time) {
-                    nextSlotIdx = currIdx + 1;
-                }
-                // Look backward
-                else if (matches[currIdx - 1]) {
-                    if (matches[currIdx - 1].time === currentM.time) {
-                        nextSlotIdx = currIdx - 1;
-                    }
-                }
+                const nextSlotIdx = DoublePit.getPeerIndex(matches, currIdx, true);
 
                 // 3. Save Logic
                 saveMatchState(currIdx, false, swapSide);
@@ -4492,23 +4452,13 @@
                 // 4. Load Logic
                 if (nextSlotIdx !== -1) {
                     // Double Slot found -> SWITCH
-                    // Check if peer is finished? If finished, we can't rotate to it?
-                    // If peer is finished, we should probably stay here (Single Mode)?
-                    const peer = matches[nextSlotIdx];
-                    if (peer.savedState && peer.savedState.finished) {
-                        // Peer is done. We become Single Slot.
-                        log("PEER MATCH TERMINATO -> STANDARD ROTATION (Single Mode)");
-                        if (swapSide) state.basesSwapped = !state.basesSwapped;
-                        startInter('single_slot');
-                    } else {
-                        log(`ROTAZIONE SLOT: Match ${currIdx + 1} -> Match ${nextSlotIdx + 1}`);
-                        loadMatch(nextSlotIdx, true);
-                    }
+                    log(`ROTAZIONE DOPPIA PIT: Match ${currIdx + 1} -> Match ${nextSlotIdx + 1}`);
+                    loadMatch(nextSlotIdx, true);
                 } else {
-                    // Single Slot
+                    // Single slot, or the paired match has already finished.
                     if (swapSide) {
                         state.basesSwapped = !state.basesSwapped;
-                        log("ROTAZIONE STANDARD (Single Slot) -> SWAP SIDE");
+                        log("DOPPIA PIT COMPLETATA / SLOT SINGOLO -> TEMPO DI RECUPERO");
                     } else {
                         log("ROTAZIONE NO-POINT -> MANTENIMENTO LATI");
                     }
@@ -6301,11 +6251,15 @@
                         if (!isNaN(v)) stagioni.push(v);
                     });
                     if (!stagioni.length) stagioni.push(12); // riserva: almeno la stagione corrente
+                    // Le ultime 3 stagioni (correnti/recenti) vengono SEMPRE ri-scaricate:
+                    // così live e correzioni recenti su ipba.it entrano senza dover forzare.
+                    const stagioniRecenti = new Set([...stagioni].sort((a, b) => b - a).slice(0, 3));
 
                     // 2. Id evento di TUTTE le stagioni. ATTENZIONE: serve sempre il
                     // parametro stagione esplicito — la pagina base (senza parametro)
                     // NASCONDE gli eventi già disputati della stagione corrente.
                     const ids = new Set();
+                    const idsRecenti = new Set();
                     let sFatte = 0;
                     for (const s of stagioni) {
                         sFatte++;
@@ -6313,7 +6267,7 @@
                         try {
                             const h = await fetchViaProxy('https://www.ipba.it/eventi.aspx?stagione=' + s,
                                 (x) => typeof x === 'string' && /evento\.aspx\?id=/i.test(x));
-                            [...h.matchAll(/evento\.aspx\?id=(\d+)/g)].forEach(m => ids.add(m[1]));
+                            [...h.matchAll(/evento\.aspx\?id=(\d+)/g)].forEach(m => { ids.add(m[1]); if (stagioniRecenti.has(s)) idsRecenti.add(m[1]); });
                         } catch (e) { console.warn('Stagione ' + s + ' non scaricata:', e.message); }
                     }
                     if (!ids.size) throw new Error('nessun evento trovato nelle liste stagione.');
@@ -6321,14 +6275,14 @@
                     // 3. Scarico solo il necessario: gli eventi vecchi già in archivio non cambiano più
                     // (v3: ogni partita salva anche la fase, letta dalla riga orario — per l'albo d'oro)
                     const db = (h2hDb && h2hDb.events && h2hDb.version === 3) ? h2hDb : { version: 3, events: {} };
-                    const oggi = Date.now();
                     const forzaTutto = !!(document.getElementById('h2h-forza') && document.getElementById('h2h-forza').checked);
                     const daScaricare = [...ids].filter(id => {
-                        if (forzaTutto) return true;                              // ri-scarica tutto (es. dopo una correzione su ipba.it)
+                        if (forzaTutto) return true;                              // ri-scarica tutto (correzione su un evento vecchio)
+                        if (idsRecenti.has(id)) return true;                      // ultime 3 stagioni: sempre aggiornate
                         const ev = db.events[id];
                         if (!ev || !ev.date) return true;
                         if (!ev.matches || !ev.matches.length) return true;       // magari ora i risultati ci sono
-                        return (oggi - new Date(ev.date).getTime()) < 45 * 86400000; // recente: può essere cambiato
+                        return false;                                             // evento vecchio già completo: si salta
                     });
 
                     let fatti = 0;
@@ -6747,16 +6701,9 @@
                 if (!state.tournament.active || currIdx === -1 || !matches[currIdx]) return null;
 
                 const currentM = matches[currIdx];
-                let targetNextIdx = currIdx + 1;
+                const targetNextIdx = DoublePit.getNextPendingIndex(matches, currIdx);
 
-                // Skip Peer Matches (matches with same time)
-                // We use trim() and skip empty times to be robust
-                const currentMTime = (currentM.time || "").trim();
-                while (targetNextIdx < matches.length && (matches[targetNextIdx].time || "").trim() === currentMTime && currentMTime !== "") {
-                    targetNextIdx++;
-                }
-
-                if (targetNextIdx < matches.length) {
+                if (targetNextIdx !== -1) {
                     const nextM = matches[targetNextIdx];
                     const nextPhase = (nextM.phase || "GIRONI").trim().toUpperCase();
                     const currPhase = (currentM.phase || "GIRONI").trim().toUpperCase();
@@ -7258,6 +7205,7 @@
                                            state.tournament.matches.length === state.tournament.currentIndex; // safety
 
                 state.tournament.matches.push(...newMatches);
+                DoublePit.prepare(state.tournament.matches);
                 saveTournamentState();
 
                 alert(`Aggiunti ${newMatches.length} match!`);

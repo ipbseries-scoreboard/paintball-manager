@@ -5,7 +5,8 @@
   "description": "Server locale del Paintball Manager: pagine web + relay WebSocket",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test tests/*.test.js"
   },
   "dependencies": {
     "ws": "^8.18.0"

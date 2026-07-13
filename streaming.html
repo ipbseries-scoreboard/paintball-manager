@@ -2485,6 +2485,7 @@
             showCasterInfo = !showCasterInfo;
             document.getElementById('caster-overlay').style.display = showCasterInfo ? 'flex' : 'none';
             if (showCasterInfo) {
+                ricaricaArchivioDaStorage(); // rileggi l'archivio (magari aggiornato altrove)
                 lastCasterFp = ''; // forza il ridisegno all'apertura
                 renderCasterInfo();
                 // chiedi subito un FULL_SYNC per avere h2h/storico freschi
@@ -2858,6 +2859,23 @@
             return archivioTopCache;
         }
 
+        // Rilegge l'archivio da localStorage: utile se è stato aggiornato dalla Regia
+        // o da un'altra scheda della stessa origine dopo il caricamento della pagina.
+        function ricaricaArchivioDaStorage() {
+            try {
+                const fresh = JSON.parse(localStorage.getItem('pm_h2h_db') || 'null');
+                if (fresh && fresh.updatedAt !== (h2hDb && h2hDb.updatedAt)) {
+                    h2hDb = fresh;
+                    archivioTopCache = null;
+                    setStrH2hStatus('📚 ' + h2hRiepilogo());
+                }
+            } catch (e) { /* archivio illeggibile: si tiene quello in memoria */ }
+        }
+        // Aggiornamento in tempo reale se l'archivio cambia in un'altra scheda
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'pm_h2h_db') { ricaricaArchivioDaStorage(); rinfrescaCaster(); }
+        });
+
         // Se c'è un archivio locale, calcola qui i dati e li mette in currentData
         // (sovrascrive quelli eventualmente arrivati dalla Regia).
         function iniettaStatsLocali() {
@@ -2888,26 +2906,30 @@
                 const stagioni = [];
                 ldoc.querySelectorAll('#txtStagione option').forEach(o => { const v = parseInt(o.value); if (!isNaN(v)) stagioni.push(v); });
                 if (!stagioni.length) stagioni.push(12);
+                // Le ultime 3 stagioni (correnti/recenti) vengono SEMPRE ri-scaricate:
+                // così live e correzioni recenti su ipba.it entrano senza dover forzare.
+                const stagioniRecenti = new Set([...stagioni].sort((a, b) => b - a).slice(0, 3));
                 const ids = new Set();
+                const idsRecenti = new Set();
                 let sFatte = 0;
                 for (const s of stagioni) {
                     sFatte++;
                     setStrH2hStatus('Leggo elenco eventi stagione ' + sFatte + '/' + stagioni.length + '...');
                     try {
                         const h = await fetchViaProxy('https://www.ipba.it/eventi.aspx?stagione=' + s, (x) => typeof x === 'string' && /evento\.aspx\?id=/i.test(x));
-                        [...h.matchAll(/evento\.aspx\?id=(\d+)/g)].forEach(m => ids.add(m[1]));
+                        [...h.matchAll(/evento\.aspx\?id=(\d+)/g)].forEach(m => { ids.add(m[1]); if (stagioniRecenti.has(s)) idsRecenti.add(m[1]); });
                     } catch (e) { console.warn('Stagione ' + s + ' non scaricata:', e.message); }
                 }
                 if (!ids.size) throw new Error('nessun evento trovato.');
                 const db = (h2hDb && h2hDb.events && h2hDb.version === 3) ? h2hDb : { version: 3, events: {} };
-                const oggi = Date.now();
                 const forzaTutto = !!(document.getElementById('str-h2h-forza') && document.getElementById('str-h2h-forza').checked);
                 const daScaricare = [...ids].filter(id => {
-                    if (forzaTutto) return true; // ri-scarica tutto (es. dopo una correzione su ipba.it)
+                    if (forzaTutto) return true;        // ri-scarica tutto (correzione su un evento vecchio)
+                    if (idsRecenti.has(id)) return true; // ultime 3 stagioni: sempre aggiornate
                     const ev = db.events[id];
                     if (!ev || !ev.date) return true;
                     if (!ev.matches || !ev.matches.length) return true;
-                    return (oggi - new Date(ev.date).getTime()) < 45 * 86400000;
+                    return false;                        // evento vecchio già completo: si salta
                 });
                 let fatti = 0;
                 for (const id of daScaricare) {
