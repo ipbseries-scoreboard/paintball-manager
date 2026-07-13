@@ -4045,14 +4045,6 @@
                     window.pendingRotation = null;
                 }
 
-                // During dedicated break modes the button keeps its original
-                // meaning: finish the countdown immediately.
-                if (state.mode === 'BREAK_MATCH' || state.mode === 'GOLDEN_BREAK') {
-                    state.timer = 0;
-                    updateTimerDisplay();
-                    return;
-                }
-
                 if (!state.tournament.active || state.tournament.currentIndex === -1) {
                     matchOver(true);
                     return;
@@ -4060,28 +4052,49 @@
 
                 const currIdx = state.tournament.currentIndex;
                 const matches = state.tournament.matches;
-                const peerIdx = DoublePit.getPeerIndex(matches, currIdx, true);
+                const slotIndexes = DoublePit.getSlotIndexes(matches, currIdx);
+                const skippedAt = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-                if (peerIdx !== -1) {
-                    // In double-pit mode "skip slot" means skip this turn, not
-                    // finish the match. Preserve score, game clock and sides so
-                    // the match can be loaded again after the peer's next point.
-                    stopTimerLoop();
-                    if (state.mode === 'POINT' || state.mode === 'OVERTIME' ||
-                        (state.mode === 'PAUSED' && (state.prevMode === 'POINT' || state.prevMode === 'OVERTIME'))) {
-                        state.gameTimeRemaining = state.timer;
-                    }
-                    state.mode = 'IDLE';
-                    state.showNextMatchOverlay = false;
-                    saveMatchState(currIdx, false, false);
-                    log(`SALTA TURNO DOPPIA PIT: Match ${currIdx + 1} resta attivo -> Match ${peerIdx + 1}`);
-                    loadMatch(peerIdx, true);
-                    return;
-                }
+                // SALTA SLOT advances to the next scheduled time block. Close
+                // every active match paired with the current one first, so the
+                // normal end-of-match flow cannot select it as the next peer.
+                slotIndexes.forEach((matchIdx) => {
+                    if (matchIdx === currIdx) return;
+                    const match = matches[matchIdx];
+                    if (!match || DoublePit.isFinished(match)) return;
 
-                // A single slot (or a slot whose peer is already finished)
-                // retains the historical behavior and advances the schedule.
+                    const saved = match.savedState || {};
+                    match.realEndTime = skippedAt;
+                    match.savedState = {
+                        scoreA: saved.scoreA || 0,
+                        scoreB: saved.scoreB || 0,
+                        penaltiesA: saved.penaltiesA || 0,
+                        penaltiesB: saved.penaltiesB || 0,
+                        techUsedA: saved.techUsedA || false,
+                        techUsedB: saved.techUsedB || false,
+                        timer: saved.timer !== undefined ? saved.timer : CONFIG.gameTime,
+                        basesSwappedNext: saved.basesSwappedNext || false,
+                        finished: true,
+                        skipped: true,
+                        history: Array.isArray(saved.history) ? saved.history : [],
+                        realStartTime: saved.realStartTime || match.realStartTime,
+                        realEndTime: skippedAt,
+                        gameTimeRemaining: saved.gameTimeRemaining !== undefined ? saved.gameTimeRemaining : CONFIG.gameTime
+                    };
+                });
+
+                saveTournamentState();
+                log(`SALTA BLOCCO: chiusi i match ${slotIndexes.map(i => i + 1).join(' e ')} -> prossimo orario`);
                 matchOver(true);
+
+                // matchOver() persists the current match with its live score and
+                // clock. Tag it afterwards so no live data is overwritten.
+                const skippedMatch = matches[currIdx];
+                if (skippedMatch && skippedMatch.savedState) {
+                    skippedMatch.savedState.skipped = true;
+                    saveTournamentState();
+                    broadcastState(true);
+                }
             }
 
             function manualSwapSides() {
@@ -5818,10 +5831,10 @@
             document.getElementById('btn-skip-slot').addEventListener('click', () => {
                 const currIdx = state.tournament.currentIndex;
                 const matches = state.tournament.matches;
-                const hasActivePeer = state.tournament.active && currIdx !== -1 &&
-                    DoublePit.getPeerIndex(matches, currIdx, true) !== -1;
-                const confirmMessage = hasActivePeer
-                    ? "Passare all'altra pit? Il match corrente resterà attivo e tornerà al turno successivo."
+                const isDoubleSlot = state.tournament.active && currIdx !== -1 &&
+                    DoublePit.isDoubleSlot(matches, currIdx);
+                const confirmMessage = isDoubleSlot
+                    ? "Saltare l'intero blocco DOPPIA PIT e passare all'orario successivo? Entrambi i match verranno chiusi."
                     : "Sei sicuro di voler SALTARE e CHIUDERE questo SLOT?";
                 if (state.settings.confirmSkipSlot && !confirm(confirmMessage)) return;
 
