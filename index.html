@@ -4039,6 +4039,51 @@
                 }
             }
 
+            function skipCurrentSlot() {
+                if (window.pendingRotation) {
+                    clearTimeout(window.pendingRotation);
+                    window.pendingRotation = null;
+                }
+
+                // During dedicated break modes the button keeps its original
+                // meaning: finish the countdown immediately.
+                if (state.mode === 'BREAK_MATCH' || state.mode === 'GOLDEN_BREAK') {
+                    state.timer = 0;
+                    updateTimerDisplay();
+                    return;
+                }
+
+                if (!state.tournament.active || state.tournament.currentIndex === -1) {
+                    matchOver(true);
+                    return;
+                }
+
+                const currIdx = state.tournament.currentIndex;
+                const matches = state.tournament.matches;
+                const peerIdx = DoublePit.getPeerIndex(matches, currIdx, true);
+
+                if (peerIdx !== -1) {
+                    // In double-pit mode "skip slot" means skip this turn, not
+                    // finish the match. Preserve score, game clock and sides so
+                    // the match can be loaded again after the peer's next point.
+                    stopTimerLoop();
+                    if (state.mode === 'POINT' || state.mode === 'OVERTIME' ||
+                        (state.mode === 'PAUSED' && (state.prevMode === 'POINT' || state.prevMode === 'OVERTIME'))) {
+                        state.gameTimeRemaining = state.timer;
+                    }
+                    state.mode = 'IDLE';
+                    state.showNextMatchOverlay = false;
+                    saveMatchState(currIdx, false, false);
+                    log(`SALTA TURNO DOPPIA PIT: Match ${currIdx + 1} resta attivo -> Match ${peerIdx + 1}`);
+                    loadMatch(peerIdx, true);
+                    return;
+                }
+
+                // A single slot (or a slot whose peer is already finished)
+                // retains the historical behavior and advances the schedule.
+                matchOver(true);
+            }
+
             function manualSwapSides() {
                 saveStateToHistory();
                 state.basesSwapped = !state.basesSwapped;
@@ -5771,18 +5816,17 @@
 
             // SKIP SLOT LOGIC
             document.getElementById('btn-skip-slot').addEventListener('click', () => {
-                if (state.settings.confirmSkipSlot && !confirm("Sei sicuro di voler SALTARE questo SLOT?")) return;
+                const currIdx = state.tournament.currentIndex;
+                const matches = state.tournament.matches;
+                const hasActivePeer = state.tournament.active && currIdx !== -1 &&
+                    DoublePit.getPeerIndex(matches, currIdx, true) !== -1;
+                const confirmMessage = hasActivePeer
+                    ? "Passare all'altra pit? Il match corrente resterà attivo e tornerà al turno successivo."
+                    : "Sei sicuro di voler SALTARE e CHIUDERE questo SLOT?";
+                if (state.settings.confirmSkipSlot && !confirm(confirmMessage)) return;
 
                 log("SKIP SLOT ATTIVATO DA UTENTE");
-
-                if (state.mode === 'BREAK_MATCH' || state.mode === 'GOLDEN_BREAK') {
-                    // Set timer to essentially zero to trigger tick logic
-                    state.timer = 0;
-                    updateTimerDisplay();
-                } else {
-                    // In Game or Match Over (Force Skip)
-                    matchOver(true);
-                }
+                skipCurrentSlot();
             });
 
             // HISTORY LOGIC
