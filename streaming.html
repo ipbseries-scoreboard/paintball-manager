@@ -1342,6 +1342,11 @@
                                 IMPORTA</button>
                             <input type="file" id="str-h2h-file" accept="application/json,.json" style="display:none;">
                         </div>
+                        <label style="display:flex; align-items:center; gap:8px; margin-top:10px; color:#cbd5e1; font-size:0.82rem; cursor:pointer;">
+                            <input type="checkbox" id="str-h2h-forza" style="width:16px; height:16px;">
+                            🔄 Ri-scarica <b>tutti</b> gli eventi, anche i vecchi già salvati (usalo dopo aver corretto un
+                            risultato passato su ipba.it — è più lento)
+                        </label>
                         <div id="str-h2h-status" style="margin-top:8px; font-size:0.82rem; color:#94a3b8;"></div>
                     </div>
 
@@ -2896,7 +2901,9 @@
                 if (!ids.size) throw new Error('nessun evento trovato.');
                 const db = (h2hDb && h2hDb.events && h2hDb.version === 3) ? h2hDb : { version: 3, events: {} };
                 const oggi = Date.now();
+                const forzaTutto = !!(document.getElementById('str-h2h-forza') && document.getElementById('str-h2h-forza').checked);
                 const daScaricare = [...ids].filter(id => {
+                    if (forzaTutto) return true; // ri-scarica tutto (es. dopo una correzione su ipba.it)
                     const ev = db.events[id];
                     if (!ev || !ev.date) return true;
                     if (!ev.matches || !ev.matches.length) return true;
