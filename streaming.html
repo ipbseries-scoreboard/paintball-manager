@@ -9,7 +9,7 @@
     <!-- PeerJS CDN -->
     <script src="lib/peerjs.min.js"></script>
     <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');</script>
-    <script src="pm-client.js?v=2.1.0-iphone"></script>
+    <script src="pm-client.js?v=2.1.1-controller-cloud"></script>
     <!-- Google Fonts -->
     <link
         href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Bebas+Neue&family=Orbitron:wght@600&family=Black+Ops+One&family=Roboto:wght@400;700&display=swap"
@@ -1654,7 +1654,8 @@
         // Load Stored ID or URL Params
         const urlParams = new URLSearchParams(window.location.search);
         let targetId = urlParams.get('matchId') || urlParams.get('id');
-        let controlPin = (urlParams.get('pin') || localStorage.getItem('pm_stream_control_pin') || '').replace(/\D/g, '');
+        const pinFromUrl = urlParams.has('pin') ? (urlParams.get('pin') || '') : null;
+        let controlPin = (pinFromUrl !== null ? pinFromUrl : (localStorage.getItem('pm_stream_control_pin') || '')).replace(/\D/g, '');
         pinInput.value = controlPin;
         if (urlParams.has('pin')) {
             urlParams.delete('pin');
@@ -1784,6 +1785,7 @@
                 return;
             }
             if (controlPin) localStorage.setItem('pm_stream_control_pin', controlPin);
+            else localStorage.removeItem('pm_stream_control_pin');
             if (btn) btn.innerText = "CONNESSIONE...";
 
             // Il trasporto (retry, PING/PONG, fallback locale->cloud) è gestito da pm-client.js

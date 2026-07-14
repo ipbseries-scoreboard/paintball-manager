@@ -100,18 +100,61 @@ test('stale data uses Regia states rather than relay heartbeat and custom ports 
 
 test('public iPhone viewers go straight to CLOUD and recover without churn', () => {
     assert.match(pmClient, /var isGithubPage = \/\\\.github\\\.io\$\/i/);
-    assert.match(pmClient, /var cloudOnly = p\.get\('local'\) === '0' \|\| \(isGithubPage && !forced\)/);
+    assert.match(pmClient, /var cloudOnly = !localOnly && \(p\.get\('local'\) === '0' \|\| \(isGithubPage && !forced\)\)/);
     assert.match(pmClient, /if \(!cloudOnly\) \{[\s\S]{0,180}addWs\(localHost/);
     assert.match(pmClient, /if \(!cloudOnly\) \{[\s\S]{0,180}addPeer\(localHost/);
     assert.match(pmClient, /var dataChannelAlive = connOpen && conn && conn\.open/);
     assert.match(pmClient, /if \(dataChannelAlive && err\.type !== 'browser-incompatible'\)[\s\S]{0,320}return;/);
     assert.match(pmClient, /visibilitychange[\s\S]{0,180}pageshow[\s\S]{0,180}online/);
     assert.match(pmClient, /function requestFreshState\(force\)/);
-    assert.match(board, /pm-client\.js\?v=2\.1\.0-iphone/);
-    assert.match(streaming, /pm-client\.js\?v=2\.1\.0-iphone/);
+    assert.match(board, /pm-client\.js\?v=2\.1\.1-controller-cloud/);
+    assert.match(streaming, /pm-client\.js\?v=2\.1\.1-controller-cloud/);
     assert.match(control, /function bindPeer\(p, tag, targetId\)[\s\S]{0,700}hasOpenDataChannels/);
     assert.match(control, /signalingOnlyError && !p\.destroyed && hasOpenDataChannels\(\)[\s\S]{0,420}return;/);
     assert.match(control, /p\.disconnected && !hasOpenDataChannels\(\)[\s\S]{0,180}scheduleCloudReconnect/);
+});
+
+test('GitHub CLOUD authenticates controllers before opening Streaming or Referee', () => {
+    const helpersStart = pmClient.indexOf('var ICE_CONFIG');
+    const helpersEnd = pmClient.indexOf('function connect(cfg)', helpersStart);
+    assert.ok(helpersStart >= 0 && helpersEnd > helpersStart);
+
+    const page = {
+        location: {
+            search: '?matchId=IPBA-1674',
+            hostname: 'ipbseries-scoreboard.github.io',
+            port: '',
+            protocol: 'https:'
+        }
+    };
+    const buildCandidates = new Function(
+        'global',
+        pmClient.slice(helpersStart, helpersEnd) + '; return buildCandidates;'
+    )(page);
+    const routes = (role, token) => buildCandidates(role, token).map(candidate =>
+        candidate.kind === 'ws'
+            ? `ws:${candidate.url}`
+            : `peer:${candidate.options.host}:${candidate.options.port}`
+    );
+
+    assert.deepEqual(routes('controller', '123456'), ['peer:0.peerjs.com:443']);
+    assert.deepEqual(routes('controller', '12345'), []);
+    assert.deepEqual(routes('viewer', ''), ['peer:0.peerjs.com:443']);
+
+    page.location.search = '?matchId=IPBA-1674&local=1';
+    assert.deepEqual(routes('controller', '123456'), ['ws:ws://localhost:9000/ws']);
+    assert.deepEqual(routes('viewer', ''), [
+        'ws:ws://localhost:9000/ws',
+        'peer:localhost:9000'
+    ]);
+
+    assert.match(pmClient, /type:\s*'AUTH_CONTROLLER'[\s\S]{0,120}controlToken:\s*token/);
+    assert.match(pmClient, /d\.type === 'COMMAND_ACK' && d\.commandId === authCommandId/);
+    assert.match(pmClient, /d\.accepted === true \|\| legacyAccepted[\s\S]{0,160}completePeerOpen\(\)/);
+    assert.match(pmClient, /authRejected = true[\s\S]{0,260}clearTimeout\(watchdog\)[\s\S]{0,180}Accesso negato/);
+    assert.match(pmClient, /Object\.assign\(\{\}, data, \{ controlToken: token \}\)/);
+    assert.match(control, /case 'AUTH_CONTROLLER':[\s\S]{0,500}Controller autorizzato/);
+    assert.match(control, /data\.type === 'AUTH_CONTROLLER'[\s\S]{0,100}initialSnapshotTimer/);
 });
 
 test('PeerJS snapshots are targeted, compact and never contain embedded logos', () => {

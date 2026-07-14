@@ -3004,7 +3004,7 @@
                         if (data && data.type === 'PONG') {
                             handlePong(conn.peer, data.ts);
                         } else {
-                            if (data && (data.type === 'requestState' || data.type === 'FORCE_SYNC') && initialSnapshotTimer) {
+                            if (data && (data.type === 'requestState' || data.type === 'FORCE_SYNC' || data.type === 'AUTH_CONTROLLER') && initialSnapshotTimer) {
                                 clearTimeout(initialSnapshotTimer);
                                 initialSnapshotTimer = null;
                             }
@@ -3937,6 +3937,12 @@
                 };
 
                 switch (cmd.type) {
+                    case 'AUTH_CONTROLLER':
+                        // Il controllo del PIN e gia avvenuto sopra. Non modifica
+                        // lo stato: serve soltanto a sbloccare in sicurezza le UI
+                        // Streaming/Arbitro collegate tramite PeerJS CLOUD.
+                        message = 'Controller autorizzato';
+                        break;
                     case 'POINT':
                         if (pendingPointSide) {
                             if (cmd.side === pendingPointSide) {

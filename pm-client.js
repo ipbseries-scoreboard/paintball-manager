@@ -107,7 +107,7 @@
         return { host: parts[0], port: parts[1] ? parseInt(parts[1], 10) : (secure ? 443 : 9000), secure: secure };
     }
 
-    function buildCandidates(role) {
+    function buildCandidates(role, token) {
         var p = new URLSearchParams(global.location.search);
         var list = [];
         var seen = {};
@@ -119,8 +119,9 @@
         // I QR della Regia usano local=0 quando il CLOUD è selezionato. In quel
         // caso (e su GitHub Pages senza host esplicito) localhost è il telefono,
         // non la Regia: provarlo prima del cloud aggiunge timeout e falsi errori.
-        var cloudOnly = p.get('local') === '0' || (isGithubPage && !forced);
         var localOnly = p.get('local') === '1' || p.get('nocloud') === '1';
+        var cloudOnly = !localOnly && (p.get('local') === '0' || (isGithubPage && !forced));
+        var cloudController = role === 'controller' && /^\d{6}$/.test(String(token || ''));
         if (hn && !isGithubPage) {
             var pagePort = parseInt(global.location.port, 10);
             if (!pagePort) pagePort = global.location.protocol === 'https:' ? 443 : 80;
@@ -173,16 +174,18 @@
                 addPeer(pageHost, 'della pagina');
                 addPeer(localHost, 'locale');
             }
+        }
 
-            // 3. Cloud PeerJS (board.html da casa)
-            if (!localOnly) {
-                list.push({
-                    kind: 'peer',
-                    label: 'cloud PeerJS',
-                    options: { secure: true, host: '0.peerjs.com', port: 443, path: '/', config: ICE_CONFIG, debug: 1 },
-                    watchdog: PEER_WATCHDOG_MS
-                });
-            }
+        // 3. Cloud PeerJS: disponibile anche a Streaming/Arbitro da
+        // GitHub Pages, ma solo con un PIN controller completo. La Regia
+        // verifica comunque il PIN prima di ogni comando mutante.
+        if (!localOnly && (role === 'viewer' || cloudController)) {
+            list.push({
+                kind: 'peer',
+                label: 'cloud PeerJS',
+                options: { secure: true, host: '0.peerjs.com', port: 443, path: '/', config: ICE_CONFIG, debug: 1 },
+                watchdog: PEER_WATCHDOG_MS
+            });
         }
         return list;
     }
@@ -192,7 +195,7 @@
         var hostId = normalizeId(cfg.id);
         var role = cfg.role === 'controller' || cfg.role === 'host' ? cfg.role : 'viewer';
         var token = cfg.token == null ? '' : String(cfg.token);
-        var candidates = buildCandidates(role);
+        var candidates = buildCandidates(role, token);
         var candIdx = 0;
         var peer = null;      // trasporto PeerJS attivo
         var conn = null;      // DataConnection PeerJS attiva
@@ -223,13 +226,15 @@
         function touchTransport() { lastTransportAlive = Date.now(); }
 
         function fireOpen(label) {
-            if (!connOpen) {
+            var firstOpen = !connOpen;
+            if (firstOpen) {
                 hostConnectedAt = Date.now();
                 lastStateReceived = 0;
             }
             connOpen = true;
             everOpened = true;
             touchTransport();
+            if (!firstOpen) return;
             status('Connesso via ' + label);
             if (cfg.onOpen) { try { cfg.onOpen(); } catch (e) { console.error('[PMClient] onOpen:', e); } }
         }
@@ -259,8 +264,14 @@
         function sendData(data) {
             if (!connOpen) return false;
             try {
-                if (sock && sock.readyState === 1) { sock.send(JSON.stringify(data)); return true; }
-                if (conn && conn.open) { conn.send(data); return true; }
+                var outgoing = data;
+                // Ogni comando futuro di un controller porta automaticamente il
+                // PIN corrente: la sicurezza non dipende dalla singola pagina UI.
+                if (role === 'controller' && data && typeof data === 'object' && !Array.isArray(data)) {
+                    outgoing = Object.assign({}, data, { controlToken: token });
+                }
+                if (sock && sock.readyState === 1) { sock.send(JSON.stringify(outgoing)); return true; }
+                if (conn && conn.open) { conn.send(outgoing); return true; }
             } catch (e) { }
             return false;
         }
@@ -390,6 +401,9 @@
         // ---------- TRASPORTO 2/3: PEERJS (locale o cloud) ----------
         function tryPeer(cand, myGen) {
             var p;
+            var authCommandId = null;
+            var authRejected = false;
+            var authTimer = null;
             try {
                 p = new Peer(cand.options);
             } catch (e) {
@@ -404,13 +418,47 @@
                 var c = p.connect(hostId);
                 conn = c;
 
+                function completePeerOpen() {
+                    if (destroyed || myGen !== gen || authRejected) return;
+                    if (watchdog) { clearTimeout(watchdog); watchdog = null; }
+                    if (authTimer) { clearTimeout(authTimer); authTimer = null; }
+                    fireOpen(cand.label);
+                    // La Regia risponde con uno snapshot compatto e mirato.
+                    requestFreshState(true);
+                }
+
                 c.on('open', function () {
                     if (destroyed || myGen !== gen) return;
-                    if (watchdog) { clearTimeout(watchdog); watchdog = null; }
-                    fireOpen(cand.label);
-                    // Un solo handshake: la Regia risponde a questa richiesta con
-                    // uno snapshot compatto e mirato al nuovo dispositivo.
-                    requestFreshState(true);
+                    if (role !== 'controller') {
+                        completePeerOpen();
+                        return;
+                    }
+
+                    // PeerJS autentica il canale ma non il ruolo applicativo. Prima
+                    // di mostrare Streaming/Arbitro chiediamo quindi alla Regia di
+                    // verificare davvero il PIN inserito.
+                    authCommandId = 'pm-auth-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+                    status('Verifica PIN controller...');
+                    try {
+                        c.send({
+                            type: 'AUTH_CONTROLLER',
+                            commandId: authCommandId,
+                            controlToken: token
+                        });
+                    } catch (e) {
+                        authRejected = true;
+                        if (watchdog) { clearTimeout(watchdog); watchdog = null; }
+                        status('Verifica PIN non riuscita.', true);
+                        try { c.close(); } catch (closeError) { }
+                        return;
+                    }
+                    authTimer = setTimeout(function () {
+                        if (destroyed || myGen !== gen || !authCommandId) return;
+                        authRejected = true;
+                        if (watchdog) { clearTimeout(watchdog); watchdog = null; }
+                        status('Verifica PIN scaduta: controlla il codice e riprova.', true);
+                        try { c.close(); } catch (e) { }
+                    }, 6000);
                 });
 
                 c.on('data', function (raw) {
@@ -425,13 +473,37 @@
                         try { c.send({ type: 'PONG', ts: d.ts }); } catch (e) { }
                         return;
                     }
+                    if (authCommandId) {
+                        if (d.type === 'COMMAND_ACK' && d.commandId === authCommandId) {
+                            // Compatibilita con la Regia immediatamente precedente:
+                            // il comando sconosciuto arrivava al switch solo DOPO
+                            // aver superato la verifica del PIN.
+                            var legacyAccepted = /comando sconosciuto/i.test(String(d.message || ''));
+                            if (d.accepted === true || legacyAccepted) {
+                                authCommandId = null;
+                                completePeerOpen();
+                            } else {
+                                authRejected = true;
+                                if (authTimer) { clearTimeout(authTimer); authTimer = null; }
+                                if (watchdog) { clearTimeout(watchdog); watchdog = null; }
+                                status('Accesso negato: ' + (d.message || 'PIN controllo non valido.'), true);
+                                try { c.close(); } catch (e) { }
+                            }
+                        }
+                        return;
+                    }
                     fireData(d);
                 });
 
                 c.on('close', function () {
                     if (destroyed || myGen !== gen) return;
+                    if (authTimer) { clearTimeout(authTimer); authTimer = null; }
                     var was = connOpen;
                     fireClose();
+                    if (authRejected) {
+                        if (watchdog) { clearTimeout(watchdog); watchdog = null; }
+                        return;
+                    }
                     if (was) {
                         status('Connessione persa. Riconnessione...', true);
                         candIdx = Math.max(0, candIdx - 1);
