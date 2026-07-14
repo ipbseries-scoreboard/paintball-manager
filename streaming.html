@@ -9,7 +9,7 @@
     <!-- PeerJS CDN -->
     <script src="lib/peerjs.min.js"></script>
     <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');</script>
-    <script src="pm-client.js"></script>
+    <script src="pm-client.js?v=2.1.0-iphone"></script>
     <!-- Google Fonts -->
     <link
         href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Bebas+Neue&family=Orbitron:wght@600&family=Black+Ops+One&family=Roboto:wght@400;700&display=swap"
@@ -1977,6 +1977,10 @@
             // Overlays update if open
             if (showSchedule) renderScheduleTable();
             if (showBracket && d.standingsData && d.standingsData.bracket) renderBracket(d.standingsData.bracket);
+            const statsOverlay = document.getElementById('stats-overlay');
+            if (statsOverlay && statsOverlay.style.display === 'flex' && d.standingsData) {
+                renderStandingsTable(d.standingsData);
+            }
             if (showCasterInfo) renderCasterInfo();
         }
 
@@ -2463,7 +2467,7 @@
 
             // Request fresh stats if opening
             if (!isVisible && typeof clientConn !== 'undefined' && clientConn && clientConn.open) {
-                clientConn.send({ type: 'requestState' });
+                clientConn.send({ type: 'requestState', full: true });
             }
 
             if (!isVisible && currentData && currentData.standingsData) {
@@ -2479,7 +2483,7 @@
 
             // Request fresh bracket if opening
             if (showBracket && typeof clientConn !== 'undefined' && clientConn && clientConn.open) {
-                clientConn.send({ type: 'requestState' });
+                clientConn.send({ type: 'requestState', full: true });
             }
 
             if (showBracket && currentData && currentData.standingsData) renderBracket(currentData.standingsData.bracket);
@@ -2489,7 +2493,12 @@
             showSchedule = !showSchedule;
             const overlay = document.getElementById('schedule-overlay');
             overlay.style.display = showSchedule ? 'flex' : 'none';
-            if (showSchedule) renderScheduleTable();
+            if (showSchedule) {
+                if (typeof clientConn !== 'undefined' && clientConn && clientConn.open) {
+                    clientConn.send({ type: 'requestState', full: true });
+                }
+                renderScheduleTable();
+            }
         }
 
         // --- LAYOUT HANDLER ---
@@ -2519,7 +2528,7 @@
                 renderCasterInfo();
                 // chiedi subito un FULL_SYNC per avere h2h/storico freschi
                 if (typeof clientConn !== 'undefined' && clientConn && clientConn.open) {
-                    clientConn.send({ type: 'requestState' });
+                    clientConn.send({ type: 'requestState', full: true });
                 }
             }
         }

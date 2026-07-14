@@ -89,11 +89,128 @@ test('stale data uses Regia states rather than relay heartbeat and custom ports 
     assert.match(pmClient, /_hb aggiorna solo il trasporto/);
     assert.match(pmClient, /function isRegiaStatePacket\(d\)/);
     assert.match(pmClient, /if \(isRegiaStatePacket\(d\)\) lastStateReceived = Date\.now\(\)/);
-    assert.match(pmClient, /stateStale/);
+    assert.match(pmClient, /initialStateMissing/);
+    assert.match(pmClient, /!connOpen \|\| transportStale \|\| initialStateMissing/);
+    assert.doesNotMatch(pmClient, /now - stateReference > STALE_AFTER_MS/);
     assert.match(pmClient, /parseInt\(global\.location\.port, 10\)/);
     assert.match(pmClient, /target\.secure \? 'wss:\/\/' : 'ws:\/\/'/);
     assert.match(pmClient, /function normalizeId\(raw\)[\s\S]{0,360}slice\(0, 80\)/);
     assert.match(control, /location\.port \|\| \(location\.protocol === 'file:'/);
+});
+
+test('public iPhone viewers go straight to CLOUD and recover without churn', () => {
+    assert.match(pmClient, /var isGithubPage = \/\\\.github\\\.io\$\/i/);
+    assert.match(pmClient, /var cloudOnly = p\.get\('local'\) === '0' \|\| \(isGithubPage && !forced\)/);
+    assert.match(pmClient, /if \(!cloudOnly\) \{[\s\S]{0,180}addWs\(localHost/);
+    assert.match(pmClient, /if \(!cloudOnly\) \{[\s\S]{0,180}addPeer\(localHost/);
+    assert.match(pmClient, /var dataChannelAlive = connOpen && conn && conn\.open/);
+    assert.match(pmClient, /if \(dataChannelAlive && err\.type !== 'browser-incompatible'\)[\s\S]{0,320}return;/);
+    assert.match(pmClient, /visibilitychange[\s\S]{0,180}pageshow[\s\S]{0,180}online/);
+    assert.match(pmClient, /function requestFreshState\(force\)/);
+    assert.match(board, /pm-client\.js\?v=2\.1\.0-iphone/);
+    assert.match(streaming, /pm-client\.js\?v=2\.1\.0-iphone/);
+    assert.match(control, /function bindPeer\(p, tag, targetId\)[\s\S]{0,700}hasOpenDataChannels/);
+    assert.match(control, /signalingOnlyError && !p\.destroyed && hasOpenDataChannels\(\)[\s\S]{0,420}return;/);
+    assert.match(control, /p\.disconnected && !hasOpenDataChannels\(\)[\s\S]{0,180}scheduleCloudReconnect/);
+});
+
+test('PeerJS snapshots are targeted, compact and never contain embedded logos', () => {
+    const peerConnectionStart = control.indexOf("p.on('connection', (conn) =>");
+    const peerConnectionBlock = control.slice(peerConnectionStart, control.indexOf('function initPeer()', peerConnectionStart));
+    const remoteStart = control.indexOf('function handleRemoteCommand');
+    const remoteBlock = control.slice(remoteStart, control.indexOf('function saveTournamentState', remoteStart));
+
+    assert.doesNotMatch(peerConnectionBlock, /broadcastState\(true\)/);
+    assert.match(peerConnectionBlock, /sendPeerSnapshot\(conn, false\)/);
+    assert.match(peerConnectionBlock, /handleRemoteCommand\(data, \{ peerConn: conn \}\)/);
+    assert.match(peerConnectionBlock, /conn\.on\('error'/);
+    assert.match(remoteBlock, /source && source\.peerConn[\s\S]{0,180}sendPeerSnapshot/);
+    assert.match(control, /MAX_PEER_PAYLOAD_BYTES = 64 \* 1024/);
+    assert.match(control, /function safeRemoteLogoUrl/);
+    assert.match(control, /function compactPeerPacket/);
+    assert.match(control, /const peerConnections = peerTarget \? \[peerTarget\] : connections/);
+
+    const helpersStart = control.indexOf('const MAX_PEER_PAYLOAD_BYTES');
+    const helpersEnd = control.indexOf('function sendPeerSnapshot', helpersStart);
+    const helpersSource = control.slice(helpersStart, helpersEnd);
+    const helpers = new Function(helpersSource + '; return { safeRemoteLogoUrl, peerSafePayload };')();
+
+    assert.equal(helpers.safeRemoteLogoUrl('data:image/png;base64,AAAA'), null);
+    assert.equal(helpers.safeRemoteLogoUrl('blob:https://example.test/1'), null);
+    assert.equal(helpers.safeRemoteLogoUrl('http://example.test/logo.png'), null);
+    assert.equal(helpers.safeRemoteLogoUrl('https://example.test/logo.png'), 'https://example.test/logo.png');
+
+    const hugePacket = {
+        type: 'FULL_SYNC', stateRevision: 7, stateSentAt: Date.now(), timer: '05:00.00', mode: 'READY',
+        teamLeft: { name: 'A', score: 1, logoUrl: 'data:image/png;base64,' + 'A'.repeat(1024 * 1024) },
+        teamRight: { name: 'B', score: 2, logoUrl: 'blob:https://example.test/2' },
+        tournament: {
+            active: true, currentIndex: 0, name: 'Evento', data: 'X'.repeat(100 * 1024),
+            matches: [
+                { time: '09:30', teamA: 'A', teamB: 'B', phase: 'GIRONI', field: 'Campo 1', savedState: null },
+                { time: '10:00', teamA: 'C', teamB: 'D', phase: 'GIRONI', field: 'Campo 1', savedState: { finished: true } }
+            ]
+        },
+        standingsData: {
+            data: 'Y'.repeat(100 * 1024),
+            standings: [{ name: 'A', played: 1, wins: 1, losses: 0, draws: 0, rw: 3, rl: 1, pen: 0, tech: 99 }],
+            bracket: { rounds: [{ name: 'FINALE', matches: [{ teamA: 'A', teamB: 'B', scoreA: 3, scoreB: 1, winner: 'A', finished: true }] }] },
+            matchHistory: [{ id: 1, teamA: 'A', scoreA: 3, teamB: 'B', scoreB: 1, winner: 'A' }],
+            techUsage: [{ name: 'A', tech: 99 }]
+        },
+        h2h: { data: 'H'.repeat(100 * 1024) }, teamHistory: { data: 'T'.repeat(100 * 1024) },
+        archivioTop: { data: 'Z'.repeat(100 * 1024) }
+    };
+    const safePayload = helpers.peerSafePayload(hugePacket, JSON.stringify(hugePacket));
+    const safePacket = JSON.parse(safePayload);
+    assert.ok(Buffer.byteLength(safePayload, 'utf8') <= 64 * 1024);
+    assert.equal(safePacket.type, 'FULL_SYNC');
+    assert.equal(safePacket.timer, '05:00.00');
+    assert.equal(safePacket.teamLeft.logoUrl, undefined);
+    assert.equal(safePacket.teamRight.logoUrl, undefined);
+    assert.equal(safePacket.tournament.matches.length, 2);
+    assert.equal(safePacket.standingsData.standings[0].name, 'A');
+    assert.equal(safePacket.standingsData.bracket.rounds[0].name, 'FINALE');
+    assert.equal(safePacket.standingsData.techUsage, undefined);
+    assert.equal(safePacket.h2h, undefined);
+    assert.equal(safePacket.teamHistory, undefined);
+    assert.equal(safePacket.archivioTop, undefined);
+    assert.doesNotMatch(safePayload, /data:image|blob:/);
+
+    const pathological = {
+        ...hugePacket,
+        layoutUrl: 'data:image/png;base64,' + 'L'.repeat(1024 * 1024),
+        teamLeft: { name: 'A'.repeat(200000), score: 1, logoUrl: 'data:image/png;base64,AAAA' },
+        h2h: null,
+        teamHistory: null,
+        archivioTop: null,
+        tournament: {
+            active: true,
+            currentIndex: 0,
+            matches: Array.from({ length: 1500 }, (_, i) => ({
+                time: String(i), teamA: 'A'.repeat(200), teamB: 'B'.repeat(200),
+                phase: 'GIRONI', field: 'Campo 1', savedState: null
+            }))
+        }
+    };
+    const pathologicalPayload = helpers.peerSafePayload(pathological, JSON.stringify(pathological));
+    assert.ok(Buffer.byteLength(pathologicalPayload, 'utf8') <= 64 * 1024);
+    const pathologicalPacket = JSON.parse(pathologicalPayload);
+    assert.equal(pathologicalPacket.type, 'PARTIAL_SYNC');
+    assert.equal(pathologicalPacket.layoutUrl, null);
+    assert.ok(pathologicalPacket.teamLeft.name.length <= 160);
+    assert.doesNotMatch(pathologicalPayload, /data:image|blob:/);
+});
+
+test('display overlays request and consume asynchronous full snapshots', () => {
+    for (const source of [board, streaming]) {
+        const scheduleStart = source.indexOf('function toggleSchedule()');
+        const scheduleBlock = source.slice(scheduleStart, source.indexOf('//', scheduleStart + 30));
+        assert.match(scheduleBlock, /requestState[\s\S]{0,80}full:\s*true/);
+        const updateStart = source.indexOf('function updateBoard(d)');
+        const updateBlock = source.slice(updateStart, source.indexOf('setInterval', updateStart));
+        assert.match(updateBlock, /stats-overlay[\s\S]{0,260}renderStandingsTable\(d\.standingsData\)/);
+    }
 });
 
 test('CLOUD retries are isolated from the local WebSocket relay', () => {
@@ -167,9 +284,9 @@ test('only one Regia tab can mutate state', () => {
     assert.match(control, /function reloadSettingsForRegiaTakeover\(\)[\s\S]{0,6500}cloudToggle\.checked/);
     assert.match(control, /function canControlRegiaState\(\)/);
     assert.match(control, /function tick\(\)[\s\S]{0,120}ensureCurrentRegiaLease\(\)/);
-    assert.match(control, /function handleRemoteCommand\(cmd\)[\s\S]{0,140}ensureCurrentRegiaLease\(\)/);
+    assert.match(control, /function handleRemoteCommand\(cmd(?:, source = null)?\)[\s\S]{0,180}ensureCurrentRegiaLease\(\)/);
     assert.match(control, /function saveTournamentState\(\)[\s\S]{0,100}canControlRegiaState\(\)/);
-    assert.match(control, /function broadcastState\(forceFullSync = false\)[\s\S]{0,100}canControlRegiaState\(\)/);
+    assert.match(control, /function broadcastState\(forceFullSync = false(?:, syncOptions = \{\})?\)[\s\S]{0,140}canControlRegiaState\(\)/);
     assert.match(control, /function normalizeMatchIdValue\(value\)[\s\S]{0,300}slice\(0, 80\)/);
     assert.match(control, /normalizeMatchIdValue\(value\)[\s\S]{0,220}\\u007f-\\u009f/);
     assert.match(pmClient, /function normalizeId\(raw\)[\s\S]{0,260}\\u007f-\\u009f/);

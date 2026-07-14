@@ -961,7 +961,7 @@
     <div id="scaler">
         <div
             style="position: absolute; top: 10px; left: 10px; color: #64748b; font-size: 0.8rem; z-index: 9999; pointer-events: none; font-family: var(--font-family);">
-            v. 2.0.1</div>
+            v. 2.0.2</div>
         <div id="top-bar">
             NEXT: <span id="tb-teams" style="color: white; margin-left: 10px;">-- vs --</span>
             <span id="tb-score" class="tb-live-score" style="display:none;">0 - 0</span>
@@ -2863,6 +2863,24 @@
                 // Un peer "vecchio" (sostituito da initPeer) non deve più influenzare il sistema:
                 // i suoi eventi di errore/disconnessione ucciderebbero la connessione attiva.
                 const isStale = () => (p !== peerLocal && p !== peerCloud);
+                const hasOpenDataChannels = () => connections.some(conn =>
+                    conn && conn.open && (!conn.provider || conn.provider === p));
+
+                const recoverSignalingWithoutClosingData = () => {
+                    setTimeout(() => {
+                        if (isStale() || !canControlRegiaState() || !isCloudSyncEnabled()) return;
+                        if (p && !p.destroyed && p.disconnected) {
+                            try { p.reconnect(); }
+                            catch (e) {
+                                // Non chiudere un WebRTC ancora operativo soltanto
+                                // per ricreare la connessione al server di signaling.
+                                if (hasOpenDataChannels()) return;
+                                destroyCloudPeer();
+                                scheduleCloudReconnect(5000);
+                            }
+                        }
+                    }, 2000);
+                };
 
                 // Il signaling CLOUD è indipendente dal relay locale. Una sua caduta
                 // non deve mai riavviare o distruggere gli altri trasporti.
@@ -2872,16 +2890,7 @@
                     if (p.destroyed) {
                         scheduleCloudReconnect(5000);
                     } else {
-                        setTimeout(() => {
-                            if (isStale() || !canControlRegiaState() || !isCloudSyncEnabled()) return;
-                            if (p && !p.destroyed && p.disconnected) {
-                                try { p.reconnect(); }
-                                catch (e) {
-                                    destroyCloudPeer();
-                                    scheduleCloudReconnect(5000);
-                                }
-                            }
-                        }, 2000);
+                        recoverSignalingWithoutClosingData();
                     }
                 });
 
@@ -2892,6 +2901,18 @@
                     }
                     console.error(`[${tag}] PeerJS Global Error:`, err.type, err.message);
                     const display = document.getElementById('my-peer-id');
+                    const signalingOnlyError = err.type === 'network' || err.type === 'server-error' ||
+                        err.type === 'socket-error' || err.type === 'socket-closed';
+
+                    // Il signaling serve a presentare nuovi dispositivi, ma i
+                    // DataChannel gia aperti continuano a funzionare senza di esso.
+                    // Distruggere il Peer qui causava il loop osservato su iPhone.
+                    if (signalingOnlyError && !p.destroyed && hasOpenDataChannels()) {
+                        const liveChannels = connections.filter(c => c && c.open).length;
+                        console.warn(`[${tag}] Signaling temporaneamente instabile; ${liveChannels} canale/i dati restano attivi.`);
+                        recoverSignalingWithoutClosingData();
+                        return;
+                    }
 
                     if (err.type === 'unavailable-id') {
                         // Questa è l'unica prova reale che l'ID è già registrato sul cloud.
@@ -2961,29 +2982,51 @@
                     connections.push(conn);
                     updateConnectionCount();
 
-                    // Send immediate state
-                    const sendInitialState = () => {
-                        broadcastState(true); // Force full sync for new client
+                    // Il client moderno chiede lo stato appena apre. Questo fallback
+                    // serve ai viewer legacy, ma invia un solo snapshot compatto e
+                    // soltanto alla nuova connessione (mai due FULL_SYNC a tutti).
+                    let initialSnapshotTimer = null;
+                    const queueInitialSnapshot = () => {
+                        if (initialSnapshotTimer) clearTimeout(initialSnapshotTimer);
+                        initialSnapshotTimer = setTimeout(() => {
+                            initialSnapshotTimer = null;
+                            sendPeerSnapshot(conn, false);
+                        }, 750);
                     };
 
                     if (conn.open) {
-                        sendInitialState();
+                        queueInitialSnapshot();
                     } else {
-                        conn.on('open', sendInitialState);
+                        conn.on('open', queueInitialSnapshot);
                     }
 
                     conn.on('data', (data) => {
                         if (data && data.type === 'PONG') {
                             handlePong(conn.peer, data.ts);
                         } else {
-                            handleRemoteCommand(data);
+                            if (data && (data.type === 'requestState' || data.type === 'FORCE_SYNC') && initialSnapshotTimer) {
+                                clearTimeout(initialSnapshotTimer);
+                                initialSnapshotTimer = null;
+                            }
+                            handleRemoteCommand(data, { peerConn: conn });
                         }
                     });
+                    conn.on('error', (err) => {
+                        console.warn('[CLOUD] Errore DataChannel ' + (conn.peer || '?') + ':', err && (err.type || err.message || err));
+                    });
                     conn.on('close', () => {
+                        if (initialSnapshotTimer) clearTimeout(initialSnapshotTimer);
                         connections = connections.filter(c => c !== conn);
                         delete connHealth[conn.peer];
                         updateConnectionCount();
                         updateConnectionMonitorUI();
+                        // Se il signaling era caduto e anche l'ultimo canale dati
+                        // e terminato, il Peer puo ora essere ricreato senza
+                        // interrompere alcun display ancora operativo.
+                        if (tag === 'CLOUD' && p === peerCloud && p.disconnected && !hasOpenDataChannels()) {
+                            destroyCloudPeer();
+                            scheduleCloudReconnect(1500);
+                        }
                     });
                 });
             }
@@ -3075,7 +3118,7 @@
                     }
                 }, 15000);
 
-                console.log("[SYSTEM] Paintball Manager v2.0.1 - RETE RELAY/CLOUD ISOLATA...");
+                console.log("[SYSTEM] Paintball Manager v2.0.2 - CLOUD IPHONE OTTIMIZZATO...");
 
                 // Start Ping Interval safely
                 pingInterval = setInterval(sendPings, 5000);
@@ -3355,12 +3398,267 @@
 
             let lastBroadcastTime = 0;
             let stateRevision = 0;
-            function broadcastState(forceFullSync = false) {
+            const MAX_PEER_PAYLOAD_BYTES = 64 * 1024;
+            let lastPeerPayloadWarning = 0;
+
+            function safeRemoteLogoUrl(value) {
+                if (typeof value !== 'string') return null;
+                const url = value.trim();
+                // data:/blob: possono valere molti MB e saturano WebRTC su Safari.
+                // I display remoti HTTPS possono caricare in sicurezza solo URL HTTPS.
+                return url.length <= 4096 && /^https:\/\//i.test(url) ? url : null;
+            }
+
+            function utf8ByteLength(value) {
+                try { return new TextEncoder().encode(value).length; }
+                catch (e) { return value.length; }
+            }
+
+            function safePeerTeam(team) {
+                if (!team || typeof team !== 'object') return team;
+                const safeTeam = { ...team };
+                const safeLogo = safeRemoteLogoUrl(safeTeam.logoUrl);
+                if (safeLogo) safeTeam.logoUrl = safeLogo;
+                else delete safeTeam.logoUrl;
+                return safeTeam;
+            }
+
+            function compactPeerPacket(packet) {
+                return {
+                    type: 'PARTIAL_SYNC',
+                    stateRevision: packet.stateRevision,
+                    stateSentAt: packet.stateSentAt,
+                    timer: clipPeerText(packet.timer, 32),
+                    mode: clipPeerText(packet.mode, 40),
+                    phase: clipPeerText(packet.phase, 80),
+                    mercy: packet.mercy,
+                    teamLeft: compactPeerTeam(packet.teamLeft),
+                    teamRight: compactPeerTeam(packet.teamRight),
+                    breakLabel: clipPeerText(packet.breakLabel, 400),
+                    isBreak: packet.isBreak,
+                    statusText: clipPeerText(packet.statusText, 120),
+                    statusClass: clipPeerText(packet.statusClass, 160),
+                    nextMatch: compactNextMatch(packet.nextMatch),
+                    layoutUrl: safeRemoteLogoUrl(packet.layoutUrl),
+                    showNextMatchOverlay: packet.showNextMatchOverlay,
+                    hapticReferee: packet.hapticReferee,
+                    teamStyle: compactTeamStyle(packet.teamStyle),
+                    outdoorMode: packet.outdoorMode,
+                    fastestRound: compactFastestRound(packet.fastestRound)
+                };
+            }
+
+            function clipPeerText(value, maxLength = 120) {
+                return value == null ? '' : String(value).slice(0, maxLength);
+            }
+
+            function compactPeerTeam(team) {
+                if (!team || typeof team !== 'object') return null;
+                const result = {
+                    name: clipPeerText(team.name, 160),
+                    score: Number(team.score) || 0,
+                    timeouts: Number(team.timeouts) || 0,
+                    penalties: Number(team.penalties) || 0,
+                    totalPenalties: Number(team.totalPenalties) || 0,
+                    techUsed: !!team.techUsed,
+                    color: clipPeerText(team.color, 32)
+                };
+                const safeLogo = safeRemoteLogoUrl(team.logoUrl);
+                if (safeLogo) result.logoUrl = safeLogo;
+                if (team.lastPenalty && typeof team.lastPenalty === 'object') {
+                    result.lastPenalty = {
+                        timestamp: Number(team.lastPenalty.timestamp) || 0,
+                        type: clipPeerText(team.lastPenalty.type, 24)
+                    };
+                }
+                return result;
+            }
+
+            function compactNextMatch(match) {
+                if (!match || typeof match !== 'object') return null;
+                return {
+                    teamA: clipPeerText(match.teamA, 160),
+                    teamB: clipPeerText(match.teamB, 160),
+                    scoreA: Number(match.scoreA) || 0,
+                    scoreB: Number(match.scoreB) || 0,
+                    isStarted: !!match.isStarted,
+                    time: clipPeerText(match.time, 24),
+                    timer: clipPeerText(match.timer, 32)
+                };
+            }
+
+            function compactTeamStyle(style) {
+                if (!style || typeof style !== 'object') return null;
+                return {
+                    fontSize: Number(style.fontSize) || 80,
+                    fontFamily: clipPeerText(style.fontFamily, 120),
+                    bold: !!style.bold,
+                    scaleX: Number(style.scaleX) || 1,
+                    scaleY: Number(style.scaleY) || 1,
+                    limit: Number(style.limit) || 11,
+                    dot: clipPeerText(style.dot, 5)
+                };
+            }
+
+            function compactFastestRound(round) {
+                if (!round || typeof round !== 'object') return null;
+                return {
+                    team: clipPeerText(round.team, 160),
+                    duration: Number(round.duration) || 0,
+                    match: clipPeerText(round.match, 40)
+                };
+            }
+
+            function peerTournament(tournament) {
+                if (!tournament || typeof tournament !== 'object') return null;
+                const settings = tournament.settings && typeof tournament.settings === 'object'
+                    ? {
+                        pointIntervalDuration: Number(tournament.settings.pointIntervalDuration) || 0,
+                        slotIntervalDuration: Number(tournament.settings.slotIntervalDuration) || 0,
+                        singleSlotIntervalDuration: Number(tournament.settings.singleSlotIntervalDuration) || 0,
+                        hapticReferee: tournament.settings.hapticReferee !== false
+                    }
+                    : undefined;
+                return {
+                    active: !!tournament.active,
+                    currentIndex: Number.isInteger(tournament.currentIndex) ? tournament.currentIndex : -1,
+                    delay: Number(tournament.delay) || 0,
+                    layoutUrl: safeRemoteLogoUrl(tournament.layoutUrl),
+                    settings,
+                    name: clipPeerText(tournament.name, 160),
+                    date: clipPeerText(tournament.date, 32),
+                    eventUrl: safeRemoteLogoUrl(tournament.eventUrl),
+                    matches: Array.isArray(tournament.matches) ? tournament.matches.map(match => ({
+                        time: clipPeerText(match && match.time, 24),
+                        teamA: clipPeerText(match && match.teamA, 160),
+                        teamB: clipPeerText(match && match.teamB, 160),
+                        phase: clipPeerText(match && match.phase, 80),
+                        field: clipPeerText(match && match.field, 80),
+                        savedState: match && match.savedState ? {
+                            finished: !!match.savedState.finished,
+                            skipped: !!match.savedState.skipped
+                        } : null
+                    })) : []
+                };
+            }
+
+            function peerBracket(bracket) {
+                if (!bracket || !Array.isArray(bracket.rounds)) return null;
+                return {
+                    rounds: bracket.rounds.map(round => ({
+                        name: clipPeerText(round && round.name, 80),
+                        matches: Array.isArray(round && round.matches) ? round.matches.map(match => ({
+                            teamA: clipPeerText(match && match.teamA, 160),
+                            teamB: clipPeerText(match && match.teamB, 160),
+                            scoreA: Number(match && match.scoreA) || 0,
+                            scoreB: Number(match && match.scoreB) || 0,
+                            winner: clipPeerText(match && match.winner, 8)
+                        })) : []
+                    }))
+                };
+            }
+
+            function peerStandings(data, detailed = true) {
+                if (!data || typeof data !== 'object') return null;
+                const standings = Array.isArray(data.standings) ? data.standings.map(row => ({
+                    name: clipPeerText(row && row.name, 160),
+                    played: Number(row && row.played) || 0,
+                    wins: Number(row && row.wins) || 0,
+                    losses: Number(row && row.losses) || 0,
+                    draws: Number(row && row.draws) || 0,
+                    rw: Number(row && row.rw) || 0,
+                    rl: Number(row && row.rl) || 0,
+                    pen: Number(row && row.pen) || 0
+                })) : [];
+                const result = { standings, bracket: peerBracket(data.bracket) };
+                if (!detailed) return result;
+
+                const roundList = (list) => Array.isArray(list) ? list.slice(0, 5).map(row => ({
+                    team: clipPeerText(row && row.team, 160),
+                    duration: Number(row && row.duration) || 0,
+                    match: clipPeerText(row && row.match, 40)
+                })) : [];
+                const countList = (list) => Array.isArray(list) ? list.slice(0, 5).map(row => ({
+                    team: clipPeerText(row && row.team, 160),
+                    count: Number(row && row.count) || 0
+                })) : [];
+
+                result.records = roundList(data.records);
+                result.slowestRounds = roundList(data.slowestRounds);
+                result.averageTimes = Array.isArray(data.averageTimes) ? data.averageTimes.slice(0, 5).map(row => ({
+                    team: clipPeerText(row && row.team, 160),
+                    avg: Number(row && row.avg) || 0
+                })) : [];
+                result.mercyKillers = countList(data.mercyKillers);
+                result.badBoys = countList(data.badBoys);
+                result.matchHistory = Array.isArray(data.matchHistory) ? data.matchHistory.slice(0, 10).map(row => ({
+                    id: Number(row && row.id) || 0,
+                    teamA: clipPeerText(row && row.teamA, 160),
+                    scoreA: Number(row && row.scoreA) || 0,
+                    teamB: clipPeerText(row && row.teamB, 160),
+                    scoreB: Number(row && row.scoreB) || 0,
+                    winner: clipPeerText(row && row.winner, 8)
+                })) : [];
+                return result;
+            }
+
+            function displayFullPeerPacket(packet, detailedStats = true) {
+                const displayPacket = { ...compactPeerPacket(packet), type: 'FULL_SYNC' };
+                const tournament = peerTournament(packet.tournament);
+                const standings = peerStandings(packet.standingsData, detailedStats);
+                if (tournament) displayPacket.tournament = tournament;
+                if (standings) displayPacket.standingsData = standings;
+                return displayPacket;
+            }
+
+            function peerSafePayload(packet, serializedPacket) {
+                const safePacket = {
+                    ...packet,
+                    teamLeft: safePeerTeam(packet.teamLeft),
+                    teamRight: safePeerTeam(packet.teamRight)
+                };
+                serializedPacket = JSON.stringify(safePacket);
+                if (utf8ByteLength(serializedPacket) <= MAX_PEER_PAYLOAD_BYTES) return serializedPacket;
+
+                // Un FULL_SYNC molto grande viene potato a livelli: Schedule,
+                // Classifica e Bracket restano disponibili senza trasmettere H2H,
+                // archivi e cronologie pesanti sul DataChannel dell'iPhone.
+                if (safePacket.type === 'FULL_SYNC') {
+                    let displayFull = JSON.stringify(displayFullPeerPacket(safePacket, true));
+                    if (utf8ByteLength(displayFull) <= MAX_PEER_PAYLOAD_BYTES) return displayFull;
+                    displayFull = JSON.stringify(displayFullPeerPacket(safePacket, false));
+                    if (utf8ByteLength(displayFull) <= MAX_PEER_PAYLOAD_BYTES) return displayFull;
+                }
+
+                const compact = JSON.stringify(compactPeerPacket(safePacket));
+                const now = Date.now();
+                if (now - lastPeerPayloadWarning > 30000) {
+                    lastPeerPayloadWarning = now;
+                    console.warn(`[CLOUD] FULL_SYNC troppo grande (${Math.round(utf8ByteLength(serializedPacket) / 1024)} KiB): invio snapshot compatto da ${Math.round(utf8ByteLength(compact) / 1024)} KiB.`);
+                }
+                return compact;
+            }
+
+            function sendPeerSnapshot(conn, includeFull = false) {
+                if (!conn || !conn.open) return;
+                broadcastState(includeFull, {
+                    peerTarget: conn,
+                    peerOnly: true,
+                    compact: !includeFull,
+                    forceSend: true
+                });
+            }
+
+            function broadcastState(forceFullSync = false, syncOptions = {}) {
                 if (!canControlRegiaState()) return;
                 try {
+                    const peerTarget = syncOptions.peerTarget || null;
+                    const peerOnly = syncOptions.peerOnly === true;
+                    const compactSync = syncOptions.compact === true;
+                    const forceSend = syncOptions.forceSend === true;
                     const nowTotal = Date.now();
-                    if (!forceFullSync && nowTotal - lastBroadcastTime < 200) return; // Throttle to 5Hz (resolves slight stutter on remote displays over strict internet relays)
-                    lastBroadcastTime = nowTotal;
+                    if (!forceSend && !forceFullSync && nowTotal - lastBroadcastTime < 200) return; // Throttle to 5Hz
+                    if (!peerOnly) lastBroadcastTime = nowTotal;
 
                     const teamLeftId = state.basesSwapped ? 'B' : 'A';
                     const teamRightId = state.basesSwapped ? 'A' : 'B';
@@ -3369,8 +3667,8 @@
                     const nameB = state.teams.B.name;
 
                     // Detect name change or manual trigger
-                    let forceLogo = forceFullSync;
-                    if (nameA !== lastSyncNames.A || nameB !== lastSyncNames.B) {
+                    let forceLogo = !compactSync && forceFullSync;
+                    if (!compactSync && !peerOnly && (nameA !== lastSyncNames.A || nameB !== lastSyncNames.B)) {
                         forceLogo = true;
                         lastSyncNames.A = nameA;
                         lastSyncNames.B = nameB;
@@ -3378,12 +3676,12 @@
 
                     // Periodic resync of logos (every 5s) and full data (every 30s)
                     const now = Date.now();
-                    if (now - lastLogoSyncTime > LOGO_RESYNC_INTERVAL) {
+                    if (!compactSync && !peerOnly && now - lastLogoSyncTime > LOGO_RESYNC_INTERVAL) {
                         forceLogo = true;
                         lastLogoSyncTime = now;
                     }
 
-                    let fullSync = (now - lastFullSyncTime > FULL_SYNC_INTERVAL) || forceFullSync;
+                    let fullSync = !compactSync && ((now - lastFullSyncTime > FULL_SYNC_INTERVAL) || forceFullSync);
 
                     const teamLeftData = { ...state.teams[teamLeftId], totalPenalties: getTotalPenalties(state.teams[teamLeftId].name) };
                     const teamRightData = { ...state.teams[teamRightId], totalPenalties: getTotalPenalties(state.teams[teamRightId].name) };
@@ -3401,7 +3699,7 @@
                                 const target = c.name.trim().toLowerCase().replace(/\s+/g, '');
                                 return target === clean || target.includes(clean) || clean.includes(target);
                             });
-                            return match ? match.logoUrl : null;
+                            return match ? safeRemoteLogoUrl(match.logoUrl) : null;
                         };
                         teamLeftData.logoUrl = getLogo(teamLeftData.name);
                         teamRightData.logoUrl = getLogo(teamRightData.name);
@@ -3514,21 +3812,22 @@
                         } catch (e) { packet.h2h = packet.h2h || null; }
                         // Cache the fastest round so we can send it on every sync without recalculating
                         state.lastFastestRound = statsData ? (statsData.records[0] || null) : null;
-                        lastFullSyncTime = now;
+                        if (!peerOnly) lastFullSyncTime = now;
                     }
 
                     // Always send the cached fastest round so the top bar doesn't disappear on partial syncs
                     packet.fastestRound = state.lastFastestRound || null;
 
                     try {
+                        const payloadString = JSON.stringify(packet);
+                        const cloudPeerPayload = peerSafePayload(packet, payloadString);
+                        if (!peerOnly) {
                         // NEW: Zero-latency Local Tab Sync (BroadcastChannel)
                         syncChannel.postMessage({ type: 'STATE_UPDATE', payload: packet });
 
                         // HUGE PERFORMANCE FIX: PeerJS will JSON.stringify the packet for EVERY single connection in conn.send()!
                         // This causes massive CPU locks and SCTP queueing on the Host when 4 clients are connected at 5Hz.
                         // By stringifying it ONCE here, we bypass PeerJS's internal slow stringification.
-                        const payloadString = JSON.stringify(packet);
-
                         // PUBLIC SYNC STORAGE: Save to localStorage for public viewers to "poll" if they are local,
                         // or as a base for a future GitHub Action / Script that pushes this to a JSON file on GH.
                         localStorage.setItem('pm_last_state', payloadString);
@@ -3548,13 +3847,14 @@
                                 body: payloadString
                             }).catch(() => { }); // Quiet fail if bridge not running
                         }
+                        }
 
-                        let delayMs = 0;
-                        connections.forEach((conn, index) => {
+                        const peerConnections = peerTarget ? [peerTarget] : connections;
+                        peerConnections.forEach((conn, index) => {
                             if (conn.open) {
                                 setTimeout(() => {
                                     try {
-                                        if (conn.open) conn.send(payloadString);
+                                        if (conn.open) conn.send(cloudPeerPayload);
                                     } catch (err) {
                                         console.error("PeerJS Send Error:", err);
                                     }
@@ -3606,7 +3906,7 @@
                 return !!expected && supplied === expected;
             }
 
-            function handleRemoteCommand(cmd) {
+            function handleRemoteCommand(cmd, source = null) {
                 if (!ensureCurrentRegiaLease() || !cmd || !cmd.type) return;
 
                 // Un'altra scheda Regia potrebbe avere gia eseguito il comando
@@ -3679,7 +3979,11 @@
                         break;
                     case 'requestState':
                     case 'FORCE_SYNC':
-                        broadcastState(true);
+                        if (source && source.peerConn) {
+                            sendPeerSnapshot(source.peerConn, cmd.full === true || cmd.type === 'FORCE_SYNC');
+                        } else {
+                            broadcastState(true);
+                        }
                         break;
                     case 'UNDO':
                         requireExecution(undoLastAction(), 'Nessuna azione annullata');

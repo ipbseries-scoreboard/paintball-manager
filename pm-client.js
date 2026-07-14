@@ -1,5 +1,5 @@
 /*
- * PM-CLIENT v2 — Connettore condiviso del Paintball Manager.
+ * PM-CLIENT v2.1 — Connettore condiviso del Paintball Manager.
  *
  * Tutte le pagine "client" (referee, pit, ledwall, streaming, board,
  * obs_bar, vmix_bg) usano questo file per collegarsi alla Regia (index.html).
@@ -115,7 +115,13 @@
         var forced = parseHostParam(p.get('host'));
         var pageHost = null;
         var hn = global.location.hostname;
-        if (hn && hn.indexOf('github.io') === -1) {
+        var isGithubPage = /\.github\.io$/i.test(hn || '');
+        // I QR della Regia usano local=0 quando il CLOUD è selezionato. In quel
+        // caso (e su GitHub Pages senza host esplicito) localhost è il telefono,
+        // non la Regia: provarlo prima del cloud aggiunge timeout e falsi errori.
+        var cloudOnly = p.get('local') === '0' || (isGithubPage && !forced);
+        var localOnly = p.get('local') === '1' || p.get('nocloud') === '1';
+        if (hn && !isGithubPage) {
             var pagePort = parseInt(global.location.port, 10);
             if (!pagePort) pagePort = global.location.protocol === 'https:' ? 443 : 80;
             pageHost = { host: hn, port: pagePort, secure: global.location.protocol === 'https:' };
@@ -152,8 +158,10 @@
         // 1. Relay WebSocket (il metodo preferito)
         if (p.get('norelay') !== '1') {
             addWs(forced, 'indicato');
-            addWs(pageHost, 'della pagina');
-            addWs(localHost, 'locale');
+            if (!cloudOnly) {
+                addWs(pageHost, 'della pagina');
+                addWs(localHost, 'locale');
+            }
         }
 
         // 2. PeerJS locale (compatibilità col vecchio server "peer")
@@ -161,11 +169,13 @@
         // I controller devono usare il relay WebSocket autenticato.
         if (role === 'viewer') {
             addPeer(forced, 'indicato');
-            addPeer(pageHost, 'della pagina');
-            addPeer(localHost, 'locale');
+            if (!cloudOnly) {
+                addPeer(pageHost, 'della pagina');
+                addPeer(localHost, 'locale');
+            }
 
             // 3. Cloud PeerJS (board.html da casa)
-            if (p.get('nocloud') !== '1') {
+            if (!localOnly) {
                 list.push({
                     kind: 'peer',
                     label: 'cloud PeerJS',
@@ -197,6 +207,10 @@
         var lastTransportAlive = 0;
         var lastStateReceived = 0;
         var hostConnectedAt = 0;
+        var lastStateRequestAt = 0;
+        var resumeTimer = null;
+        var resumeVerifyTimer = null;
+        var connectStartedAt = Date.now();
         // Ogni tentativo incrementa "gen": gli handler dei tentativi vecchi
         // si auto-disattivano (evita i loop di riconnessione sovrapposti).
         var gen = 0;
@@ -242,11 +256,29 @@
             if (was && cfg.onClose) { try { cfg.onClose(); } catch (e) { } }
         }
 
+        function sendData(data) {
+            if (!connOpen) return false;
+            try {
+                if (sock && sock.readyState === 1) { sock.send(JSON.stringify(data)); return true; }
+                if (conn && conn.open) { conn.send(data); return true; }
+            } catch (e) { }
+            return false;
+        }
+
+        function requestFreshState(force) {
+            var now = Date.now();
+            if (!force && now - lastStateRequestAt < 3000) return false;
+            if (!sendData({ type: 'requestState' })) return false;
+            lastStateRequestAt = now;
+            return true;
+        }
+
         function cleanup() {
             gen++;
             connOpen = false;
             parked = false;
             if (watchdog) { clearTimeout(watchdog); watchdog = null; }
+            if (resumeVerifyTimer) { clearTimeout(resumeVerifyTimer); resumeVerifyTimer = null; }
             if (conn) { try { conn.close(); } catch (e) { } conn = null; }
             if (peer) { try { peer.destroy(); } catch (e) { } peer = null; }
             if (sock) { try { sock.onclose = null; sock.close(); } catch (e) { } sock = null; }
@@ -308,7 +340,7 @@
                             fireOpen(cand.label);
                         } else if (d.hostOnline) {
                             fireOpen(cand.label);
-                            try { s.send(JSON.stringify({ type: 'requestState' })); } catch (e) { }
+                            requestFreshState(true);
                         } else {
                             // Relay raggiunto ma Regia non ancora accesa: restiamo qui
                             // in attesa invece di ciclare a vuoto sugli altri server.
@@ -316,7 +348,7 @@
                         }
                     } else if (d.type === '_hostOnline') {
                         fireOpen(cand.label);
-                        try { s.send(JSON.stringify({ type: 'requestState' })); } catch (e) { }
+                        requestFreshState(false);
                     } else if (d.type === '_hostOffline') {
                         status('Regia disconnessa. Resto in attesa che torni...', true);
                         fireClose();
@@ -376,7 +408,9 @@
                     if (destroyed || myGen !== gen) return;
                     if (watchdog) { clearTimeout(watchdog); watchdog = null; }
                     fireOpen(cand.label);
-                    try { c.send({ type: 'requestState' }); } catch (e) { }
+                    // Un solo handshake: la Regia risponde a questa richiesta con
+                    // uno snapshot compatto e mirato al nuovo dispositivo.
+                    requestFreshState(true);
                 });
 
                 c.on('data', function (raw) {
@@ -417,12 +451,21 @@
 
             p.on('error', function (err) {
                 if (destroyed || myGen !== gen) return;
+                var dataChannelAlive = connOpen && conn && conn.open;
                 if (err.type === 'peer-unavailable') {
                     status('Regia "' + hostId + '" non trovata su ' + cand.label + '.', true);
                     scheduleNext(1500);
                 } else if (err.type === 'network' || err.type === 'server-error' ||
                     err.type === 'socket-error' || err.type === 'socket-closed' ||
                     err.type === 'browser-incompatible') {
+                    // PeerJS può perdere il solo server di signaling mentre il
+                    // DataChannel WebRTC continua a funzionare. Distruggerlo qui
+                    // provocava il loop di riapertura osservato su Safari/iPhone.
+                    if (dataChannelAlive && err.type !== 'browser-incompatible') {
+                        status('Segnalazione cloud temporaneamente instabile; canale dati ancora attivo.');
+                        try { if (peer && !peer.destroyed && peer.disconnected) peer.reconnect(); } catch (e) { }
+                        return;
+                    }
                     status('Server non raggiungibile: ' + cand.label, true);
                     scheduleNext(500);
                 }
@@ -456,6 +499,41 @@
             }
         }
 
+        // Safari sospende timer e socket quando cambia app o rete. Al ritorno
+        // chiediamo uno stato fresco; se non arriva, riavviamo una sola volta il
+        // candidato corrente invece di lasciare il tabellone in uno stato zombie.
+        function recoverAfterResume() {
+            if (destroyed || (global.document && global.document.visibilityState === 'hidden')) return;
+            // Ignora il normale pageshow del primo caricamento: tryCandidate è già partito.
+            if (!everOpened && Date.now() - connectStartedAt < 3000) return;
+            if (resumeTimer) clearTimeout(resumeTimer);
+            resumeTimer = setTimeout(function () {
+                resumeTimer = null;
+                if (destroyed) return;
+                if (!connOpen) {
+                    scheduleNext(0);
+                    return;
+                }
+                var stateBeforeRequest = lastStateReceived;
+                if (!requestFreshState(true)) return;
+                if (resumeVerifyTimer) clearTimeout(resumeVerifyTimer);
+                resumeVerifyTimer = setTimeout(function () {
+                    resumeVerifyTimer = null;
+                    if (destroyed || (global.document && global.document.visibilityState === 'hidden')) return;
+                    if (!connOpen || !lastStateReceived || lastStateReceived <= stateBeforeRequest) {
+                        status('Connessione ripresa senza dati: riconnessione CLOUD...', true);
+                        candIdx = Math.max(0, candIdx - 1);
+                        fireClose();
+                        scheduleNext(0);
+                    }
+                }, 5000);
+            }, 300);
+        }
+
+        function onVisibilityResume() {
+            if (!global.document || global.document.visibilityState === 'visible') recoverAfterResume();
+        }
+
         // ---------- BADGE "DATI NON AGGIORNATI" ----------
         var badgeEl = null;
         var badgeTimer = null;
@@ -467,10 +545,13 @@
                 var now = Date.now();
                 var transportStale = connOpen && lastTransportAlive &&
                     (now - lastTransportAlive > STALE_AFTER_MS);
-                var stateReference = lastStateReceived || hostConnectedAt;
-                var stateStale = connOpen && stateReference &&
-                    (now - stateReference > STALE_AFTER_MS);
-                var stale = everOpened && (!connOpen || transportStale || stateStale);
+                // Se è già arrivato almeno uno stato, i PING sullo stesso canale
+                // provano che il flusso dati è ancora vivo anche quando il match è
+                // fermo su PRONTO. Prima il solo stato invariato faceva comparire
+                // falsamente il badge ogni 15 secondi.
+                var initialStateMissing = connOpen && !lastStateReceived && hostConnectedAt &&
+                    (now - hostConnectedAt > STALE_AFTER_MS);
+                var stale = everOpened && (!connOpen || transportStale || initialStateMissing);
                 if (stale && !badgeEl) {
                     badgeEl = document.createElement('div');
                     badgeEl.id = 'pm-stale-badge';
@@ -499,24 +580,26 @@
             };
         }
 
+        if (global.document) global.document.addEventListener('visibilitychange', onVisibilityResume);
+        global.addEventListener('pageshow', recoverAfterResume);
+        global.addEventListener('online', recoverAfterResume);
+
         tryCandidate();
 
         return {
-            send: function (data) {
-                if (!connOpen) return false;
-                try {
-                    if (sock && sock.readyState === 1) { sock.send(JSON.stringify(data)); return true; }
-                    if (conn) { conn.send(data); return true; }
-                } catch (e) { }
-                return false;
-            },
+            send: sendData,
             get open() { return connOpen; },
             get transport() { return currentLabel; },
             destroy: function () {
                 destroyed = true;
                 if (timer) clearTimeout(timer);
+                if (resumeTimer) clearTimeout(resumeTimer);
+                if (resumeVerifyTimer) clearTimeout(resumeVerifyTimer);
                 if (badgeTimer) clearInterval(badgeTimer);
                 if (badgeEl) { badgeEl.remove(); badgeEl = null; }
+                if (global.document) global.document.removeEventListener('visibilitychange', onVisibilityResume);
+                global.removeEventListener('pageshow', recoverAfterResume);
+                global.removeEventListener('online', recoverAfterResume);
                 cleanup();
             }
         };
