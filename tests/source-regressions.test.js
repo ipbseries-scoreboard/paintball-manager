@@ -96,6 +96,35 @@ test('stale data uses Regia states rather than relay heartbeat and custom ports 
     assert.match(control, /location\.port \|\| \(location\.protocol === 'file:'/);
 });
 
+test('CLOUD retries are isolated from the local WebSocket relay', () => {
+    const initStart = control.indexOf('function initPeer()');
+    const initBlock = control.slice(initStart, control.indexOf('// ---------- RELAY WEBSOCKET', initStart));
+    const cloudRetryStart = control.indexOf('function scheduleCloudReconnect');
+    const cloudRetry = control.slice(cloudRetryStart, control.indexOf('function bindPeer', cloudRetryStart));
+    const relayStart = control.indexOf('function startWsHostLoop()');
+    const relayLoop = control.slice(relayStart, control.indexOf('function restartWsHost', relayStart));
+    const toggleStart = control.indexOf("document.getElementById('cloud-sync-toggle').addEventListener");
+    const toggleBlock = control.slice(toggleStart, control.indexOf('populateVoiceList()', toggleStart));
+
+    // La porta 9000 è HTTP + /ws e non deve essere trattata come un PeerServer legacy.
+    assert.doesNotMatch(initBlock, /new Peer\(targetId,\s*localOptions\)/);
+    assert.doesNotMatch(initBlock, /host:\s*'localhost'[\s\S]{0,80}port:\s*9000/);
+
+    // Un guasto CLOUD ricrea solo peerCloud; non re-inizializza la rete intera.
+    assert.match(cloudRetry, /destroyCloudPeer\(\)[\s\S]{0,100}startCloudPeer\(\)/);
+    assert.doesNotMatch(cloudRetry, /initPeer\(|peerLocal/);
+
+    // La caduta del relay e il toggle CLOUD non devono distruggersi a vicenda.
+    assert.doesNotMatch(relayLoop, /scheduleReconnect\(/);
+    assert.doesNotMatch(toggleBlock, /scheduleReconnect\(|peerLocal\.destroy/);
+    assert.match(toggleBlock, /destroyCloudPeer\(\)/);
+    assert.match(toggleBlock, /startCloudPeer\(\)/);
+
+    // Tre normali eventi open non sono prova di una seconda Regia.
+    assert.doesNotMatch(control, /detectCloudFlap|cloudOpenTimes|Causa più probabile: la Regia è aperta anche ALTROVE/);
+    assert.match(control, /err\.type === 'unavailable-id'[\s\S]{0,500}MATCH ID GIÀ REGISTRATO SUL CLOUD/);
+});
+
 test('only one Regia tab can mutate state', () => {
     assert.match(control, /function acquireRegiaLeadership/);
     assert.match(control, /function enterRegiaStandby/);
@@ -125,8 +154,8 @@ test('only one Regia tab can mutate state', () => {
     assert.ok(takeover.indexOf('reloadSettingsForRegiaTakeover()') < takeover.indexOf('loadRecentRemoteAcksFromStorage()'));
     assert.ok(takeover.indexOf('loadRecentRemoteAcksFromStorage()') < takeover.indexOf('initPeer()'));
     assert.match(control, /function stopRegiaNetworking\(\)[\s\S]{0,260}initPeerGeneration \+= 1/);
-    assert.match(control, /function stopRegiaNetworking\(\)[\s\S]{0,900}wsRelayActive = false/);
-    assert.match(control, /function stopRegiaNetworking\(\)[\s\S]{0,1000}wsClientCount = 0/);
+    assert.match(control, /function stopRegiaNetworking\(\)[\s\S]{0,1400}wsRelayActive = false/);
+    assert.match(control, /function stopRegiaNetworking\(\)[\s\S]{0,1500}wsClientCount = 0/);
     assert.match(control, /function reloadSettingsForRegiaTakeover\(\)[\s\S]{0,3200}state\.settings\.controlPin\s*=\s*controlPin/);
     assert.match(control, /function reloadSettingsForRegiaTakeover\(\)[\s\S]{0,6500}CONFIG\.singleSlotInterTime/);
     assert.match(control, /function reloadSettingsForRegiaTakeover\(\)[\s\S]{0,6500}state\.settings\.buzzerMapping\s*=\s*mapping/);

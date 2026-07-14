@@ -961,7 +961,7 @@
     <div id="scaler">
         <div
             style="position: absolute; top: 10px; left: 10px; color: #64748b; font-size: 0.8rem; z-index: 9999; pointer-events: none; font-family: var(--font-family);">
-            v. 1.7</div>
+            v. 2.0.1</div>
         <div id="top-bar">
             NEXT: <span id="tb-teams" style="color: white; margin-left: 10px;">-- vs --</span>
             <span id="tb-score" class="tb-live-score" style="display:none;">0 - 0</span>
@@ -2460,29 +2460,10 @@
             let connections = []; // Support multiple viewers
             let pingInterval = null;
             let reconnectTimeout = null;
+            let cloudReconnectTimeout = null;
 
-            // Rilevatore di "flapping" della rete cloud: se il peer cloud si riapre
-            // troppe volte in pochi secondi, quasi sempre la stessa Regia è aperta
-            // anche altrove (altro PC/browser) con il cloud attivo. Il cloud pubblico
-            // (0.peerjs.com), a differenza del relay, non arbitra "un solo proprietario":
-            // le due istanze si scalciano l'ID a vicenda e i dispositivi cadono di continuo.
-            // Qui NON tocchiamo la riconnessione: avvisiamo solo, con la causa e la soluzione.
-            let cloudOpenTimes = [];
-            let cloudFlapWarned = false;
             let cloudOpenedOnce = false;   // il peer cloud si è mai aperto dall'ultimo initPeer?
             let cloudWatchdog = null;      // se resta su "Generazione..." troppo a lungo → auto-diagnostica
-            function detectCloudFlap() {
-                const now = Date.now();
-                cloudOpenTimes.push(now);
-                cloudOpenTimes = cloudOpenTimes.filter(t => now - t < 30000);
-                if (cloudOpenTimes.length >= 3 && !cloudFlapWarned) {
-                    cloudFlapWarned = true;
-                    setTimeout(() => { cloudFlapWarned = false; }, 60000); // riavvisa al massimo ogni minuto
-                    log('⚠️ RETE CLOUD INSTABILE: continua a riconnettersi. Causa più probabile: la Regia è aperta anche ALTROVE (altro computer/browser) con il CLOUD attivo — sul cloud non c\'è arbitraggio, le due Regie si contendono lo stesso ID. Soluzione: tieni la Regia aperta in UN SOLO posto; per i dispositivi sulla stessa rete usa il collegamento locale (togli la spunta CLOUD). Clicca l\'ID per riavviare la rete.');
-                    const disp = document.getElementById('my-peer-id');
-                    if (disp) disp.title = 'Rete cloud instabile — vedi il log (probabile Regia doppia)';
-                }
-            }
 
             // Diagnostica: chi tiene il Match ID sul cloud? Crea un peer di test con
             // ID casuale e prova a connettersi all'ID del torneo su 0.peerjs.com.
@@ -2499,6 +2480,11 @@
                 if (typeof Peer === 'undefined') { setDiagStatus('❌ Libreria di rete non caricata.', true); return; }
                 const targetId = (state.settings.matchId || 'IPBA-1674').trim() || 'IPBA-1674';
                 const shortId = targetId.replace('IPBA-', '');
+                if (peerCloud && peerCloud.open && peerCloud.id === targetId) {
+                    setDiagStatus('✅ Il CLOUD è già collegato: l’ID ' + shortId + ' è occupato da QUESTA Regia.');
+                    log('DIAGNOSTICA RETE: CLOUD già attivo correttamente su questa Regia.');
+                    return;
+                }
                 diagInCorso = true;
                 setDiagStatus('🔍 Controllo chi tiene l\'ID ' + shortId + ' sul cloud... (attendi ~10s)');
                 log('DIAGNOSTICA RETE: contatto ' + targetId + ' sul cloud...');
@@ -2588,6 +2574,8 @@
                 // da initPeer() prima che questa scheda diventasse secondaria.
                 initPeerGeneration += 1;
                 if (reconnectTimeout) { clearTimeout(reconnectTimeout); reconnectTimeout = null; }
+                if (cloudReconnectTimeout) { clearTimeout(cloudReconnectTimeout); cloudReconnectTimeout = null; }
+                if (cloudWatchdog) { clearTimeout(cloudWatchdog); cloudWatchdog = null; }
                 if (pingInterval) { clearInterval(pingInterval); pingInterval = null; }
                 if (typeof wsRetryTimer !== 'undefined' && wsRetryTimer) { clearTimeout(wsRetryTimer); wsRetryTimer = null; }
                 if (typeof wsHost !== 'undefined' && wsHost) {
@@ -2598,9 +2586,8 @@
                 if (typeof wsRelayActive !== 'undefined') wsRelayActive = false;
                 if (typeof wsClientCount !== 'undefined') wsClientCount = 0;
                 if (peerLocal && !peerLocal.destroyed) { try { peerLocal.destroy(); } catch (e) { } }
-                if (peerCloud && !peerCloud.destroyed) { try { peerCloud.destroy(); } catch (e) { } }
                 peerLocal = null;
-                peerCloud = null;
+                destroyCloudPeer();
                 connections = [];
                 if (window.pendingRotation) {
                     clearTimeout(window.pendingRotation);
@@ -2803,7 +2790,72 @@
                 if (!canControlRegiaState()) return;
                 if (reconnectTimeout) clearTimeout(reconnectTimeout);
                 reconnectTimeout = setTimeout(() => {
+                    reconnectTimeout = null;
                     if (canControlRegiaState()) initPeer();
+                }, delay);
+            }
+
+            function isCloudSyncEnabled() {
+                const toggle = document.getElementById('cloud-sync-toggle');
+                return !!(toggle && toggle.checked);
+            }
+
+            function currentCloudTargetId() {
+                const value = normalizeMatchIdValue(state.settings.matchId || 'IPBA-1674');
+                return value && value !== 'IPBA-UNDEFINED' ? value : 'IPBA-1674';
+            }
+
+            function cloudPeerOptions() {
+                return {
+                    secure: true,
+                    host: '0.peerjs.com',
+                    port: 443,
+                    config: {
+                        iceServers: [
+                            { urls: 'stun:stun.l.google.com:19302' },
+                            { urls: 'stun:stun1.l.google.com:19302' },
+                            { urls: 'stun:stun2.l.google.com:19302' },
+                            { urls: 'stun:stun3.l.google.com:19302' },
+                            { urls: 'stun:stun4.l.google.com:19302' },
+                            { urls: 'stun:stun.relay.metered.ca:80' }
+                        ]
+                    },
+                    debug: 1
+                };
+            }
+
+            function clearCloudReconnect() {
+                if (!cloudReconnectTimeout) return;
+                clearTimeout(cloudReconnectTimeout);
+                cloudReconnectTimeout = null;
+            }
+
+            function destroyCloudPeer() {
+                const oldPeer = peerCloud;
+                peerCloud = null; // rende innocui gli eventi tardivi del peer sostituito
+                if (oldPeer && !oldPeer.destroyed) {
+                    try { oldPeer.destroy(); } catch (e) { }
+                }
+            }
+
+            function startCloudPeer(targetId = currentCloudTargetId()) {
+                if (!canControlRegiaState() || !isCloudSyncEnabled() || typeof Peer === 'undefined') return null;
+                if (peerCloud && !peerCloud.destroyed) return peerCloud;
+                clearCloudReconnect();
+                const nextPeer = new Peer(targetId, cloudPeerOptions());
+                peerCloud = nextPeer;
+                bindPeer(nextPeer, 'CLOUD', targetId);
+                return nextPeer;
+            }
+
+            function scheduleCloudReconnect(delay) {
+                if (!canControlRegiaState() || !isCloudSyncEnabled()) return;
+                clearCloudReconnect();
+                cloudReconnectTimeout = setTimeout(() => {
+                    cloudReconnectTimeout = null;
+                    if (!canControlRegiaState() || !isCloudSyncEnabled()) return;
+                    destroyCloudPeer();
+                    startCloudPeer();
                 }, delay);
             }
 
@@ -2812,18 +2864,22 @@
                 // i suoi eventi di errore/disconnessione ucciderebbero la connessione attiva.
                 const isStale = () => (p !== peerLocal && p !== peerCloud);
 
-                // Auto-Reconnect if disconnected from PeerServer
+                // Il signaling CLOUD è indipendente dal relay locale. Una sua caduta
+                // non deve mai riavviare o distruggere gli altri trasporti.
                 p.on('disconnected', () => {
                     if (isStale()) return;
                     console.log(`[${tag}] Disconnected from signaling server. Attempting recovery...`);
                     if (p.destroyed) {
-                        console.log(`[${tag}] Peer object destroyed. Re-initializing entirely...`);
-                        scheduleReconnect(2000);
+                        scheduleCloudReconnect(5000);
                     } else {
-                        // Prevent tight reconnect loops for transient errors
                         setTimeout(() => {
+                            if (isStale() || !canControlRegiaState() || !isCloudSyncEnabled()) return;
                             if (p && !p.destroyed && p.disconnected) {
-                                p.reconnect();
+                                try { p.reconnect(); }
+                                catch (e) {
+                                    destroyCloudPeer();
+                                    scheduleCloudReconnect(5000);
+                                }
                             }
                         }, 2000);
                     }
@@ -2838,45 +2894,41 @@
                     const display = document.getElementById('my-peer-id');
 
                     if (err.type === 'unavailable-id') {
-                        // NON cambiare il Match ID: quasi sempre è una registrazione fantasma
-                        // (un nostro peer precedente) che il server scarta entro pochi secondi.
-                        // Cambiare ID qui rompeva tutti i client collegati e i QR code.
-                        console.warn(`[${tag}] ID ${targetId} occupato (probabile registrazione fantasma). Riprovo con lo STESSO ID...`);
-                        if (display) {
-                            display.innerText = "ID OCCUPATO, RIPROVO...";
+                        // Questa è l'unica prova reale che l'ID è già registrato sul cloud.
+                        // Può essere un'altra Regia oppure la sessione precedente non ancora scaduta.
+                        console.warn(`[${tag}] ID ${targetId} già registrato sul cloud. Riprovo con lo stesso ID...`);
+                        log('⚠️ MATCH ID GIÀ REGISTRATO SUL CLOUD: chiudi un’eventuale seconda Regia con lo stesso ID oppure attendi che la sessione precedente scada. La rete locale, se attiva, continua a funzionare.');
+                        if (display && !wsRelayActive) {
+                            display.innerText = "ID CLOUD OCCUPATO";
                             display.style.color = 'var(--danger-color)';
                         }
-                        if (peerLocal && !peerLocal.destroyed) peerLocal.destroy();
-                        if (peerCloud && !peerCloud.destroyed) peerCloud.destroy();
-                        scheduleReconnect(4000);
-                    } else if (err.type === 'server-error' || p.destroyed) {
-                        if (display) {
-                            display.innerText = "ERRORE SERVER, RIPROVO...";
+                        destroyCloudPeer();
+                        scheduleCloudReconnect(10000);
+                    } else if (err.type === 'server-error' || err.type === 'socket-error' || err.type === 'socket-closed' || p.destroyed) {
+                        if (display && !wsRelayActive) {
+                            display.innerText = "CLOUD NON DISPONIBILE";
                             display.style.fontSize = "0.7em";
                             display.style.color = 'var(--danger-color)';
                         }
-                        console.warn(`[${tag}] Server error. Riprovo con lo stesso ID tra 8s...`);
-                        if (peerLocal && !peerLocal.destroyed) peerLocal.destroy();
-                        if (peerCloud && !peerCloud.destroyed) peerCloud.destroy();
-                        scheduleReconnect(8000); // 8s delay to avoid hammering banned server
+                        console.warn(`[${tag}] Server cloud non disponibile. Riprovo tra 8s...`);
+                        destroyCloudPeer();
+                        scheduleCloudReconnect(8000);
                     } else if (err.type === 'network') {
-                        if (display && tag === 'CLOUD') {
+                        if (display && !wsRelayActive) {
                             display.innerText = "ERRORE RETE CLOUD";
                             display.style.color = 'var(--danger-color)';
                         }
-                        console.warn(`[${tag}] Network error detected. Retrying in 5s...`);
-                        if (p && !p.destroyed) p.destroy();
-                        // Only schedule full reconnect if it's the local that failed, cloud can be restarted independently later maybe.
-                        scheduleReconnect(5000);
+                        console.warn(`[${tag}] Errore rete cloud. Riprovo tra 5s senza toccare il relay locale...`);
+                        destroyCloudPeer();
+                        scheduleCloudReconnect(5000);
                     } else if (err.type === 'peer-unavailable') {
                          console.warn(`[${tag}] Target peer not found. Ignoring as it's a connection time issue.`);
                     } else if (err.type === 'browser-incompatible') {
-                         if (display) display.innerText = "BROWSER NON COMPATIBILE";
+                         if (display && !wsRelayActive) display.innerText = "BROWSER NON COMPATIBILE";
                     } else {
-                        // For generic errors, try a slow retry
-                        console.warn(`[${tag}] Unhandled PeerJS error. Slow retry...`);
-                        if (p && !p.destroyed) p.destroy();
-                        scheduleReconnect(8000);
+                        console.warn(`[${tag}] Errore cloud non gestito. Riprovo senza toccare il relay locale...`);
+                        destroyCloudPeer();
+                        scheduleCloudReconnect(10000);
                     }
                 });
 
@@ -2887,12 +2939,10 @@
                         if (tag === 'LOCAL') document.getElementById('my-peer-id').innerText = "ERRORE ID";
                         return;
                     }
-                    if (reconnectTimeout) clearTimeout(reconnectTimeout);
+                    clearCloudReconnect();
 
-                    // Mostra l'ID (solo parte numerica) da QUALSIASI peer apra per primo:
-                    // locale e cloud usano lo stesso Match ID, quindi il valore è identico.
-                    // Prima l'ID veniva mostrato solo dal peer LOCALE: senza server locale
-                    // attivo la scritta restava su "Generazione..." per sempre.
+                    // Mostra l'ID appena il CLOUD è pronto; il relay locale mostra lo
+                    // stesso valore in modo indipendente quando riceve il suo welcome.
                     const displayId = id.replace("IPBA-", "");
                     const disp = document.getElementById('my-peer-id');
                     if (disp) {
@@ -2904,7 +2954,6 @@
                     if (tag === 'CLOUD') {
                         cloudOpenedOnce = true;
                         if (cloudWatchdog) { clearTimeout(cloudWatchdog); cloudWatchdog = null; }
-                        detectCloudFlap();
                     }
                 });
 
@@ -2941,16 +2990,15 @@
 
             function initPeer() {
                 if (!ensureCurrentRegiaLease()) return;
-                if (reconnectTimeout) clearTimeout(reconnectTimeout);
+                if (reconnectTimeout) { clearTimeout(reconnectTimeout); reconnectTimeout = null; }
+                clearCloudReconnect();
                 if (pingInterval) clearInterval(pingInterval);
 
-                // I peer precedenti vanno SEMPRE distrutti prima di crearne di nuovi:
-                // un peer vivo tiene occupato il Match ID sul server e il nuovo peer
-                // riceverebbe "unavailable-id" all'infinito.
+                // Un riavvio manuale/cambio Match ID sostituisce il solo peer CLOUD.
+                // Il collegamento locale moderno è il relay WebSocket di server.js.
                 if (peerLocal && !peerLocal.destroyed) { try { peerLocal.destroy(); } catch (e) { } }
-                if (peerCloud && !peerCloud.destroyed) { try { peerCloud.destroy(); } catch (e) { } }
                 peerLocal = null;
-                peerCloud = null;
+                destroyCloudPeer();
 
                 // Persistent ID logic
                 let targetId = typeof state.settings.matchId === 'string' ? state.settings.matchId.trim() : '';
@@ -2977,43 +3025,12 @@
                     refLink.href = `referee.html?id=${encodeURIComponent(targetId)}&pin=${encodeURIComponent(state.settings.controlPin || '')}`;
                 }
 
-                const customIceConfig = {
-                    config: {
-                        'iceServers': [
-                            { urls: 'stun:stun.l.google.com:19302' },
-                            { urls: 'stun:stun1.l.google.com:19302' },
-                            { urls: 'stun:stun2.l.google.com:19302' },
-                            { urls: 'stun:stun3.l.google.com:19302' },
-                            { urls: 'stun:stun4.l.google.com:19302' },
-                            { urls: 'stun:stun.relay.metered.ca:80' }
-                        ]
-                    },
-                    debug: 1
-                };
-
-                // PREPARE OPTIONS
-                const cloudOptions = {
-                    secure: true,
-                    host: '0.peerjs.com',
-                    port: 443,
-                    config: customIceConfig.config,
-                    debug: 1
-                };
-                const localOptions = {
-                    secure: false, // Localhost usually isn't HTTPS
-                    host: 'localhost',
-                    port: 9000,
-                    path: '/',
-                    config: customIceConfig.config,
-                    debug: 1
-                };
-
                 const peerIdDisplay = document.getElementById('my-peer-id');
                 if (peerIdDisplay) {
                     peerIdDisplay.onclick = () => {
                         if (confirm("Riavviare la connessione di rete (locale e cloud)?")) {
                             if (peerLocal && !peerLocal.destroyed) peerLocal.destroy();
-                            if (peerCloud && !peerCloud.destroyed) peerCloud.destroy();
+                            destroyCloudPeer();
                             restartWsHost(); // riprende anche il relay (es. dopo "ALTRA REGIA ATTIVA")
                             scheduleReconnect(500);
                         }
@@ -3022,36 +3039,43 @@
                     peerIdDisplay.style.cursor = "pointer";
                 }
 
-                // LOCAL PEER (PeerJS): serve solo come riserva quando il relay
-                // WebSocket (server.js) non è attivo. Aspetta un attimo prima di
-                // crearlo: se il relay risponde (caso normale) non serve, e si
-                // evita un tentativo PeerJS destinato a fallire contro il relay.
+                // La porta 9000 espone HTTP + WebSocket /ws, NON un PeerServer.
+                // Il vecchio new Peer(...localhost:9000) causava un errore ogni pochi
+                // secondi e, tramite initPeer(), distruggeva anche il CLOUD sano.
                 const myInitGen = ++initPeerGeneration;
-                setTimeout(() => {
-                    if (myInitGen !== initPeerGeneration) return; // initPeer richiamato nel frattempo
-                    if (wsRelayActive || peerLocal) return;
-                    peerLocal = new Peer(targetId, localOptions);
-                    bindPeer(peerLocal, 'LOCAL', targetId);
-                }, 1500);
 
                 // BOOT CLOUD PEER IF ENABLED
-                const useCloud = document.getElementById('cloud-sync-toggle').checked;
+                const useCloud = isCloudSyncEnabled();
                 if (cloudWatchdog) { clearTimeout(cloudWatchdog); cloudWatchdog = null; }
                 cloudOpenedOnce = false;
                 if (useCloud) {
-                    peerCloud = new Peer(targetId, cloudOptions);
-                    bindPeer(peerCloud, 'CLOUD', targetId);
-                    // Se dopo 15s il cloud non si è mai aperto (resta "Generazione..."),
-                    // lancia la diagnostica da solo per dire all'utente il perché.
-                    cloudWatchdog = setTimeout(() => {
-                        if (myInitGen === initPeerGeneration && !cloudOpenedOnce && !wsRelayActive) {
+                    startCloudPeer(targetId);
+                }
+
+                // Watchdog "nessuna rete": se dopo 15s non si è collegato niente
+                // (né il relay locale, né un peer aperto), spiega cosa fare invece di
+                // lasciare la scritta muta "Generazione...".
+                cloudWatchdog = setTimeout(() => {
+                    if (myInitGen !== initPeerGeneration || wsRelayActive) return;
+                    const disp = document.getElementById('my-peer-id');
+                    if (document.getElementById('cloud-sync-toggle').checked) {
+                        // cloud attivo ma non si è mai aperto → diagnostica automatica
+                        if (!cloudOpenedOnce) {
                             log('La rete CLOUD non si è ancora collegata. Avvio la diagnostica automatica...');
                             diagnosticaReteCloud();
                         }
-                    }, 15000);
-                }
+                    } else {
+                        // niente relay + cloud spento = nessun trasporto: i dispositivi non possono collegarsi
+                        if (disp && /generazione/i.test(disp.innerText)) {
+                            disp.innerText = 'ATTIVA ▶ CLOUD';
+                            disp.style.color = 'var(--danger-color)';
+                            disp.style.fontSize = '0.8em';
+                        }
+                        log('⚠️ NESSUNA RETE ATTIVA: la Regia non è collegata a niente. Se i dispositivi sono su un\'ALTRA rete (da REMOTO), spunta la casella CLOUD qui a fianco. Se sono sulla STESSA rete, avvia il server locale (Avvia_Server_Locale.bat).');
+                    }
+                }, 15000);
 
-                console.log("[SYSTEM] Paintball Manager v1.8.2-Robust - INIZIALIZZAZIONE DUAL-BRIDGE...");
+                console.log("[SYSTEM] Paintball Manager v2.0.1 - RETE RELAY/CLOUD ISOLATA...");
 
                 // Start Ping Interval safely
                 pingInterval = setInterval(sendPings, 5000);
@@ -3066,7 +3090,7 @@
             let wsClientCount = 0;
             let wsRetryTimer = null;
             let wsEvicted = false;
-            let initPeerGeneration = 0; // annulla le creazioni ritardate del peer locale
+            let initPeerGeneration = 0; // invalida i watchdog avviati da initPeer precedenti
 
             function relayUrl() {
                 const params = new URLSearchParams(window.location.search);
@@ -3115,8 +3139,8 @@
                         wsRelayActive = true;
                         wsClientCount = d.count || 0;
                         updateConnectionCount();
-                        // Col relay attivo il peer LOCALE PeerJS non serve più
-                        if (peerLocal && !peerLocal.destroyed) { try { peerLocal.destroy(); } catch (e) { } peerLocal = null; }
+                        // Il relay copre la rete locale; il CLOUD, se selezionato,
+                        // resta attivo in parallelo per gli schermi fuori dalla LAN.
                         const disp = document.getElementById('my-peer-id');
                         if (disp) {
                             disp.innerText = (state.settings.matchId || '').replace('IPBA-', '');
@@ -3159,8 +3183,7 @@
                     wsHost = null;
                     updateConnectionCount();
                     if (wasActive) {
-                        // Relay caduto: riattiva subito il percorso PeerJS come riserva
-                        scheduleReconnect(1500);
+                        log('Rete RELAY locale disconnessa: riconnessione automatica in corso. Il CLOUD resta indipendente.');
                     }
                     wsRetryTimer = setTimeout(startWsHostLoop, 4000);
                 };
@@ -6362,9 +6385,20 @@
                 const isCloud = e.target.checked;
                 localStorage.setItem('pm_use_cloud', isCloud);
                 log(`Rete cambiata in modalità: ${isCloud ? 'CLOUD (Pubblica)' : 'LOCALE (Privata)'}`);
-                if (peerLocal && !peerLocal.destroyed) peerLocal.destroy();
-                if (peerCloud && !peerCloud.destroyed) peerCloud.destroy();
-                scheduleReconnect(500);
+                clearCloudReconnect();
+                destroyCloudPeer();
+                if (cloudWatchdog) { clearTimeout(cloudWatchdog); cloudWatchdog = null; }
+                cloudOpenedOnce = false;
+                if (isCloud) {
+                    startCloudPeer();
+                } else if (!wsRelayActive) {
+                    const disp = document.getElementById('my-peer-id');
+                    if (disp) {
+                        disp.innerText = 'ATTIVA CLOUD';
+                        disp.style.color = 'var(--danger-color)';
+                        disp.style.fontSize = '0.8em';
+                    }
+                }
             });
 
             populateVoiceList();
@@ -6559,7 +6593,7 @@
                         
                         // Re-init Peer without reload
                         if (peerLocal && !peerLocal.destroyed) peerLocal.destroy();
-                        if (peerCloud && !peerCloud.destroyed) peerCloud.destroy();
+                        destroyCloudPeer();
                         initPeer();
                         restartWsHost(); // il relay si ricollega con il nuovo Match ID
                     } else if (newControlPin !== previousControlPin) {
