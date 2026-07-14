@@ -1137,6 +1137,18 @@
                                 comandi. I normali schermi restano in sola lettura.</small>
                         </div>
 
+                        <div class="form-group">
+                            <label>Diagnostica rete</label>
+                            <button id="btn-diagnostica-rete" class="btn"
+                                style="width: 100%; border-color: #38bdf8; color: #38bdf8; background: rgba(56,189,248,0.12);">🔍
+                                CHI TIENE L'ID SUL CLOUD?</button>
+                            <small style="color: #94a3b8;">Se la Regia resta su "Generazione..." o si scollega di
+                                continuo, premi qui: controlla se un'altra Regia (o una registrazione fantasma di una
+                                sessione precedente) sta occupando il tuo ID sul cloud, oppure se il cloud è
+                                irraggiungibile dalla tua rete.</small>
+                            <div id="diagnostica-rete-status" style="margin-top: 6px; font-size: 0.85rem; color: #94a3b8;"></div>
+                        </div>
+
                         <!-- Custom Audio -->
                         <hr style="width:100%; border-color: #334155;">
                         <div class="form-group">
@@ -2448,6 +2460,74 @@
             let connections = []; // Support multiple viewers
             let pingInterval = null;
             let reconnectTimeout = null;
+
+            // Rilevatore di "flapping" della rete cloud: se il peer cloud si riapre
+            // troppe volte in pochi secondi, quasi sempre la stessa Regia è aperta
+            // anche altrove (altro PC/browser) con il cloud attivo. Il cloud pubblico
+            // (0.peerjs.com), a differenza del relay, non arbitra "un solo proprietario":
+            // le due istanze si scalciano l'ID a vicenda e i dispositivi cadono di continuo.
+            // Qui NON tocchiamo la riconnessione: avvisiamo solo, con la causa e la soluzione.
+            let cloudOpenTimes = [];
+            let cloudFlapWarned = false;
+            let cloudOpenedOnce = false;   // il peer cloud si è mai aperto dall'ultimo initPeer?
+            let cloudWatchdog = null;      // se resta su "Generazione..." troppo a lungo → auto-diagnostica
+            function detectCloudFlap() {
+                const now = Date.now();
+                cloudOpenTimes.push(now);
+                cloudOpenTimes = cloudOpenTimes.filter(t => now - t < 30000);
+                if (cloudOpenTimes.length >= 3 && !cloudFlapWarned) {
+                    cloudFlapWarned = true;
+                    setTimeout(() => { cloudFlapWarned = false; }, 60000); // riavvisa al massimo ogni minuto
+                    log('⚠️ RETE CLOUD INSTABILE: continua a riconnettersi. Causa più probabile: la Regia è aperta anche ALTROVE (altro computer/browser) con il CLOUD attivo — sul cloud non c\'è arbitraggio, le due Regie si contendono lo stesso ID. Soluzione: tieni la Regia aperta in UN SOLO posto; per i dispositivi sulla stessa rete usa il collegamento locale (togli la spunta CLOUD). Clicca l\'ID per riavviare la rete.');
+                    const disp = document.getElementById('my-peer-id');
+                    if (disp) disp.title = 'Rete cloud instabile — vedi il log (probabile Regia doppia)';
+                }
+            }
+
+            // Diagnostica: chi tiene il Match ID sul cloud? Crea un peer di test con
+            // ID casuale e prova a connettersi all'ID del torneo su 0.peerjs.com.
+            //  - connessione riuscita  → qualcuno tiene l'ID (altra Regia o fantasma)
+            //  - peer-unavailable      → l'ID è libero (il blocco è altrove: rete/fantasma in scadenza)
+            //  - cloud irraggiungibile → problema di rete/firewall verso il cloud
+            let diagInCorso = false;
+            function setDiagStatus(msg, isError) {
+                const el = document.getElementById('diagnostica-rete-status');
+                if (el) { el.innerText = msg || ''; el.style.color = isError ? '#f59e0b' : '#94a3b8'; }
+            }
+            function diagnosticaReteCloud() {
+                if (diagInCorso) return;
+                if (typeof Peer === 'undefined') { setDiagStatus('❌ Libreria di rete non caricata.', true); return; }
+                const targetId = (state.settings.matchId || 'IPBA-1674').trim() || 'IPBA-1674';
+                const shortId = targetId.replace('IPBA-', '');
+                diagInCorso = true;
+                setDiagStatus('🔍 Controllo chi tiene l\'ID ' + shortId + ' sul cloud... (attendi ~10s)');
+                log('DIAGNOSTICA RETE: contatto ' + targetId + ' sul cloud...');
+                let probe;
+                try {
+                    probe = new Peer(undefined, { secure: true, host: '0.peerjs.com', port: 443, debug: 0 });
+                } catch (e) { diagInCorso = false; setDiagStatus('❌ Impossibile avviare il test: ' + e.message, true); return; }
+                let done = false;
+                const finish = (msg, isErr) => {
+                    if (done) return; done = true; diagInCorso = false;
+                    setDiagStatus(msg, isErr); log('DIAGNOSTICA RETE: ' + msg.replace(/^[^ ]+ /, ''));
+                    try { probe.destroy(); } catch (e) { }
+                };
+                const giveUp = setTimeout(() => finish('⏱️ Il cloud non risponde: probabile blocco di rete/firewall verso 0.peerjs.com. Su questa rete il collegamento CLOUD potrebbe non funzionare.', true), 12000);
+                probe.on('open', () => {
+                    let conn;
+                    try { conn = probe.connect(targetId, { reliable: true }); }
+                    catch (e) { clearTimeout(giveUp); finish('✅ L\'ID ' + shortId + ' risulta LIBERO sul cloud.'); return; }
+                    const noAns = setTimeout(() => { clearTimeout(giveUp); finish('✅ L\'ID ' + shortId + ' sembra LIBERO (nessuna Regia risponde). Se la tua resta su "Generazione...", riprova tra ~1 minuto: una registrazione fantasma sta liberando l\'ID.'); }, 8000);
+                    conn.on('open', () => { clearTimeout(noAns); clearTimeout(giveUp); finish('⚠️ C\'È GIÀ QUALCUNO che tiene l\'ID ' + shortId + ' sul cloud: un\'altra Regia attiva oppure una registrazione fantasma di una sessione precedente. Se non hai altre Regie aperte, aspetta ~1 minuto che il fantasma scada e poi ricarica; oppure cambia temporaneamente il Match ID.', true); });
+                    conn.on('error', () => { clearTimeout(noAns); clearTimeout(giveUp); finish('✅ L\'ID ' + shortId + ' risulta LIBERO (nessuno risponde). Se resti su "Generazione...", è la connessione al cloud a non funzionare.'); });
+                });
+                probe.on('error', (e) => {
+                    clearTimeout(giveUp);
+                    if (e && e.type === 'peer-unavailable') finish('✅ L\'ID ' + shortId + ' è LIBERO sul cloud: nessun\'altra Regia lo tiene. Se resti su "Generazione...", riprova tra poco (fantasma in scadenza).');
+                    else finish('❌ Non riesco a raggiungere il cloud (' + (e ? e.type : '?') + '): problema di rete/firewall verso 0.peerjs.com su questa rete.', true);
+                });
+            }
+
             const syncChannel = new BroadcastChannel('pm_sync');
 
             function readRegiaLease() {
@@ -2821,6 +2901,11 @@
                         disp.style.fontSize = "";
                     }
                     log("Rete " + tag + " pronta. ID: " + displayId);
+                    if (tag === 'CLOUD') {
+                        cloudOpenedOnce = true;
+                        if (cloudWatchdog) { clearTimeout(cloudWatchdog); cloudWatchdog = null; }
+                        detectCloudFlap();
+                    }
                 });
 
                 p.on('connection', (conn) => {
@@ -2951,9 +3036,19 @@
 
                 // BOOT CLOUD PEER IF ENABLED
                 const useCloud = document.getElementById('cloud-sync-toggle').checked;
+                if (cloudWatchdog) { clearTimeout(cloudWatchdog); cloudWatchdog = null; }
+                cloudOpenedOnce = false;
                 if (useCloud) {
                     peerCloud = new Peer(targetId, cloudOptions);
                     bindPeer(peerCloud, 'CLOUD', targetId);
+                    // Se dopo 15s il cloud non si è mai aperto (resta "Generazione..."),
+                    // lancia la diagnostica da solo per dire all'utente il perché.
+                    cloudWatchdog = setTimeout(() => {
+                        if (myInitGen === initPeerGeneration && !cloudOpenedOnce && !wsRelayActive) {
+                            log('La rete CLOUD non si è ancora collegata. Avvio la diagnostica automatica...');
+                            diagnosticaReteCloud();
+                        }
+                    }, 15000);
                 }
 
                 console.log("[SYSTEM] Paintball Manager v1.8.2-Robust - INIZIALIZZAZIONE DUAL-BRIDGE...");
@@ -7408,6 +7503,10 @@
                 }
             }
             document.getElementById('btn-h2h-update').addEventListener('click', aggiornaStoricoH2H);
+            (function () {
+                const bd = document.getElementById('btn-diagnostica-rete');
+                if (bd) bd.addEventListener('click', diagnosticaReteCloud);
+            })();
 
             // Esporta l'archivio storico in un file .json (backup / trasferimento su altro PC)
             function esportaStoricoH2H() {

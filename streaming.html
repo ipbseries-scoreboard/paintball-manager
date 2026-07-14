@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
     <title>IPBA Stream Manager</title>
     <!-- PeerJS CDN -->
     <script src="lib/peerjs.min.js"></script>
@@ -1204,6 +1205,8 @@
         <h2 style="color: var(--accent-color); margin: 0; text-align: center;">STREAMING CONSOLE</h2>
         <p style="text-align: center; color: #94a3b8;">Inserisci il Match ID dalla finestra di Regia</p>
         <input type="text" id="match-id" placeholder="es. 1234" />
+        <input type="password" id="control-pin" inputmode="numeric" maxlength="6" autocomplete="off"
+            placeholder="PIN controllo (per modificare loghi)" />
         <button id="connect-btn">CONNETTI</button>
     </div>
 
@@ -1533,6 +1536,7 @@
         // --- PEERJS & BOARD LOGIC ---
         const btn = document.getElementById('connect-btn');
         const input = document.getElementById('match-id');
+        const pinInput = document.getElementById('control-pin');
         const ui = document.getElementById('connect-ui');
         const board = document.getElementById('scoreboard');
         const scaler = document.getElementById('scaler');
@@ -1650,12 +1654,18 @@
         // Load Stored ID or URL Params
         const urlParams = new URLSearchParams(window.location.search);
         let targetId = urlParams.get('matchId') || urlParams.get('id');
+        let controlPin = (urlParams.get('pin') || localStorage.getItem('pm_stream_control_pin') || '').replace(/\D/g, '');
+        pinInput.value = controlPin;
+        if (urlParams.has('pin')) {
+            urlParams.delete('pin');
+            const cleanQuery = urlParams.toString();
+            history.replaceState(null, '', `${window.location.pathname}${cleanQuery ? `?${cleanQuery}` : ''}${window.location.hash}`);
+        }
 
         if (targetId) {
             // If from URL, update input and try to auto-start immediately
             const fullId = targetId.startsWith("IPBA-") ? targetId : "IPBA-" + targetId;
             input.value = targetId.replace("IPBA-", "");
-            setTimeout(() => startClient(fullId), 500); // Small delay to let UI settle
         } else {
             const lastId = localStorage.getItem('last_match_id');
             if (lastId) input.value = lastId;
@@ -1765,14 +1775,33 @@
 
         function startClient(hostId) {
             if (!hostId) return alert("Inserisci ID");
+            controlPin = pinInput.value.replace(/\D/g, '');
+            if (controlPin && !/^\d{6}$/.test(controlPin)) {
+                if (btn) btn.innerText = 'PIN: INSERIRE 6 CIFRE';
+                ui.style.display = 'flex';
+                board.style.display = 'none';
+                pinInput.focus();
+                return;
+            }
+            if (controlPin) localStorage.setItem('pm_stream_control_pin', controlPin);
             if (btn) btn.innerText = "CONNESSIONE...";
 
             // Il trasporto (retry, PING/PONG, fallback locale->cloud) è gestito da pm-client.js
             if (clientConn) clientConn.destroy();
             clientConn = PMClient.connect({
                 id: hostId,
+                role: controlPin ? 'controller' : 'viewer',
+                token: controlPin,
                 staleBadge: true,
-                onStatus: (msg) => { if (btn) btn.innerText = msg; },
+                onStatus: (msg, isError) => {
+                    if (btn) btn.innerText = msg;
+                    if (isError && /pin|credenzial|accesso negato/i.test(msg || '')) {
+                        ui.style.display = 'flex';
+                        board.style.display = 'none';
+                        pinInput.focus();
+                        pinInput.select();
+                    }
+                },
                 onOpen: () => {
                     if (!smokeSystemStarted) {
                         smokeSystemStarted = true;
@@ -2281,7 +2310,7 @@
 
                 // Sync with Host if connected
                 if (clientConn && clientConn.open) {
-                    clientConn.send({ type: 'UPDATE_CLANS', clanConfig: clanConfig });
+                    clientConn.send({ type: 'UPDATE_CLANS', clanConfig: clanConfig, controlToken: controlPin });
                     console.log("Clan config synced with host via saveClans");
                 }
 
@@ -2434,7 +2463,7 @@
 
             // Request fresh stats if opening
             if (!isVisible && typeof clientConn !== 'undefined' && clientConn && clientConn.open) {
-                clientConn.send({ type: 'FORCE_SYNC' });
+                clientConn.send({ type: 'requestState' });
             }
 
             if (!isVisible && currentData && currentData.standingsData) {
@@ -2450,7 +2479,7 @@
 
             // Request fresh bracket if opening
             if (showBracket && typeof clientConn !== 'undefined' && clientConn && clientConn.open) {
-                clientConn.send({ type: 'FORCE_SYNC' });
+                clientConn.send({ type: 'requestState' });
             }
 
             if (showBracket && currentData && currentData.standingsData) renderBracket(currentData.standingsData.bracket);
@@ -2490,7 +2519,7 @@
                 renderCasterInfo();
                 // chiedi subito un FULL_SYNC per avere h2h/storico freschi
                 if (typeof clientConn !== 'undefined' && clientConn && clientConn.open) {
-                    clientConn.send({ type: 'FORCE_SYNC' });
+                    clientConn.send({ type: 'requestState' });
                 }
             }
         }
@@ -3013,7 +3042,7 @@
                 const tr = document.createElement('tr');
                 const diff = (s.rw || 0) - (s.rl || 0);
                 tr.innerHTML = `
-                    <td><span class="stats-rank-badge">${idx + 1}</span> ${s.name}</td>
+                    <td><span class="stats-rank-badge">${idx + 1}</span> ${ciEsc(s.name)}</td>
                     <td style="text-align: center">${s.played}</td>
                     <td style="text-align: center" class="stats-val-green">${s.wins}</td>
                     <td style="text-align: center" class="stats-val-red">${s.losses}</td>
@@ -3046,7 +3075,7 @@
                     items.forEach(r => {
                         const li = document.createElement('li');
                         li.style.marginBottom = '12px'; li.style.borderBottom = '1px solid rgba(255,255,255,0.05)'; li.style.paddingBottom = '8px'; li.style.display = 'flex'; li.style.justifyContent = 'space-between';
-                        li.innerHTML = `<span><strong style="color: #e2e8f0">${r.team}</strong> <span style="font-size: 0.8em; color: #94a3b8; margin-left: 10px;">${r.match || ''}</span></span><span style="font-weight: 900; color: #fbbf24; text-shadow: 0 0 10px rgba(251, 191, 36, 0.3);">${formatter(r.duration || r.avg || r.count)}</span>`;
+                        li.innerHTML = `<span><strong style="color: #e2e8f0">${ciEsc(r.team)}</strong> <span style="font-size: 0.8em; color: #94a3b8; margin-left: 10px;">${ciEsc(r.match || '')}</span></span><span style="font-weight: 900; color: #fbbf24; text-shadow: 0 0 10px rgba(251, 191, 36, 0.3);">${formatter(r.duration || r.avg || r.count)}</span>`;
                         list.appendChild(li);
                     });
                 } else { list.innerHTML = '<li style="color: #64748b; font-style: italic;">Nessun dato</li>'; }
@@ -3077,7 +3106,7 @@
                 round.matches.forEach(m => {
                     const matchCard = document.createElement('div');
                     matchCard.style.background = 'rgba(255,255,255,0.05)'; matchCard.style.padding = '20px'; matchCard.style.borderRadius = '15px'; matchCard.style.border = '1px solid rgba(255,255,255,0.1)'; matchCard.style.width = '350px'; matchCard.style.margin = '15px 0'; matchCard.style.boxShadow = '0 5px 15px rgba(0,0,0,0.3)';
-                    const renderTeamLine = (name, score, isWinner) => `<div style="display: flex; justify-content: space-between; align-items: center; margin: 5px 0; font-size: 26px; ${isWinner ? 'color: #fbbf24; font-weight: 900;' : 'color: #cbd5e1;'}"><span>${name || 'TBD'}</span><span style="background: rgba(0,0,0,0.3); padding: 5px 15px; border-radius: 8px;">${score}</span></div>`;
+                    const renderTeamLine = (name, score, isWinner) => `<div style="display: flex; justify-content: space-between; align-items: center; margin: 5px 0; font-size: 26px; ${isWinner ? 'color: #fbbf24; font-weight: 900;' : 'color: #cbd5e1;'}"><span>${ciEsc(name || 'TBD')}</span><span style="background: rgba(0,0,0,0.3); padding: 5px 15px; border-radius: 8px;">${ciEsc(score)}</span></div>`;
                     matchCard.innerHTML = `${renderTeamLine(m.teamA, m.scoreA, m.winner === 'A')}<div style="height: 2px; background: rgba(255,255,255,0.05); margin: 10px 0;"></div>${renderTeamLine(m.teamB, m.scoreB, m.winner === 'B')}`;
                     roundCol.appendChild(matchCard);
                 });
@@ -3099,7 +3128,7 @@
                 const tr = document.createElement('tr'); tr.className = 'schedule-row';
                 if (idx === currentData.tournament.currentIndex) tr.classList.add('active');
                 if (m.savedState && m.savedState.finished) tr.classList.add('finished');
-                tr.innerHTML = `<td>${m.time || '--:--'}</td><td>${m.teamA} vs ${m.teamB}</td><td>${m.phase || 'GIRONI'}</td><td>${m.field || 'Campo 1'}</td>`;
+                tr.innerHTML = `<td>${ciEsc(m.time || '--:--')}</td><td>${ciEsc(m.teamA)} vs ${ciEsc(m.teamB)}</td><td>${ciEsc(m.phase || 'GIRONI')}</td><td>${ciEsc(m.field || 'Campo 1')}</td>`;
                 tbody.appendChild(tr);
             });
         }

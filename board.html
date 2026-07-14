@@ -1812,6 +1812,10 @@
         let oldData = null;
         let currentData = null;
 
+        // Escape HTML: nomi squadra/fase possono arrivare dall'import ipba.it e
+        // finiscono in innerHTML → vanno neutralizzati contro iniezioni di codice.
+        const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
         function updateBoardFromPacket(data) {
             if (!data) return;
 
@@ -1872,7 +1876,7 @@
 
             // Request fresh bracket if opening
             if (showBracket && typeof clientConn !== 'undefined' && clientConn && clientConn.open) {
-                clientConn.send({ type: 'FORCE_SYNC' });
+                clientConn.send({ type: 'requestState' });
             }
 
             if (showBracket && currentData && currentData.standingsData) renderBracket(currentData.standingsData.bracket);
@@ -1915,8 +1919,8 @@
 
                     const renderTeamLine = (name, score, isWinner) => {
                         return `<div style="display: flex; justify-content: space-between; align-items: center; margin: 5px 0; font-size: 26px; ${isWinner ? 'color: #fbbf24; font-weight: 900;' : 'color: #cbd5e1;'}">
-                            <span>${name || 'TBD'}</span>
-                            <span style="background: rgba(0,0,0,0.3); padding: 5px 15px; border-radius: 8px;">${score}</span>
+                            <span>${esc(name || 'TBD')}</span>
+                            <span style="background: rgba(0,0,0,0.3); padding: 5px 15px; border-radius: 8px;">${esc(score)}</span>
                         </div>`;
                     };
 
@@ -1960,10 +1964,10 @@
                 if (m.savedState && m.savedState.finished) tr.classList.add('finished');
 
                 tr.innerHTML = `
-                    <td>${m.time || '--:--'}</td>
-                    <td>${m.teamA} vs ${m.teamB}</td>
-                    <td>${m.phase || 'GIRONI'}</td>
-                    <td>${m.field || 'Campo 1'}</td>
+                    <td>${esc(m.time || '--:--')}</td>
+                    <td>${esc(m.teamA)} vs ${esc(m.teamB)}</td>
+                    <td>${esc(m.phase || 'GIRONI')}</td>
+                    <td>${esc(m.field || 'Campo 1')}</td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -1983,7 +1987,7 @@
 
             // Request fresh stats if opening
             if (!isVisible && typeof clientConn !== 'undefined' && clientConn && clientConn.open) {
-                clientConn.send({ type: 'FORCE_SYNC' });
+                clientConn.send({ type: 'requestState' });
             }
 
             if (!isVisible && currentData && currentData.standingsData) {
@@ -2015,7 +2019,7 @@
                     const tr = document.createElement('tr');
                     const diff = (s.rw || 0) - (s.rl || 0);
                     tr.innerHTML = `
-                        <td><span class="stats-rank-badge">${idx + 1}</span> ${s.name}</td>
+                        <td><span class="stats-rank-badge">${idx + 1}</span> ${esc(s.name)}</td>
                         <td style="text-align: center">${s.played}</td>
                         <td style="text-align: center" class="stats-val-green">${s.wins}</td>
                         <td style="text-align: center" class="stats-val-red">${s.losses}</td>
@@ -2067,7 +2071,7 @@
                         li.style.display = 'flex';
                         li.style.justifyContent = 'space-between';
                         li.innerHTML = `
-                            <span><strong style="color: #e2e8f0">${r.team}</strong> <span style="font-size: 0.8em; color: #94a3b8; margin-left: 10px;">${r.match || ''}</span></span>
+                            <span><strong style="color: #e2e8f0">${esc(r.team)}</strong> <span style="font-size: 0.8em; color: #94a3b8; margin-left: 10px;">${esc(r.match || '')}</span></span>
                             <span style="font-weight: 900; color: #fbbf24; text-shadow: 0 0 10px rgba(251, 191, 36, 0.3);">${formatter(r.duration || r.avg || r.count)}</span>
                         `;
                         list.appendChild(li);
@@ -2106,12 +2110,12 @@
 
                     li.innerHTML = `
                         <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                            <span style="color:${colorA}; font-weight:${m.winner === 'A' ? 'bold' : 'normal'}">${m.teamA}</span>
-                            <span style="font-weight:bold; color:#fbbf24; font-size:1.1em;">${m.scoreA}</span>
+                            <span style="color:${colorA}; font-weight:${m.winner === 'A' ? 'bold' : 'normal'}">${esc(m.teamA)}</span>
+                            <span style="font-weight:bold; color:#fbbf24; font-size:1.1em;">${esc(m.scoreA)}</span>
                         </div>
                         <div style="display:flex; justify-content:space-between;">
-                            <span style="color:${colorB}; font-weight:${m.winner === 'B' ? 'bold' : 'normal'}">${m.teamB}</span>
-                            <span style="font-weight:bold; color:#fbbf24; font-size:1.1em;">${m.scoreB}</span>
+                            <span style="color:${colorB}; font-weight:${m.winner === 'B' ? 'bold' : 'normal'}">${esc(m.teamB)}</span>
+                            <span style="font-weight:bold; color:#fbbf24; font-size:1.1em;">${esc(m.scoreB)}</span>
                         </div>
                     `;
                     list.appendChild(li);

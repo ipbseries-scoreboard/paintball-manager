@@ -315,7 +315,7 @@
             if (currentData.nextMatch) {
                 const scA = currentData.nextMatch.scoreA || 0;
                 const scB = currentData.nextMatch.scoreB || 0;
-                nmString = `PROSSIMO MATCH: <span style="color:#e2e8f0">${currentData.nextMatch.teamA}</span> <span style="color:var(--accent-color)">[${scA} - ${scB}]</span> <span style="color:#e2e8f0">${currentData.nextMatch.teamB}</span>`;
+                nmString = `PROSSIMO MATCH: <span style="color:#e2e8f0">${esc(currentData.nextMatch.teamA)}</span> <span style="color:var(--accent-color)">[${scA} - ${scB}]</span> <span style="color:#e2e8f0">${esc(currentData.nextMatch.teamB)}</span>`;
             }
 
             if (currentData.mode === 'BREAK_MATCH' || currentData.mode === 'INTERVAL') {
@@ -364,7 +364,7 @@
                 finalScrollText += "RISULTATI RECENTI: &nbsp;&nbsp;";
                 // matchHistory arriva dal più recente: lo giriamo in ordine di gioco
                 [...sd.matchHistory].reverse().forEach(m => {
-                    finalScrollText += `<span style="color:#e2e8f0">${m.teamA}</span> <span style="color:var(--accent-color)">[${m.scoreA || 0} - ${m.scoreB || 0}]</span> <span style="color:#e2e8f0">${m.teamB}</span>` + SEP;
+                    finalScrollText += `<span style="color:#e2e8f0">${esc(m.teamA)}</span> <span style="color:var(--accent-color)">[${m.scoreA || 0} - ${m.scoreB || 0}]</span> <span style="color:#e2e8f0">${esc(m.teamB)}</span>` + SEP;
                 });
             }
 
@@ -390,8 +390,8 @@
         // "⚔️ PRECEDENTI X vs Y: 5 sfide — 4 X, 1 Y (ultimo: 3-6 · Evento)"
         function h2hTicker(h, prefix) {
             if (!h) return '';
-            const hi = (t) => `<span style="color:#e2e8f0">${t}</span>`;
-            const acc = (t) => `<span style="color:var(--accent-color)">${t}</span>`;
+            const hi = (t) => `<span style="color:#e2e8f0">${esc(t)}</span>`;
+            const acc = (t) => `<span style="color:var(--accent-color)">${esc(t)}</span>`;
             const lab = (emoji, t) => `<span style="color:#fbbf24;font-weight:bold">${emoji} ${t}:</span>`;
 
             if (!h.count) {
@@ -406,13 +406,18 @@
             if (h.draws) bits.push(acc(h.draws) + ' ' + hi(h.draws === 1 ? 'pareggio' : 'pareggi'));
             if (bits.length) s += ' — ' + bits.join(', ');
             if (h.last) {
-                s += ` <span style="color:#94a3b8">(ultimo: ${h.last.scoreA}-${h.last.scoreB}${h.last.event ? ' · ' + h.last.event : ''})</span>`;
+                s += ` <span style="color:#94a3b8">(ultimo: ${h.last.scoreA}-${h.last.scoreB}${h.last.event ? ' · ' + esc(h.last.event) : ''})</span>`;
             }
             return s;
         }
 
         // Stessa normalizzazione nomi usata dalla Regia (chiavi di packet.teamHistory)
         const tkNorm = (n) => (n || '').trim().toUpperCase().replace(/\s+/g, ' ');
+
+        // Escape HTML: i nomi di squadra/evento arrivano da ipba.it (le squadre si
+        // registrano da sole) e finiscono in innerHTML → vanno neutralizzati per
+        // evitare iniezioni di codice nel ticker.
+        const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
         // "👑 BESTIA NERA": una delle due domina lo scontro diretto (≥70% su almeno 4 sfide)
         function bestiaNeraTicker(h) {
@@ -422,7 +427,7 @@
             const boss = h.winsA > h.winsB ? h.teamA : h.teamB;
             const preda = h.winsA > h.winsB ? h.teamB : h.teamA;
             return `<span style="color:#fbbf24;font-weight:bold">👑 BESTIA NERA:</span> ` +
-                `<span style="color:#e2e8f0">${boss}</span> ha battuto <span style="color:#e2e8f0">${preda}</span> ` +
+                `<span style="color:#e2e8f0">${esc(boss)}</span> ha battuto <span style="color:#e2e8f0">${esc(preda)}</span> ` +
                 `<span style="color:var(--accent-color)">${wMax} volte su ${h.count}</span>`;
         }
 
@@ -433,7 +438,7 @@
                 : (e === 'S' ? '<span style="color:#f87171;font-weight:bold">S</span>'
                     : '<span style="color:#94a3b8;font-weight:bold">P</span>');
             const vitt = th.forma.filter(e => e === 'V').length;
-            return `<span style="color:#fbbf24;font-weight:bold">📈 FORMA ${th.name}:</span> ` +
+            return `<span style="color:#fbbf24;font-weight:bold">📈 FORMA ${esc(th.name)}:</span> ` +
                 th.forma.map(chip).join('&thinsp;') +
                 ` <span style="color:var(--accent-color)">(${vitt}/${th.forma.length} vinte, ${th.played} partite IPBA in totale)</span>`;
         }
@@ -446,13 +451,13 @@
             if (at.alboOro && at.alboOro[0]) {
                 const a = at.alboOro[0];
                 s += `<span style="color:#fbbf24;font-weight:bold">🏆 ALBO D'ORO:</span> ` +
-                    `<span style="color:#e2e8f0">${a.team}</span> <span style="color:var(--accent-color)">${a.count} eventi vinti</span>` +
+                    `<span style="color:#e2e8f0">${esc(a.team)}</span> <span style="color:var(--accent-color)">${a.count} eventi vinti</span>` +
                     ` <span style="color:#94a3b8">(record storico IPBA)</span>` + SEP;
             }
             if (at.veterane && at.veterane[0]) {
                 const v = at.veterane[0];
                 s += `<span style="color:#fbbf24;font-weight:bold">🎖️ VETERANA:</span> ` +
-                    `<span style="color:#e2e8f0">${v.team}</span> <span style="color:var(--accent-color)">${v.count} partite IPBA giocate</span>` +
+                    `<span style="color:#e2e8f0">${esc(v.team)}</span> <span style="color:var(--accent-color)">${v.count} partite IPBA giocate</span>` +
                     ` <span style="color:#94a3b8">(più di tutte)</span>` + SEP;
             }
             return s;
@@ -466,8 +471,8 @@
             if (!played.length) return '';
 
             const SEP = ' &nbsp;&nbsp;&bull;&nbsp;&nbsp; ';
-            const hi = (t) => `<span style="color:#e2e8f0">${t}</span>`;
-            const acc = (t) => `<span style="color:var(--accent-color)">${t}</span>`;
+            const hi = (t) => `<span style="color:#e2e8f0">${esc(t)}</span>`;
+            const acc = (t) => `<span style="color:var(--accent-color)">${esc(t)}</span>`;
             const lab = (emoji, t) => `<span style="color:#fbbf24;font-weight:bold">${emoji} ${t}:</span>`;
             const secs = (v) => Math.round(v) + 's';
             const parts = [];
