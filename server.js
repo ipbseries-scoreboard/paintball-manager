@@ -7,8 +7,8 @@
  *     lo inoltra a tutti gli schermi. I comandi degli arbitri tornano alla Regia.
  *
  * Perché è meglio del P2P (PeerJS/WebRTC):
- *   - niente Match ID "occupati": se si apre una seconda Regia, la vecchia
- *     viene scollegata automaticamente (l'ultima vince);
+ *   - il Match ID Ã¨ protetto: una seconda Regia puÃ² sostituire la prima solo
+ *     presentando lo stesso hostToken;
  *   - niente negoziazione WebRTC (STUN/TURN/ICE) che fallisce su certe reti;
  *   - chi si collega tardi riceve subito l'ultimo stato completo (cache);
  *   - un solo processo, una sola porta.
@@ -17,7 +17,9 @@
  * Richiede: npm install (dipendenza "ws"), gestito da Avvia_Server_Locale.bat
  *
  * Protocollo (messaggi JSON, i tipi di servizio iniziano con "_"):
- *   client→server (primo msg): {type:'hello', room:'IPBA-1674', role:'host'|'client'}
+ *   client→server (primo msg): {type:'hello', room:'IPBA-1674', role:'host'|'controller'|'viewer'}
+ *   La Regia invia hostToken + controlToken; un controller invia token.
+ *   Il vecchio ruolo "client" resta accettato come viewer di sola lettura.
  *   server→nuovo arrivato:     {type:'_welcome', role, hostOnline, count}
  *   server→schermi:            {type:'_hostOnline'} / {type:'_hostOffline'} / {type:'_hb'}
  *   server→Regia:              {type:'_roster', count} / {type:'_evicted'} / {type:'_hb'}
@@ -31,6 +33,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const WebSocket = require('ws');
 
 const PORT = parseInt(process.argv[2] || process.env.PORT || '9000', 10);
@@ -63,9 +66,12 @@ function proxyIpba(req, res) {
         if (!res.headersSent) res.writeHead(code || 502, { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
         res.end(msg);
     };
+    const isAllowedTarget = (targetUrl) => !!targetUrl &&
+        (targetUrl.protocol === 'http:' || targetUrl.protocol === 'https:') &&
+        /(^|\.)(ipba\.it|gunzup\.com)$/i.test(targetUrl.hostname);
     let target = null;
     try { target = new URL(new URL(req.url, 'http://localhost').searchParams.get('url') || ''); } catch (e) { }
-    if (!target || !/(^|\.)(ipba\.it|gunzup\.com)$/i.test(target.hostname)) { fail('URL non valido: ammessi solo link ipba.it o gunzup.com', 400); return; }
+    if (!isAllowedTarget(target)) { fail('URL non valido: ammessi solo link HTTP/HTTPS di ipba.it o gunzup.com', 400); return; }
 
     const fetchRemote = (u, depth) => {
         const lib = u.protocol === 'http:' ? http : https;
@@ -73,7 +79,11 @@ function proxyIpba(req, res) {
             // Segue eventuali redirect (max 3)
             if (rs.statusCode >= 300 && rs.statusCode < 400 && rs.headers.location && depth < 3) {
                 rs.resume();
-                try { fetchRemote(new URL(rs.headers.location, u), depth + 1); } catch (e) { fail('Redirect non valido'); }
+                try {
+                    const redirected = new URL(rs.headers.location, u);
+                    if (!isAllowedTarget(redirected)) { fail('Redirect verso un dominio non consentito', 400); return; }
+                    fetchRemote(redirected, depth + 1);
+                } catch (e) { fail('Redirect non valido'); }
                 return;
             }
             res.writeHead(rs.statusCode || 502, {
@@ -95,8 +105,11 @@ const server = http.createServer((req, res) => {
         let urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
         if (urlPath === '/' || urlPath === '') urlPath = '/index.html';
         if (urlPath === '/ipba') { proxyIpba(req, res); return; }
-        const filePath = path.join(ROOT, path.normalize(urlPath));
-        if (!filePath.startsWith(ROOT)) { res.writeHead(403); res.end('Accesso negato'); return; }
+        const rootPath = path.resolve(ROOT);
+        const filePath = path.resolve(rootPath, '.' + urlPath);
+        const rootPrefix = rootPath.endsWith(path.sep) ? rootPath : rootPath + path.sep;
+        const insideRoot = filePath.toLowerCase().startsWith(rootPrefix.toLowerCase());
+        if (!insideRoot) { res.writeHead(403); res.end('Accesso negato'); return; }
         fs.readFile(filePath, (err, buf) => {
             if (err) { res.writeHead(404); res.end('File non trovato: ' + urlPath); return; }
             res.writeHead(200, {
@@ -111,47 +124,259 @@ const server = http.createServer((req, res) => {
 });
 
 // ---------- RELAY WEBSOCKET ----------
-const wss = new WebSocket.Server({ server, path: '/ws' });
+function positiveEnvInt(name, fallback) {
+    const parsed = Number.parseInt(process.env[name], 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
-// room -> { host: ws|null, clients: Set<ws>, lastFullSync: string|null }
+const WS_MAX_PAYLOAD = positiveEnvInt('PM_RELAY_MAX_PAYLOAD', 16 * 1024 * 1024);
+const MAX_BUFFERED_AMOUNT = positiveEnvInt('PM_RELAY_MAX_BUFFERED', 32 * 1024 * 1024);
+const MAX_CONNECTIONS = positiveEnvInt('PM_RELAY_MAX_CONNECTIONS', 512);
+const MAX_CONNECTIONS_PER_IP = positiveEnvInt('PM_RELAY_MAX_CONNECTIONS_PER_IP', 64);
+const MAX_CLIENTS_PER_ROOM = positiveEnvInt('PM_RELAY_MAX_CLIENTS_PER_ROOM', 256);
+const MAX_ROOMS = positiveEnvInt('PM_RELAY_MAX_ROOMS', 1024);
+const HELLO_TIMEOUT_MS = positiveEnvInt('PM_RELAY_HELLO_TIMEOUT_MS', 5000);
+const PING_INTERVAL_MS = positiveEnvInt('PM_RELAY_PING_INTERVAL_MS', 30000);
+const REQUEST_STATE_INTERVAL_MS = positiveEnvInt('PM_RELAY_REQUEST_STATE_INTERVAL_MS', 1500);
+
+const wss = new WebSocket.Server({
+    server,
+    path: '/ws',
+    maxPayload: WS_MAX_PAYLOAD
+});
+
+// room -> { host, clients, lastFullSync, hostToken, controlToken }
 const rooms = new Map();
+const authFailures = new Map();
+const AUTH_WINDOW_MS = 60000;
+const AUTH_BLOCK_MS = 30000;
+const AUTH_MAX_FAILURES = 8;
 
 function getRoom(name) {
     let r = rooms.get(name);
-    if (!r) { r = { host: null, clients: new Set(), lastFullSync: null }; rooms.set(name, r); }
+    if (!r) {
+        r = {
+            host: null,
+            clients: new Set(),
+            lastFullSync: null,
+            hostToken: null,
+            controlToken: null
+        };
+        rooms.set(name, r);
+    }
     return r;
 }
 
 function safeSend(ws, data) {
     if (ws && ws.readyState === WebSocket.OPEN) {
-        try { ws.send(data); } catch (e) { }
+        const queued = Number(ws.bufferedAmount) || 0;
+        const nextSize = typeof data === 'string' ? Buffer.byteLength(data) : (data && data.length) || 0;
+        if (queued + nextSize > MAX_BUFFERED_AMOUNT) {
+            try { ws.terminate(); } catch (e) { }
+            return false;
+        }
+        try { ws.send(data); return true; } catch (e) { }
     }
+    return false;
 }
 
 function notifyRoster(room) {
     safeSend(room.host, JSON.stringify({ type: '_roster', count: room.clients.size }));
 }
 
+function readToken(value) {
+    return typeof value === 'string' ? value : '';
+}
+
+function clientAddress(ws) {
+    return String(ws && ws._socket && ws._socket.remoteAddress || 'unknown');
+}
+
+function normalizeRoomName(value) {
+    if (typeof value !== 'string' || /[\u0000-\u001f\u007f-\u009f]/.test(value)) return null;
+    const normalized = value.trim().toUpperCase();
+    return normalized && normalized.length <= 80 ? normalized : null;
+}
+
+function cleanupUnusedRoom(roomName, room) {
+    if (!room || room.host || room.clients.size || room.hostToken || room.controlToken) return false;
+    if (rooms.get(roomName) !== room) return false;
+    rooms.delete(roomName);
+    return true;
+}
+
+function openConnectionsForAddress(address) {
+    let count = 0;
+    wss.clients.forEach(client => {
+        if (client.readyState !== WebSocket.CLOSED && clientAddress(client) === address) count += 1;
+    });
+    return count;
+}
+
+function authFailureKey(ws, role, roomName) {
+    return [clientAddress(ws), String(role || ''), String(roomName || '')].join('|');
+}
+
+function authIsBlocked(ws, role, roomName) {
+    const now = Date.now();
+    const key = authFailureKey(ws, role, roomName);
+    const entry = authFailures.get(key);
+    if (!entry) return false;
+    if (entry.blockedUntil > now) return true;
+    if (now - entry.windowStartedAt > AUTH_WINDOW_MS) authFailures.delete(key);
+    return false;
+}
+
+function recordAuthFailure(ws, role, roomName) {
+    const now = Date.now();
+    const key = authFailureKey(ws, role, roomName);
+    let entry = authFailures.get(key);
+    if (!entry || now - entry.windowStartedAt > AUTH_WINDOW_MS) {
+        entry = { windowStartedAt: now, failures: 0, blockedUntil: 0 };
+    }
+    entry.failures += 1;
+    if (entry.failures >= AUTH_MAX_FAILURES) entry.blockedUntil = now + AUTH_BLOCK_MS;
+    authFailures.set(key, entry);
+
+    if (authFailures.size > 512) {
+        for (const [savedKey, savedEntry] of authFailures) {
+            if (now - savedEntry.windowStartedAt > AUTH_WINDOW_MS && savedEntry.blockedUntil <= now) {
+                authFailures.delete(savedKey);
+            }
+        }
+    }
+}
+
+function clearAuthFailures(ws, role, roomName) {
+    authFailures.delete(authFailureKey(ws, role, roomName));
+}
+
+// Confronto a tempo costante: evita di rivelare la parte corretta del token.
+// I token vuoti non sono mai credenziali valide.
+function sameToken(expected, received) {
+    expected = readToken(expected);
+    received = readToken(received);
+    if (!expected || !received) return false;
+    const a = Buffer.from(expected, 'utf8');
+    const b = Buffer.from(received, 'utf8');
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function rejectAuth(ws, code, message) {
+    safeSend(ws, JSON.stringify({ type: '_authError', code, message }));
+    // 1008 = violazione delle regole del protocollo. I messaggi giÃ  accodati
+    // vengono trasmessi prima della chiusura, inclusa la spiegazione qui sopra.
+    try { ws.close(1008, 'Autenticazione non valida'); } catch (e) { }
+}
+
+function normalizeRole(role) {
+    if (role === 'host' || role === 'controller' || role === 'viewer') return role;
+    // CompatibilitÃ  con i vecchi schermi, che usavano il ruolo "client".
+    return 'viewer';
+}
+
 wss.on('connection', (ws) => {
+    // Registra subito i gestori di trasporto: anche un payload rifiutato da
+    // `ws` o una connessione oltre i limiti non deve produrre errori non gestiti.
+    ws.on('error', () => { });
+    ws._isAlive = true;
+    ws.on('pong', () => { ws._isAlive = true; });
+
+    const address = clientAddress(ws);
+    if (wss.clients.size > MAX_CONNECTIONS || openConnectionsForAddress(address) > MAX_CONNECTIONS_PER_IP) {
+        try { ws.close(1013, 'Relay occupato'); } catch (e) { }
+        return;
+    }
+
     ws._room = null;
     ws._role = null;
+    ws._authRejected = false;
+    ws._lastRequestStateAt = 0;
+    ws._helloTimer = setTimeout(() => {
+        if (!ws._room && !ws._authRejected) {
+            try { ws.close(1008, 'Hello timeout'); } catch (e) { }
+        }
+    }, HELLO_TIMEOUT_MS);
+    if (typeof ws._helloTimer.unref === 'function') ws._helloTimer.unref();
 
     ws.on('message', (raw) => {
+        if (ws._authRejected) return;
         const text = raw.toString();
 
         // Primo messaggio: presentazione (hello)
         if (!ws._room) {
+            clearTimeout(ws._helloTimer);
+            ws._helloTimer = null;
             let hello;
-            try { hello = JSON.parse(text); } catch (e) { ws.close(); return; }
-            if (!hello || hello.type !== 'hello' || !hello.room) { ws.close(); return; }
+            try { hello = JSON.parse(text); } catch (e) { ws.close(1008, 'Hello non valido'); return; }
+            if (!hello || hello.type !== 'hello') { ws.close(1008, 'Hello non valido'); return; }
 
-            const roomName = String(hello.room).trim().toUpperCase();
-            const room = getRoom(roomName);
-            ws._room = roomName;
-            ws._role = hello.role === 'host' ? 'host' : 'client';
+            const roomName = normalizeRoomName(hello.room);
+            const role = normalizeRole(hello.role);
+            if (!roomName) {
+                ws._authRejected = true;
+                rejectAuth(ws, 'ROOM_INVALID', 'Match ID non valido. Usare da 1 a 80 caratteri senza caratteri di controllo.');
+                return;
+            }
 
-            if (ws._role === 'host') {
-                // L'ultima Regia vince: la precedente viene avvisata e scollegata.
+            if ((role === 'host' || role === 'controller') && authIsBlocked(ws, role, roomName)) {
+                ws._authRejected = true;
+                rejectAuth(ws, 'AUTH_RATE_LIMIT', 'Troppi tentativi non validi. Attendere 30 secondi.');
+                return;
+            }
+
+            let room = rooms.get(roomName);
+            if (!room && role === 'controller') {
+                ws._authRejected = true;
+                rejectAuth(ws, 'REGIA_NOT_READY', 'Regia non ancora inizializzata.');
+                return;
+            }
+
+            if (!room) {
+                if (rooms.size >= MAX_ROOMS) {
+                    ws._authRejected = true;
+                    rejectAuth(ws, 'ROOM_LIMIT', 'Numero massimo di Match ID attivi raggiunto.');
+                    return;
+                }
+                room = getRoom(roomName);
+            }
+
+            if (role === 'host') {
+                const hostToken = readToken(hello.hostToken || hello.token);
+                const controlToken = readToken(hello.controlToken);
+                if (!hostToken || !/^\d{6}$/.test(controlToken)) {
+                    ws._authRejected = true;
+                    recordAuthFailure(ws, role, roomName);
+                    cleanupUnusedRoom(roomName, room);
+                    rejectAuth(ws, 'HOST_TOKEN_REQUIRED', 'Credenziali Regia mancanti.');
+                    return;
+                }
+                if (room.hostToken && !sameToken(room.hostToken, hostToken)) {
+                    recordAuthFailure(ws, role, roomName);
+                    ws._authRejected = true;
+                    rejectAuth(ws, 'HOST_TOKEN_INVALID', 'Un\'altra Regia protetta usa gia questo Match ID.');
+                    return;
+                }
+
+                const controlTokenChanged = !!room.controlToken && !sameToken(room.controlToken, controlToken);
+                if (!room.hostToken) room.hostToken = hostToken;
+                room.controlToken = controlToken;
+                clearAuthFailures(ws, role, roomName);
+                ws._room = roomName;
+                ws._role = role;
+
+                // Se la Regia cambia PIN, i controller giÃ  autenticati devono
+                // riconnettersi. I viewer, essendo di sola lettura, restano online.
+                if (controlTokenChanged) {
+                    room.clients.forEach(client => {
+                        if (client._role === 'controller') {
+                            client._authRejected = true;
+                            rejectAuth(client, 'CONTROL_TOKEN_CHANGED', 'Il PIN arbitro Ã¨ cambiato: riconnettersi con il nuovo PIN.');
+                        }
+                    });
+                }
+
+                // Solo una Regia con lo stesso hostToken puÃ² sostituire quella attiva.
                 if (room.host && room.host !== ws) {
                     safeSend(room.host, JSON.stringify({ type: '_evicted' }));
                     try { room.host.close(); } catch (e) { }
@@ -161,12 +386,35 @@ wss.on('connection', (ws) => {
                 room.clients.forEach(c => safeSend(c, JSON.stringify({ type: '_hostOnline' })));
                 console.log(`[RELAY] Regia collegata alla stanza ${roomName} (${room.clients.size} schermi in attesa)`);
             } else {
+                if (role === 'controller' && !room.controlToken) {
+                    ws._authRejected = true;
+                    rejectAuth(ws, 'REGIA_NOT_READY', 'Regia non ancora inizializzata.');
+                    return;
+                }
+                if (role === 'controller' && (!/^\d{6}$/.test(readToken(hello.token)) || !sameToken(room.controlToken, hello.token))) {
+                    ws._authRejected = true;
+                    recordAuthFailure(ws, role, roomName);
+                    rejectAuth(ws, 'CONTROL_TOKEN_INVALID', 'PIN arbitro non valido o Regia non ancora inizializzata.');
+                    return;
+                }
+                if (role === 'controller') clearAuthFailures(ws, role, roomName);
+
+                if (room.clients.size >= MAX_CLIENTS_PER_ROOM) {
+                    ws._authRejected = true;
+                    cleanupUnusedRoom(roomName, room);
+                    rejectAuth(ws, 'ROOM_FULL', 'Questa stanza ha raggiunto il numero massimo di schermi e controller.');
+                    return;
+                }
+
+                ws._room = roomName;
+                ws._role = role;
                 room.clients.add(ws);
-                safeSend(ws, JSON.stringify({ type: '_welcome', role: 'client', hostOnline: !!room.host }));
-                // Chi arriva tardi riceve subito l'ultimo stato completo conosciuto
-                if (room.lastFullSync) safeSend(ws, room.lastFullSync);
+                safeSend(ws, JSON.stringify({ type: '_welcome', role, hostOnline: !!room.host }));
+                // Una cache Ã¨ attendibile solo mentre la Regia che l'ha prodotta
+                // Ã¨ realmente online; altrimenti si attende un nuovo FULL_SYNC.
+                if (room.host && room.lastFullSync) safeSend(ws, room.lastFullSync);
                 notifyRoster(room);
-                console.log(`[RELAY] Schermo collegato alla stanza ${roomName} (totale: ${room.clients.size})`);
+                console.log(`[RELAY] ${role === 'controller' ? 'Controller' : 'Schermo'} collegato alla stanza ${roomName} (totale: ${room.clients.size})`);
             }
             return;
         }
@@ -174,20 +422,34 @@ wss.on('connection', (ws) => {
         const room = rooms.get(ws._room);
         if (!room) return;
 
-        if (ws._role === 'host') {
+        if (ws._role === 'host' && room.host === ws) {
             // Stato dalla Regia: cache del FULL_SYNC + inoltro identico a tutti gli schermi
             try {
                 const p = JSON.parse(text);
                 if (p && p.type === 'FULL_SYNC') room.lastFullSync = text;
             } catch (e) { }
             room.clients.forEach(c => safeSend(c, text));
-        } else {
-            // Comandi dagli schermi (referee) verso la Regia
+        } else if (ws._role === 'controller') {
+            // Solo un controller autenticato puÃ² inviare comandi alla Regia.
             safeSend(room.host, text);
+        } else if (ws._role === 'viewer') {
+            // I viewer sono di sola lettura, ma possono chiedere un nuovo stato
+            // completo dopo l'ingresso o una riconnessione.
+            try {
+                const packet = JSON.parse(text);
+                if (packet && packet.type === 'requestState' && room.host) {
+                    const now = Date.now();
+                    if (now - ws._lastRequestStateAt >= REQUEST_STATE_INTERVAL_MS) {
+                        ws._lastRequestStateAt = now;
+                        safeSend(room.host, text);
+                    }
+                }
+            } catch (e) { }
         }
     });
 
     ws.on('close', () => {
+        clearTimeout(ws._helloTimer);
         const room = ws._room && rooms.get(ws._room);
         if (!room) return;
         if (ws._role === 'host') {
@@ -200,10 +462,26 @@ wss.on('connection', (ws) => {
             room.clients.delete(ws);
             notifyRoster(room);
         }
+        // Le stanze inizializzate conservano token e ownership anche se restano
+        // offline. Si eliminano solo attese vuote create da viewer pre-Regia.
+        cleanupUnusedRoom(ws._room, room);
     });
-
-    ws.on('error', () => { });
 });
+
+// Heartbeat WebSocket: i browser rispondono automaticamente al ping. Una
+// connessione che non risponde entro il giro successivo viene liberata, così
+// non occupa per sempre i limiti del relay.
+const pingInterval = setInterval(() => {
+    wss.clients.forEach(ws => {
+        if (ws._isAlive === false) {
+            try { ws.terminate(); } catch (e) { }
+            return;
+        }
+        ws._isAlive = false;
+        try { ws.ping(); } catch (e) { }
+    });
+}, PING_INTERVAL_MS);
+if (typeof pingInterval.unref === 'function') pingInterval.unref();
 
 // Heartbeat applicativo: permette agli schermi di capire di essere vivi
 // anche quando la partita è ferma e non arrivano pacchetti di stato.

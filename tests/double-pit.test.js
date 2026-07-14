@@ -49,3 +49,18 @@ test('splits more than two same-time matches into separate blocks', () => {
     assert.equal(DoublePit.isDoubleSlot(matches, 2), false);
     assert.equal(DoublePit.getPeerIndex(matches, 2), -1);
 });
+
+test('returns to an earlier unfinished slot after a manual jump forward', () => {
+    const matches = [
+        match('09:30', 'A'),
+        match('09:30', 'C'),
+        match('10:00', 'E'),
+        match('10:00', 'G')
+    ];
+    DoublePit.prepare(matches);
+
+    matches[2].savedState = { finished: true };
+    matches[3].savedState = { finished: true };
+
+    assert.equal(DoublePit.getNextPendingIndex(matches, 3), 0);
+});

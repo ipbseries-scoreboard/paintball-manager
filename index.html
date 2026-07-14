@@ -965,7 +965,7 @@
         <div id="top-bar">
             NEXT: <span id="tb-teams" style="color: white; margin-left: 10px;">-- vs --</span>
             <span id="tb-score" class="tb-live-score" style="display:none;">0 - 0</span>
-            <span id="conn-count" style="margin-left: auto; margin-right: 20px; font-size: 0.8rem; color: #94a3b8; font-weight: bold;">Connessi: 0</span>
+            <span id="conn-count-topbar" style="margin-left: auto; margin-right: 20px; font-size: 0.8rem; color: #94a3b8; font-weight: bold;">Connessi: 0</span>
         </div>
         <script>
             window.onerror = function (msg, url, line, col, error) {
@@ -1127,6 +1127,14 @@
                                 <small style="display: block; color: #94a3b8;">Usa questo link da
                                     smartphone per controllare punti e timer dal campo.</small>
                             </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>PIN Controllo Arbitro</label>
+                            <input type="text" id="control-pin-input" class="form-control" inputmode="numeric"
+                                maxlength="6" autocomplete="off" placeholder="6 cifre">
+                            <small style="color: #94a3b8;">Il Match ID identifica l'evento; questo PIN autorizza i
+                                comandi. I normali schermi restano in sola lettura.</small>
                         </div>
 
                         <!-- Custom Audio -->
@@ -1355,7 +1363,7 @@
 
                 <div
                     style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-top: 15px; border-top: 1px solid #334155; margin-top: auto;">
-                    <button class="btn btn-danger" id="btn-reset-tournament" onclick="clearEntireTournament()"
+                    <button class="btn btn-danger" id="btn-reset-tournament"
                         style="background: #991b1b; border-color: #7f1d1d; color: white;">🗑️ AZZERA INTERO TORNEO</button>
                     <div style="display: flex; gap: 10px;">
                         <button class="btn" style="border-color: #64748b; color: #94a3b8;"
@@ -1408,6 +1416,20 @@
                         Il primo download è lungo (~5 min); poi aggiorna solo gli eventi nuovi. Con 💾 ESPORTA salvi
                         l'archivio in un file da ricaricare con 📁 IMPORTA (così non riparti mai da zero).</small>
                     <div id="h2h-status" style="margin-top: 6px; font-size: 0.85rem; color: #94a3b8;"></div>
+                </div>
+
+                <div class="form-group"
+                    style="padding: 10px; background: rgba(34,197,94,0.08); border-radius: 5px; border: 1px solid rgba(34,197,94,0.35);">
+                    <label>Backup completo evento</label>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button id="btn-event-backup-export" class="btn"
+                            style="border-color: #22c55e; color: #22c55e; background: rgba(34,197,94,0.12);">SALVA BACKUP</button>
+                        <button id="btn-event-backup-import" class="btn"
+                            style="border-color: #38bdf8; color: #38bdf8; background: rgba(56,189,248,0.12);">RIPRISTINA BACKUP</button>
+                        <input type="file" id="event-backup-file-input" accept="application/json,.json" style="display: none;">
+                    </div>
+                    <small style="display: block; margin-top: 6px; color: #94a3b8;">Salva palinsesto, risultati,
+                        timer, impostazioni e loghi. Il file contiene anche il PIN arbitro: conservalo in modo sicuro.</small>
                 </div>
 
                 <div style="display: flex; flex-direction: column; gap: 15px;">
@@ -1950,11 +1972,70 @@
         <script src="lib/jspdf.umd.min.js"></script>
         <script>window.jspdf || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>');</script>
         <script src="double-pit.js"></script>
+        <script src="event-backup.js"></script>
 
         <!-- SCRIPT -->
         <script>
+            function readJsonStorage(key, fallback) {
+                try {
+                    const raw = localStorage.getItem(key);
+                    return raw ? JSON.parse(raw) : fallback;
+                } catch (e) {
+                    console.warn(`Archivio locale non valido (${key}):`, e);
+                    return fallback;
+                }
+            }
+
+            function makeSecureToken() {
+                if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+                if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+                    const bytes = new Uint8Array(24);
+                    window.crypto.getRandomValues(bytes);
+                    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+                }
+                return `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+            }
+
+            function makeControlPin() {
+                if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+                    const value = new Uint32Array(1);
+                    window.crypto.getRandomValues(value);
+                    return String(100000 + (value[0] % 900000));
+                }
+                return String(Math.floor(100000 + Math.random() * 900000));
+            }
+
+            function normalizeMatchIdValue(value) {
+                if (typeof value !== 'string') return '';
+                let matchId = value.trim().toUpperCase().replace(/[\u0000-\u001f\u007f-\u009f]/g, '');
+                if (matchId && !matchId.startsWith('IPBA-')) matchId = 'IPBA-' + matchId;
+                return matchId.slice(0, 80);
+            }
+
             // Load Saved Settings
-            const savedSettings = JSON.parse(localStorage.getItem('pm_settings') || "{}");
+            const savedSettings = readJsonStorage('pm_settings', {});
+            savedSettings.matchId = normalizeMatchIdValue(savedSettings.matchId);
+            if (typeof savedSettings.logPassword !== 'string') savedSettings.logPassword = '';
+            if (!/^\d{6}$/.test(String(savedSettings.controlPin || ''))) {
+                savedSettings.controlPin = makeControlPin();
+            }
+
+            const REGIA_HOST_TOKEN_KEY = 'pm_host_token';
+            let regiaHostToken = localStorage.getItem(REGIA_HOST_TOKEN_KEY);
+            if (!regiaHostToken) {
+                regiaHostToken = makeSecureToken();
+                localStorage.setItem(REGIA_HOST_TOKEN_KEY, regiaHostToken);
+            }
+
+            const REGIA_LEADER_KEY = 'pm_regia_leader_v1';
+            // Ogni istanza della pagina deve avere un ID proprio. sessionStorage
+            // viene copiato quando il browser duplica una scheda e permetterebbe
+            // a due Regie di apparire come la stessa istanza.
+            const regiaTabId = makeSecureToken();
+            let regiaIsLeader = false;
+            let regiaTakeoverPending = false;
+            let regiaLeaseTimer = null;
+            let regiaStateHeartbeatTimer = null;
 
             // Forzatura aggiornamento alla lingua inglese per vecchi utenti
             if (savedSettings.lang === 'it-IT' && !savedSettings.upgradedToEnglishTTS) {
@@ -1963,6 +2044,8 @@
                 savedSettings.upgradedToEnglishTTS = true;
                 localStorage.setItem('pm_settings', JSON.stringify(savedSettings));
             }
+            // Persist the generated control PIN even on a fresh installation.
+            localStorage.setItem('pm_settings', JSON.stringify(savedSettings));
 
             const CONFIG = {
                 gameTime: (parseInt(savedSettings.gameDuration) || 10) * 60,
@@ -1974,7 +2057,7 @@
             };
 
             let state = {
-                mode: 'IDLE', timer: CONFIG.gameTime, timerMode: 'GAME',
+                mode: 'IDLE', timer: CONFIG.gameTime, timerMode: 'GAME', gameTimeRemaining: CONFIG.gameTime,
                 teams: { A: { name: 'TEAM A', score: 0, timeouts: 1, penalties: 0, techUsed: false, color: '#3b82f6' }, B: { name: 'TEAM B', score: 0, timeouts: 1, penalties: 0, techUsed: false, color: '#ef4444' } },
                 basesSwapped: false,
                 settings: {
@@ -1984,6 +2067,7 @@
                     confirmTowel: !!savedSettings.confirmTowel,
                     confirmTech: !!savedSettings.confirmTech,
                     hapticReferee: savedSettings.hapticReferee !== false,
+                    outdoorMode: savedSettings.outdoorMode === true,
                     confirmSkipSlot: savedSettings.confirmSkipSlot !== false,
                     confirmNoPoint: savedSettings.confirmNoPoint !== false,
                     confirmUndo: savedSettings.confirmUndo !== false, // NEW
@@ -1994,7 +2078,8 @@
                     goldenDuration: parseInt(savedSettings.goldenDuration) || 3,
                     voiceURI: savedSettings.voiceURI || null,
                     mercyDiff: parseInt(savedSettings.mercyDiff) || 4,
-                    matchId: savedSettings.matchId || "",
+                    matchId: typeof savedSettings.matchId === 'string' ? savedSettings.matchId : "",
+                    controlPin: String(savedSettings.controlPin),
                     logPassword: savedSettings.logPassword || "",
                     buzzerMapping: savedSettings.buzzerMapping || {
                         "GP0_B0": "POINT_A",
@@ -2025,8 +2110,9 @@
                 showLayoutOverlay: false,
                 showSchedule: false, // NEW
                 currentMatchEvents: [],
-                outdoorMode: false, // NEW
-                clanConfig: JSON.parse(localStorage.getItem('pm_stream_clans') || "[]"), // Sync team logos
+                pendingRotationAction: null,
+                outdoorMode: savedSettings.outdoorMode === true,
+                clanConfig: readJsonStorage('pm_stream_clans', []), // Sync team logos
                 matchLog: [], intervalInstance: null, flags: { warn60: false, warn30: false, warn20: false, warn10: false }
             };
 
@@ -2040,10 +2126,116 @@
                 scaleY: 2.1,
                 limit: 11,
                 dot: '.',
-                ...JSON.parse(localStorage.getItem('pm_team_style') || "{}")
+                ...readJsonStorage('pm_team_style', {})
             };
             let pendingTowelSide = null;
             let pendingPointSide = null;
+            let pendingPointOriginalMode = null;
+            const REMOTE_ACK_STORAGE_KEY = 'pm_remote_ack_cache_v1';
+            const recentRemoteCommandIds = new Map();
+
+            function normalizeRemoteCommandRoom(roomName) {
+                return String(roomName || '').trim().toUpperCase().slice(0, 80);
+            }
+
+            function remoteCommandCacheKey(commandId, roomName = state.settings.matchId) {
+                return JSON.stringify([
+                    normalizeRemoteCommandRoom(roomName),
+                    String(commandId || '').slice(0, 160)
+                ]);
+            }
+
+            function persistRecentRemoteAcks() {
+                const now = Date.now();
+                const entries = [];
+                for (const [cacheKey, entry] of recentRemoteCommandIds) {
+                    const ttlMs = Number(entry && entry.ttlMs) || 120000;
+                    if (!entry || now - Number(entry.savedAt) > ttlMs) {
+                        recentRemoteCommandIds.delete(cacheKey);
+                        continue;
+                    }
+                    entries.push({
+                        room: normalizeRemoteCommandRoom(entry.room),
+                        commandId: String(entry.ack && entry.ack.commandId || '').slice(0, 160),
+                        savedAt: Number(entry.savedAt),
+                        ttlMs,
+                        ack: entry.ack,
+                        controlToken: String(entry.controlToken || '').slice(0, 160)
+                    });
+                }
+                entries.sort((a, b) => b.savedAt - a.savedAt);
+                try {
+                    localStorage.setItem(REMOTE_ACK_STORAGE_KEY, JSON.stringify(entries.slice(0, 200)));
+                } catch (e) {
+                    console.warn('Cache conferme remote non salvata:', e);
+                }
+            }
+
+            function loadRecentRemoteAcksFromStorage() {
+                const saved = readJsonStorage(REMOTE_ACK_STORAGE_KEY, []);
+                if (!Array.isArray(saved)) return;
+                const now = Date.now();
+                saved.slice(0, 200).forEach((entry) => {
+                    if (!entry || typeof entry !== 'object' || !entry.ack || typeof entry.ack !== 'object') return;
+                    const room = normalizeRemoteCommandRoom(entry.room);
+                    const commandId = String(entry.commandId || '').slice(0, 160);
+                    const cacheKey = remoteCommandCacheKey(commandId, room);
+                    const savedAt = Number(entry.savedAt);
+                    const ttlMs = Math.min(120000, Math.max(1000, Number(entry.ttlMs) || 120000));
+                    if (!room || !Number.isFinite(savedAt) || now - savedAt > ttlMs) return;
+                    if (!commandId || String(entry.ack.commandId || '') !== commandId) return;
+                    const ack = {
+                        type: 'COMMAND_ACK',
+                        commandId,
+                        accepted: entry.ack.accepted === true,
+                        message: String(entry.ack.message || '').slice(0, 300),
+                        receivedAt: Number(entry.ack.receivedAt) || savedAt
+                    };
+                    const current = recentRemoteCommandIds.get(cacheKey);
+                    if (!current || Number(current.savedAt) < savedAt) {
+                        recentRemoteCommandIds.set(cacheKey, {
+                            savedAt,
+                            ttlMs,
+                            ack,
+                            room,
+                            controlToken: String(entry.controlToken || '').slice(0, 160)
+                        });
+                    }
+                });
+            }
+
+            function getRecentRemoteAck(cmd) {
+                if (!cmd || !cmd.commandId) return null;
+                const id = remoteCommandCacheKey(cmd.commandId);
+                const now = Date.now();
+                for (const [savedId, entry] of recentRemoteCommandIds) {
+                    if (!entry || now - entry.savedAt > (entry.ttlMs || 120000)) recentRemoteCommandIds.delete(savedId);
+                }
+                const entry = recentRemoteCommandIds.get(id);
+                if (entry && entry.ack && entry.ack.accepted === false &&
+                    entry.controlToken !== String(cmd.controlToken || '')) return null;
+                return entry ? entry.ack : null;
+            }
+
+            function rememberRemoteAck(commandId, ack) {
+                if (!commandId) return;
+                const room = normalizeRemoteCommandRoom(state.settings.matchId);
+                const terminalPointRejection = ack && ack.accepted === false &&
+                    /verifica punto non .*attiva/i.test(String(ack.message || ''));
+                recentRemoteCommandIds.set(remoteCommandCacheKey(commandId), {
+                    savedAt: Date.now(),
+                    ack,
+                    room,
+                    controlToken: String((ack && ack._cacheControlToken) || '').slice(0, 160),
+                    // Un rifiuto temporaneo non modifica lo stato: basta una breve
+                    // finestra per assorbire il doppio trasporto. Gli esiti eseguiti
+                    // e il rifiuto terminale restano invece pienamente idempotenti.
+                    ttlMs: ack && ack.accepted === false && !terminalPointRejection ? 1500 : 120000
+                });
+                persistRecentRemoteAcks();
+            }
+
+            loadRecentRemoteAcksFromStorage();
 
             // --- Optimized Sync Tracking ---
             let lastSyncNames = { A: '', B: '' };
@@ -2258,17 +2450,280 @@
             let reconnectTimeout = null;
             const syncChannel = new BroadcastChannel('pm_sync');
 
+            function readRegiaLease() {
+                try { return JSON.parse(localStorage.getItem(REGIA_LEADER_KEY) || 'null'); }
+                catch (e) { return null; }
+            }
+
+            function writeRegiaLease() {
+                const lease = { tabId: regiaTabId, expiresAt: Date.now() + 7000 };
+                localStorage.setItem(REGIA_LEADER_KEY, JSON.stringify(lease));
+                return lease;
+            }
+
+            function hasCurrentRegiaLease() {
+                if (!regiaIsLeader) return false;
+                const lease = readRegiaLease();
+                return !!lease && lease.tabId === regiaTabId;
+            }
+
+            function canControlRegiaState() {
+                return hasCurrentRegiaLease() && !regiaTakeoverPending;
+            }
+
+            function ensureCurrentRegiaLease() {
+                if (canControlRegiaState()) return true;
+                if (regiaTakeoverPending) return false;
+                if (regiaIsLeader) enterRegiaStandby('Un altra scheda Regia ha preso il controllo.');
+                return false;
+            }
+
+            function showRegiaStandby(reason) {
+                let overlay = document.getElementById('regia-standby-overlay');
+                if (!overlay) {
+                    overlay = document.createElement('div');
+                    overlay.id = 'regia-standby-overlay';
+                    overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(2,6,23,.97);color:white;display:flex;align-items:center;justify-content:center;padding:24px;font-family:Arial,sans-serif;text-align:center;';
+                    overlay.innerHTML = `<div style="max-width:620px;border:2px solid #f59e0b;border-radius:18px;padding:28px;background:#0f172a;box-shadow:0 20px 60px rgba(0,0,0,.55)">
+                        <div style="font-size:48px;margin-bottom:10px">&#9888;</div>
+                        <h1 style="margin:0 0 12px;color:#fbbf24">REGIA SECONDARIA</h1>
+                        <p id="regia-standby-reason" style="font-size:18px;line-height:1.5;color:#cbd5e1"></p>
+                        <p style="color:#94a3b8">Questa scheda è in sola lettura e non può modificare timer o risultati.</p>
+                        <button onclick="takeOverRegia()" style="margin-top:12px;padding:14px 22px;border:1px solid #f59e0b;border-radius:10px;background:#f59e0b;color:#111827;font-size:17px;font-weight:900;cursor:pointer">PRENDI IL CONTROLLO</button>
+                    </div>`;
+                    document.body.appendChild(overlay);
+                }
+                const reasonEl = document.getElementById('regia-standby-reason');
+                if (reasonEl) reasonEl.textContent = reason || 'È già attiva un’altra Regia per questo evento.';
+                overlay.style.display = 'flex';
+            }
+
+            function hideRegiaStandby() {
+                const overlay = document.getElementById('regia-standby-overlay');
+                if (overlay) overlay.style.display = 'none';
+            }
+
+            function stopRegiaNetworking() {
+                // Invalida anche l'eventuale creazione PeerJS ritardata avviata
+                // da initPeer() prima che questa scheda diventasse secondaria.
+                initPeerGeneration += 1;
+                if (reconnectTimeout) { clearTimeout(reconnectTimeout); reconnectTimeout = null; }
+                if (pingInterval) { clearInterval(pingInterval); pingInterval = null; }
+                if (typeof wsRetryTimer !== 'undefined' && wsRetryTimer) { clearTimeout(wsRetryTimer); wsRetryTimer = null; }
+                if (typeof wsHost !== 'undefined' && wsHost) {
+                    const oldWs = wsHost;
+                    wsHost = null;
+                    try { oldWs.close(); } catch (e) { }
+                }
+                if (typeof wsRelayActive !== 'undefined') wsRelayActive = false;
+                if (typeof wsClientCount !== 'undefined') wsClientCount = 0;
+                if (peerLocal && !peerLocal.destroyed) { try { peerLocal.destroy(); } catch (e) { } }
+                if (peerCloud && !peerCloud.destroyed) { try { peerCloud.destroy(); } catch (e) { } }
+                peerLocal = null;
+                peerCloud = null;
+                connections = [];
+                if (window.pendingRotation) {
+                    clearTimeout(window.pendingRotation);
+                    window.pendingRotation = null;
+                }
+                stopTimerLoop();
+                updateConnectionCount();
+            }
+
+            function enterRegiaStandby(reason) {
+                regiaTakeoverPending = false;
+                regiaIsLeader = false;
+                if (regiaLeaseTimer) { clearInterval(regiaLeaseTimer); regiaLeaseTimer = null; }
+                if (regiaStateHeartbeatTimer) { clearInterval(regiaStateHeartbeatTimer); regiaStateHeartbeatTimer = null; }
+                if (typeof wsEvicted !== 'undefined') wsEvicted = true;
+                stopRegiaNetworking();
+                showRegiaStandby(reason);
+            }
+
+            function renewRegiaLease() {
+                if (!regiaIsLeader) return;
+                const lease = readRegiaLease();
+                if (lease && lease.tabId !== regiaTabId) {
+                    enterRegiaStandby('Un’altra scheda Regia ha preso il controllo.');
+                    return;
+                }
+                writeRegiaLease();
+            }
+
+            function acquireRegiaLeadership(force = false) {
+                const lease = readRegiaLease();
+                const available = force || !lease || lease.tabId === regiaTabId || Number(lease.expiresAt) <= Date.now();
+                if (!available) {
+                    enterRegiaStandby('È già aperta una Regia attiva in un’altra scheda.');
+                    return false;
+                }
+
+                writeRegiaLease();
+                const confirmed = readRegiaLease();
+                if (!confirmed || confirmed.tabId !== regiaTabId) {
+                    enterRegiaStandby('Non è stato possibile ottenere il controllo esclusivo della Regia.');
+                    return false;
+                }
+
+                regiaIsLeader = true;
+                hideRegiaStandby();
+                if (regiaLeaseTimer) clearInterval(regiaLeaseTimer);
+                regiaLeaseTimer = setInterval(renewRegiaLease, 2000);
+                return true;
+            }
+
+            function reloadSettingsForRegiaTakeover() {
+                const incoming = readJsonStorage('pm_settings', {});
+                if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) return;
+
+                const booleanKeys = [
+                    'voice', 'autoStart', 'confirmTowel', 'confirmTech',
+                    'hapticReferee', 'outdoorMode', 'confirmSkipSlot',
+                    'confirmNoPoint', 'confirmUndo'
+                ];
+                booleanKeys.forEach((key) => {
+                    if (typeof incoming[key] === 'boolean') state.settings[key] = incoming[key];
+                });
+
+                const applyInteger = (key, min, max) => {
+                    if (!Object.prototype.hasOwnProperty.call(incoming, key)) return;
+                    const value = Number.parseInt(incoming[key], 10);
+                    if (Number.isInteger(value) && value >= min && value <= max) {
+                        state.settings[key] = value;
+                    }
+                };
+                applyInteger('gameDuration', 1, 120);
+                applyInteger('goldenDuration', 1, 120);
+                applyInteger('mercyDiff', 1, 20);
+                applyInteger('breakDuration', 0, 3600);
+                applyInteger('pointIntervalDuration', 1, 3600);
+                applyInteger('slotIntervalDuration', 1, 3600);
+                applyInteger('singleSlotIntervalDuration', 1, 3600);
+
+                const matchId = normalizeMatchIdValue(incoming.matchId);
+                if (matchId) state.settings.matchId = matchId;
+                const controlPin = String(incoming.controlPin || '');
+                if (/^\d{6}$/.test(controlPin)) state.settings.controlPin = controlPin;
+                if (typeof incoming.logPassword === 'string') state.settings.logPassword = incoming.logPassword.slice(0, 160);
+                if (typeof incoming.lang === 'string' && incoming.lang.length <= 20) state.settings.lang = incoming.lang;
+                if (incoming.voiceURI === null || typeof incoming.voiceURI === 'string') state.settings.voiceURI = incoming.voiceURI;
+                if (incoming.buzzerMapping && typeof incoming.buzzerMapping === 'object' && !Array.isArray(incoming.buzzerMapping)) {
+                    const mapping = Object.create(null);
+                    Object.entries(incoming.buzzerMapping).slice(0, 100).forEach(([key, value]) => {
+                        if (key === '__proto__' || key === 'prototype' || key === 'constructor') return;
+                        if (typeof value === 'string' && key.length <= 64 && value.length <= 64) mapping[key] = value;
+                    });
+                    state.settings.buzzerMapping = mapping;
+                }
+
+                const storedStyle = readJsonStorage('pm_team_style', null);
+                if (storedStyle && typeof storedStyle === 'object' && !Array.isArray(storedStyle)) {
+                    const nextStyle = { ...TEAM_STYLE };
+                    const fontSize = Number(storedStyle.fontSize);
+                    const scaleX = Number(storedStyle.scaleX);
+                    const scaleY = Number(storedStyle.scaleY);
+                    const limit = Number.parseInt(storedStyle.limit, 10);
+                    if (Number.isFinite(fontSize) && fontSize >= 8 && fontSize <= 300) nextStyle.fontSize = fontSize;
+                    if (Number.isFinite(scaleX) && scaleX >= 0.1 && scaleX <= 5) nextStyle.scaleX = scaleX;
+                    if (Number.isFinite(scaleY) && scaleY >= 0.1 && scaleY <= 5) nextStyle.scaleY = scaleY;
+                    if (Number.isInteger(limit) && limit >= 1 && limit <= 100) nextStyle.limit = limit;
+                    if (typeof storedStyle.fontFamily === 'string' && storedStyle.fontFamily.length <= 160) nextStyle.fontFamily = storedStyle.fontFamily;
+                    if (typeof storedStyle.bold === 'boolean') nextStyle.bold = storedStyle.bold;
+                    if (typeof storedStyle.dot === 'string' && storedStyle.dot.length <= 5) nextStyle.dot = storedStyle.dot;
+                    TEAM_STYLE = nextStyle;
+                }
+
+                const storedClans = readJsonStorage('pm_stream_clans', null);
+                if (Array.isArray(storedClans)) state.clanConfig = storedClans;
+                const cloudPreference = localStorage.getItem('pm_use_cloud');
+                const cloudToggle = document.getElementById('cloud-sync-toggle');
+                if (cloudToggle && cloudPreference !== null) cloudToggle.checked = cloudPreference === 'true';
+
+                state.outdoorMode = state.settings.outdoorMode === true;
+                CONFIG.gameTime = (state.settings.gameDuration || 10) * 60;
+                CONFIG.goldenTime = (state.settings.goldenDuration || 3) * 60;
+                CONFIG.mercyDiff = state.settings.mercyDiff || 4;
+                CONFIG.pointInterTime = state.settings.pointIntervalDuration || 30;
+                CONFIG.slotInterTime = state.settings.slotIntervalDuration || 120;
+                CONFIG.singleSlotInterTime = state.settings.singleSlotIntervalDuration || 120;
+
+                const refLink = document.getElementById('referee-link');
+                if (refLink) {
+                    refLink.href = `referee.html?id=${encodeURIComponent(state.settings.matchId || 'IPBA-1674')}&pin=${encodeURIComponent(state.settings.controlPin || '')}`;
+                }
+            }
+
+            function takeOverRegia() {
+                if (!confirm('Prendere il controllo? L’altra Regia verrà messa in sola lettura.')) return;
+                if (!acquireRegiaLeadership(true)) return;
+                regiaTakeoverPending = true;
+                // La scheda secondaria puo essere rimasta aperta per molto tempo:
+                // riallinea match, punteggio e checkpoint persistiti prima di
+                // collegarsi al relay e pubblicare qualunque stato.
+                cancelPendingPitTransition();
+                pendingTowelSide = null;
+                pendingPointSide = null;
+                pendingPointOriginalMode = null;
+                historyStack.length = 0;
+                document.querySelectorAll('.overlay').forEach((overlay) => {
+                    overlay.style.display = 'none';
+                });
+                // Lascia terminare l'eventuale task sincrono della vecchia
+                // Regia. Durante questa breve barriera i fence impediscono alla
+                // nuova scheda di modificare o trasmettere lo stato vecchio.
+                setTimeout(() => {
+                    if (!hasCurrentRegiaLease()) {
+                        regiaTakeoverPending = false;
+                        enterRegiaStandby('Il controllo e passato a un altra scheda Regia.');
+                        return;
+                    }
+                    reloadSettingsForRegiaTakeover();
+                    loadRecentRemoteAcksFromStorage();
+                    regiaTakeoverPending = false;
+                    loadTournamentState();
+                    wsEvicted = false;
+                    initPeer();
+                    startWsHostLoop();
+                    startRegiaStateHeartbeat();
+                    render();
+                }, 250);
+            }
+
+            function startRegiaStateHeartbeat() {
+                if (regiaStateHeartbeatTimer) clearInterval(regiaStateHeartbeatTimer);
+                regiaStateHeartbeatTimer = setInterval(() => {
+                    if (regiaIsLeader) broadcastState(false);
+                }, 5000);
+            }
+
+            window.addEventListener('storage', (event) => {
+                if (event.key !== REGIA_LEADER_KEY || !regiaIsLeader) return;
+                const lease = readRegiaLease();
+                if (lease && lease.tabId !== regiaTabId) {
+                    enterRegiaStandby('Un’altra scheda Regia ha preso il controllo.');
+                }
+            });
+
+            window.addEventListener('beforeunload', () => {
+                if (!regiaIsLeader) return;
+                const lease = readRegiaLease();
+                if (lease && lease.tabId === regiaTabId) {
+                    localStorage.removeItem(REGIA_LEADER_KEY);
+                }
+            });
+
             // Listen for remote commands from local tabs (Forward to handler)
             syncChannel.onmessage = (event) => {
-                if (event.data && event.data.type === 'REMOTE_COMMAND') {
+                if (canControlRegiaState() && event.data && event.data.type === 'REMOTE_COMMAND') {
                     handleRemoteCommand(event.data.payload);
                 }
             };
 
             function scheduleReconnect(delay) {
+                if (!canControlRegiaState()) return;
                 if (reconnectTimeout) clearTimeout(reconnectTimeout);
                 reconnectTimeout = setTimeout(() => {
-                    initPeer();
+                    if (canControlRegiaState()) initPeer();
                 }, delay);
             }
 
@@ -2400,6 +2855,7 @@
             }
 
             function initPeer() {
+                if (!ensureCurrentRegiaLease()) return;
                 if (reconnectTimeout) clearTimeout(reconnectTimeout);
                 if (pingInterval) clearInterval(pingInterval);
 
@@ -2412,19 +2868,17 @@
                 peerCloud = null;
 
                 // Persistent ID logic
-                let targetId = state.settings.matchId;
+                let targetId = typeof state.settings.matchId === 'string' ? state.settings.matchId.trim() : '';
 
                 // Ripulisce i suffissi "-FB-xx" generati dalle vecchie versioni in caso di errore server
                 if (targetId && targetId.includes("-FB-")) {
                     targetId = targetId.split("-FB-")[0];
                 }
 
-                if (!targetId || targetId === "undefined") {
+                targetId = normalizeMatchIdValue(targetId);
+                if (!targetId || targetId === "IPBA-UNDEFINED") {
                     // Default to standard ID 1674 as requested
                     targetId = "IPBA-1674";
-                } else if (!targetId.startsWith("IPBA-")) {
-                    // Rispetta l'ID scelto dall'utente: aggiunge solo il prefisso, non lo sostituisce
-                    targetId = "IPBA-" + targetId;
                 }
 
                 if (targetId !== state.settings.matchId) {
@@ -2435,7 +2889,7 @@
                 // Update referee link href with the match ID
                 const refLink = document.getElementById('referee-link');
                 if (refLink) {
-                    refLink.href = `referee.html?id=${targetId}`;
+                    refLink.href = `referee.html?id=${encodeURIComponent(targetId)}&pin=${encodeURIComponent(state.settings.controlPin || '')}`;
                 }
 
                 const customIceConfig = {
@@ -2526,10 +2980,14 @@
                     const parts = override.split(':');
                     return 'ws://' + parts[0] + ':' + (parts[1] || '9000') + '/ws';
                 }
-                return 'ws://localhost:9000/ws';
+                const relayHost = location.hostname || 'localhost';
+                const relayPort = location.port || (location.protocol === 'file:' ? '9000' : (location.protocol === 'https:' ? '443' : '80'));
+                const relayProtocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
+                return relayProtocol + relayHost + ':' + relayPort + '/ws';
             }
 
             function startWsHostLoop() {
+                if (!ensureCurrentRegiaLease()) return;
                 if (wsRetryTimer) clearTimeout(wsRetryTimer);
                 if (wsEvicted) return; // un'altra Regia ha preso il controllo: riparti solo manualmente
                 let s;
@@ -2543,7 +3001,13 @@
 
                 s.onopen = () => {
                     if (wsHost !== s) return;
-                    s.send(JSON.stringify({ type: 'hello', role: 'host', room: state.settings.matchId }));
+                    s.send(JSON.stringify({
+                        type: 'hello',
+                        role: 'host',
+                        room: state.settings.matchId,
+                        hostToken: regiaHostToken,
+                        controlToken: state.settings.controlPin
+                    }));
                 };
 
                 s.onmessage = (ev) => {
@@ -2565,6 +3029,7 @@
                             disp.style.fontSize = "";
                         }
                         log("Rete RELAY pronta. ID: " + (state.settings.matchId || '').replace('IPBA-', ''));
+                        broadcastState(true);
                     } else if (d.type === '_roster') {
                         wsClientCount = d.count || 0;
                         updateConnectionCount();
@@ -2579,6 +3044,10 @@
                             disp.style.color = 'var(--danger-color)';
                         }
                         log("ATTENZIONE: un'altra Regia usa lo stesso Match ID. Clicca sull'ID per riprendere il controllo.");
+                        enterRegiaStandby('Un’altra Regia autorizzata ha preso il controllo di questo Match ID.');
+                    } else if (d.type === '_authError') {
+                        log("ACCESSO RELAY NEGATO: " + (d.message || 'credenziali Regia non valide'));
+                        enterRegiaStandby('Il server ha rifiutato questa Regia: credenziali evento non valide.');
                     } else if (d.type === '_hb') {
                         // heartbeat del server: nulla da fare
                     } else {
@@ -2605,6 +3074,7 @@
             }
 
             function restartWsHost() {
+                if (!ensureCurrentRegiaLease()) return;
                 // Ricollega il relay (es. dopo cambio Match ID o ripresa manuale)
                 wsEvicted = false;
                 const old = wsHost;
@@ -2684,12 +3154,17 @@
             }
 
             function updateConnectionCount() {
-                const el = document.getElementById('conn-count');
-                if (el) {
-                    // connessioni PeerJS dirette + schermi collegati tramite il relay
-                    const count = connections.length + wsClientCount;
-                    el.innerText = `Connessi: ${count}`;
-                    el.style.color = count > 0 ? '#22c55e' : '#94a3b8';
+                // connessioni PeerJS dirette + schermi collegati tramite il relay
+                const count = connections.length + wsClientCount;
+                const topbar = document.getElementById('conn-count-topbar');
+                const header = document.getElementById('conn-count');
+                if (topbar) {
+                    topbar.innerText = `Connessi: ${count}`;
+                    topbar.style.color = count > 0 ? '#22c55e' : '#94a3b8';
+                }
+                if (header) {
+                    header.innerText = `(${count})`;
+                    header.style.color = count > 0 ? '#22c55e' : '#94a3b8';
                 }
             }
             function showQRCode(type = 'spectator') {
@@ -2711,7 +3186,7 @@
 
                 if (type === 'referee') {
                     qrTitle.innerText = "QR Code Arbitro";
-                    targetUrl = baseDir + "referee.html?id=" + peerId + localParam + "&v=" + Date.now();
+                    targetUrl = baseDir + "referee.html?id=" + encodeURIComponent(peerId) + "&pin=" + encodeURIComponent(state.settings.controlPin || '') + localParam + "&v=" + Date.now();
                 } else {
                     qrTitle.innerText = "QR Code Spettatore";
                     targetUrl = baseDir + "board.html?id=" + peerId + localParam + "&v=" + Date.now();
@@ -2736,10 +3211,11 @@
                 let total = 0;
                 if (!teamName) return 0;
                 state.tournament.matches.forEach((m, idx) => {
+                    if (m.savedState && m.savedState.skipped) return;
                     if (state.tournament.active && idx === state.tournament.currentIndex) {
                         if (state.teams.A.name === teamName) total += state.teams.A.penalties;
                         if (state.teams.B.name === teamName) total += state.teams.B.penalties;
-                    } else if (m.savedState) {
+                    } else if (m.savedState && !m.savedState.skipped) {
                         if (m.teamA === teamName) total += (m.savedState.penaltiesA || 0);
                         if (m.teamB === teamName) total += (m.savedState.penaltiesB || 0);
                     }
@@ -2760,7 +3236,9 @@
             }
 
             let lastBroadcastTime = 0;
+            let stateRevision = 0;
             function broadcastState(forceFullSync = false) {
+                if (!canControlRegiaState()) return;
                 try {
                     const nowTotal = Date.now();
                     if (!forceFullSync && nowTotal - lastBroadcastTime < 200) return; // Throttle to 5Hz (resolves slight stutter on remote displays over strict internet relays)
@@ -2839,6 +3317,8 @@
 
                     const packet = {
                         type: fullSync ? 'FULL_SYNC' : 'PARTIAL_SYNC',
+                        stateRevision: ++stateRevision,
+                        stateSentAt: now,
                         timer: formatTimeSeconds(state.timer),
                         mode: state.mode,
                         phase: (state.tournament.active && state.tournament.currentIndex !== -1 && state.tournament.matches[state.tournament.currentIndex]) ? (state.tournament.matches[state.tournament.currentIndex].phase || "GIRONI") : "",
@@ -2869,7 +3349,12 @@
                                 currentIndex: state.tournament.currentIndex,
                                 delay: state.tournament.delay,
                                 layoutUrl: state.tournament.layoutUrl,
-                                settings: state.tournament.settings,
+                                settings: {
+                                    pointIntervalDuration: state.settings.pointIntervalDuration,
+                                    slotIntervalDuration: state.settings.slotIntervalDuration,
+                                    singleSlotIntervalDuration: state.settings.singleSlotIntervalDuration,
+                                    hapticReferee: state.settings.hapticReferee !== false
+                                },
                                 name: state.tournament.name,   // per gli schermi (titolo + esclusione evento in corso dallo storico)
                                 date: state.tournament.date,
                                 eventUrl: state.tournament.eventUrl,
@@ -2879,7 +3364,10 @@
                                     teamB: m.teamB,
                                     phase: m.phase,
                                     field: m.field,
-                                    savedState: m.savedState ? { finished: m.savedState.finished } : null
+                                    savedState: m.savedState ? {
+                                        finished: m.savedState.finished,
+                                        skipped: !!m.savedState.skipped
+                                    } : null
                                 })) : []
                             };
                         }
@@ -2963,84 +3451,177 @@
                 }
             }
 
-            function handleSmartAction(side) {
-                if (state.mode === 'INTERVAL') {
-                    let teamId = !state.basesSwapped ? (side === 'left' ? 'A' : 'B') : (side === 'left' ? 'B' : 'A');
-                    handleTechPause(teamId);
-                } else if (state.mode === 'POINT' || state.mode === 'OVERTIME' || state.mode === 'PAUSED' || state.mode === 'IDLE') {
-                    let teamId = !state.basesSwapped ? (side === 'left' ? 'A' : 'B') : (side === 'left' ? 'B' : 'A');
-                    const opponentId = teamId === 'A' ? 'B' : 'A';
-                    executeTowel(teamId, opponentId);
+            function dispatchRemoteAck(ack) {
+                if (!canControlRegiaState() || !ack || !ack.commandId) return;
+                try { syncChannel.postMessage({ type: 'COMMAND_ACK', payload: ack }); } catch (e) { }
+                if (wsRelayActive && wsHost && wsHost.readyState === 1) {
+                    try { wsHost.send(JSON.stringify(ack)); } catch (e) { }
                 }
+                connections.forEach((connection) => {
+                    if (!connection || !connection.open) return;
+                    try { connection.send(ack); } catch (e) { }
+                });
+            }
+
+            function acknowledgeRemoteCommand(cmd, accepted, message) {
+                if (!canControlRegiaState() || !cmd || !cmd.commandId) return;
+                const ack = {
+                    type: 'COMMAND_ACK',
+                    commandId: String(cmd.commandId).slice(0, 160),
+                    accepted: accepted !== false,
+                    message: message || (accepted === false ? 'Comando rifiutato' : 'Comando eseguito'),
+                    receivedAt: Date.now()
+                };
+                Object.defineProperty(ack, '_cacheControlToken', {
+                    value: String(cmd.controlToken || ''),
+                    enumerable: false
+                });
+                rememberRemoteAck(cmd.commandId, ack);
+                dispatchRemoteAck(ack);
+            }
+
+            function isAuthorizedRemoteCommand(cmd) {
+                if (!cmd) return false;
+                if (cmd.type === 'requestState' || cmd.type === 'FORCE_SYNC') return true;
+                const expected = String(state.settings.controlPin || '');
+                const supplied = String(cmd.controlToken || '');
+                return !!expected && supplied === expected;
             }
 
             function handleRemoteCommand(cmd) {
-                if (!cmd || !cmd.type) return;
+                if (!ensureCurrentRegiaLease() || !cmd || !cmd.type) return;
+
+                // Un'altra scheda Regia potrebbe avere gia eseguito il comando
+                // immediatamente prima di un takeover.
+                loadRecentRemoteAcksFromStorage();
+                const previousAck = getRecentRemoteAck(cmd);
+                if (previousAck) {
+                    console.warn(`Comando remoto duplicato ignorato: ${cmd.commandId}`);
+                    dispatchRemoteAck(previousAck);
+                    return;
+                }
+
+                if (!isAuthorizedRemoteCommand(cmd)) {
+                    log(`[REMOTO] COMANDO RIFIUTATO: PIN non valido (${cmd.type})`);
+                    acknowledgeRemoteCommand(cmd, false, 'PIN controllo non valido');
+                    return;
+                }
+
                 log(`[REMOTO] Comando: ${cmd.type} ${cmd.side || ''} ${cmd.level || ''}`);
+                let accepted = true;
+                let message = 'Comando eseguito';
+
+                const requireExecution = (executed, failureMessage) => {
+                    if (executed === true) return true;
+                    accepted = false;
+                    message = failureMessage;
+                    return false;
+                };
 
                 switch (cmd.type) {
                     case 'POINT':
-                        handleTeamAction(cmd.side, 'point');
+                        if (pendingPointSide) {
+                            if (cmd.side === pendingPointSide) {
+                                message = 'Verifica punto già attiva sullo stesso lato';
+                            } else {
+                                accepted = false;
+                                message = 'Verifica punto già attiva sull\'altro lato';
+                            }
+                        } else {
+                            requireExecution(handleTeamAction(cmd.side, 'point'), 'Verifica punto non disponibile nello stato corrente');
+                        }
                         break;
                     case 'CONFIRM_POINT':
-                        // Directly trigger confirmation logic (decision: APPROVED, REVERSE, REJECT)
-                        pendingPointSide = cmd.side;
-                        confirmPoint(cmd.decision);
+                        // A delayed/stale confirmation must never create a new point.
+                        if (!pendingPointSide || cmd.side !== pendingPointSide) {
+                            log(`[REMOTO] CONFERMA PUNTO IGNORATA: verifica non attiva o lato diverso`);
+                            accepted = false;
+                            message = 'Verifica punto non più attiva';
+                            break;
+                        }
+                        requireExecution(confirmPoint(cmd.decision), 'Decisione punto non eseguita');
                         break;
-                    case 'ACTION': // Smart Action (Towel / Tech Pause)
-                        handleSmartAction(cmd.side);
+                    case 'ACTION':
+                        requireExecution(handleSmartAction(cmd.side), 'Azione non disponibile nello stato corrente');
                         break;
                     case 'PENALTY':
-                        addPenalty(cmd.side, cmd.level || 1);
+                        requireExecution(addPenalty(cmd.side, cmd.level || 1), 'Penalità non applicata');
                         break;
                     case 'START_INTER':
-                        startInter(cmd.intervalType || 'point');
+                        requireExecution(startInter(cmd.intervalType || 'point'), 'Intervallo non avviato');
                         break;
                     case 'START_POINT':
-                        startPoint();
+                        requireExecution(startPoint(), 'Point non avviato');
                         break;
                     case 'PAUSE':
-                        pause();
+                        requireExecution(pause(), 'Pausa/ripresa non eseguita');
                         break;
                     case 'STOP_TIMER':
                         if (state.mode !== 'PAUSED' && state.mode !== 'TECH_PAUSED') pause();
                         break;
                     case 'requestState':
-                        broadcastState(true); // Full sync on request
-                        break;
-                    case 'UNDO':
-                        undoLastAction();
-                        break;
-                    case 'NO_POINT':
-                        handleNoPoint();
-                        break;
-                    case 'TECH':
-                        // If peer sends TECH, trigger the tech pause for the side
-                        let tId = !state.basesSwapped ? (cmd.side === 'left' ? 'A' : 'B') : (cmd.side === 'left' ? 'B' : 'A');
-                        handleTechPause(tId);
-                        break;
-                    case 'UPDATE_CLANS':
-                        if (cmd.clanConfig) {
-                            state.clanConfig = cmd.clanConfig;
-                            localStorage.setItem('pm_stream_clans', JSON.stringify(state.clanConfig));
-                            log(`[REMOTO] Lista Loghi aggiornata da Console Streaming`);
-                            broadcastState(true); // Full sync on clan update
-                        }
-                        break;
                     case 'FORCE_SYNC':
                         broadcastState(true);
                         break;
-                    case 'UPDATE_SETTINGS':
-                        if (cmd.settings) {
-                            Object.assign(state.settings, cmd.settings);
-                            CONFIG.pointInterTime = state.settings.pointIntervalDuration || CONFIG.pointInterTime;
-                            CONFIG.slotInterTime = state.settings.slotIntervalDuration || CONFIG.slotInterTime;
-                            log(`[REMOTO] Impostazioni aggiornate da Arbitro`);
-                            localStorage.setItem('pm_settings', JSON.stringify(state.settings));
-                            broadcastState(true); // Full sync on settings update
+                    case 'UNDO':
+                        requireExecution(undoLastAction(), 'Nessuna azione annullata');
+                        break;
+                    case 'NO_POINT':
+                        requireExecution(handleNoPoint(true), 'No Point non eseguito');
+                        break;
+                    case 'TECH': {
+                        if (cmd.side !== 'left' && cmd.side !== 'right') {
+                            accepted = false;
+                            message = 'Lato pausa tecnica non valido';
+                        } else {
+                            const tId = !state.basesSwapped ? (cmd.side === 'left' ? 'A' : 'B') : (cmd.side === 'left' ? 'B' : 'A');
+                            requireExecution(handleTechPause(tId), 'Pausa tecnica non applicata');
                         }
                         break;
+                    }
+                    case 'UPDATE_CLANS':
+                        if (Array.isArray(cmd.clanConfig)) {
+                            state.clanConfig = cmd.clanConfig;
+                            localStorage.setItem('pm_stream_clans', JSON.stringify(state.clanConfig));
+                            log(`[REMOTO] Lista Loghi aggiornata da Console Streaming`);
+                            broadcastState(true);
+                        } else {
+                            accepted = false;
+                            message = 'Lista loghi non valida';
+                        }
+                        break;
+                    case 'UPDATE_SETTINGS': {
+                        const incoming = cmd.settings || {};
+                        const allowed = ['pointIntervalDuration', 'slotIntervalDuration', 'singleSlotIntervalDuration'];
+                        let changed = false;
+                        allowed.forEach((key) => {
+                            if (!Object.prototype.hasOwnProperty.call(incoming, key)) return;
+                            const value = Number(incoming[key]);
+                            if (!Number.isFinite(value) || value <= 0 || value > 3600) return;
+                            state.settings[key] = Math.round(value);
+                            changed = true;
+                        });
+                        if (!changed) {
+                            accepted = false;
+                            message = 'Impostazioni non valide';
+                            break;
+                        }
+                        CONFIG.pointInterTime = state.settings.pointIntervalDuration || CONFIG.pointInterTime;
+                        CONFIG.slotInterTime = state.settings.slotIntervalDuration || CONFIG.slotInterTime;
+                        CONFIG.singleSlotInterTime = state.settings.singleSlotIntervalDuration || CONFIG.singleSlotInterTime;
+                        log(`[REMOTO] Impostazioni aggiornate da Arbitro`);
+                        localStorage.setItem('pm_settings', JSON.stringify(state.settings));
+                        saveTournamentState();
+                        broadcastState(true);
+                        break;
+                    }
+                    default:
+                        accepted = false;
+                        message = 'Comando sconosciuto';
+                        break;
                 }
+
+                acknowledgeRemoteCommand(cmd, accepted, message);
             }
 
 
@@ -3255,6 +3836,7 @@
 
             function tick() {
                 try {
+                    if (!ensureCurrentRegiaLease()) return;
                     if (state.mode === 'IDLE' || state.mode.startsWith('PAUSED')) return;
 
                     const now = performance.now();
@@ -3265,8 +3847,12 @@
                         const prev = state.timer;
                         state.timer -= dt;
                         if (state.timer < 0) state.timer = 0;
+                        if (state.mode === 'POINT' || state.mode === 'OVERTIME') {
+                            state.gameTimeRemaining = state.timer;
+                        }
 
                         updateTimerDisplay();
+                        persistRuntimeCheckpoint();
 
                         // Sound Triggers (Edge Detection)
                         if (prev >= 60 && state.timer < 60 && !state.flags.warn60) { state.flags.warn60 = true; playBeep('warn'); speak("Sessanta secondi", "Sixty seconds"); }
@@ -3319,13 +3905,14 @@
                                 log("FINE TEMPO CON PAREGGIO - IN ATTESA DI DECISIONE");
                             } else {
                                 log("FINE TEMPO - ROTATING MATCH SLOT (Delay 3s)");
-                                window.pendingRotation = setTimeout(() => { matchOver(); window.pendingRotation = null; }, 3000);
+                                schedulePitTransition('MATCH_OVER');
                             }
                         }
                         else if (state.mode === 'BREAK_MATCH') {
                             const nextIdx = (state.nextMatchIndex !== undefined) ? state.nextMatchIndex : (state.tournament.currentIndex + 1);
                             state.nextMatchIndex = undefined;
-                            loadMatch(nextIdx);
+                            const nextMatch = state.tournament.matches[nextIdx];
+                            loadMatch(nextIdx, !!(nextMatch && nextMatch.savedState), false);
                             log("FINE PAUSA MATCH - AVVIO AUTOMATICO INTERVALLO");
                             startInter(); // Auto-start interval
                         }
@@ -3366,11 +3953,12 @@
                 const matches = state.tournament.matches;
                 const currIdx = state.tournament.currentIndex;
 
-                // If currently in a match, look at the next one to see if we are late for its start
-                if (currIdx < matches.length - 1) {
-                    targetM = matches[currIdx + 1];
-                } else if (currIdx !== -1) {
-                    targetM = matches[currIdx]; // Last match
+                // Follow the actual double-pit order, which may not match the
+                // physical row immediately after the current one.
+                if (currIdx !== -1) {
+                    let targetIdx = DoublePit.getPeerIndex(matches, currIdx, true);
+                    if (targetIdx === -1) targetIdx = DoublePit.getNextPendingIndex(matches, currIdx);
+                    targetM = targetIdx !== -1 ? matches[targetIdx] : matches[currIdx];
                 }
 
                 if (!targetM || !targetM.time || targetM.time === "00:00") return;
@@ -3395,30 +3983,86 @@
             }
 
             function startTimerLoop() {
+                if (!ensureCurrentRegiaLease()) return;
                 if (state.intervalInstance) clearInterval(state.intervalInstance);
                 state.lastTime = performance.now();
                 state.intervalInstance = setInterval(tick, 50); // 20Hz update
             }
-            function stopTimerLoop() { if (state.intervalInstance) clearInterval(state.intervalInstance); }
+            function stopTimerLoop() {
+                if (state.intervalInstance) clearInterval(state.intervalInstance);
+                state.intervalInstance = null;
+            }
+
+            function runPendingPitTransition() {
+                if (!ensureCurrentRegiaLease()) return;
+                const pending = state.pendingRotationAction;
+                window.pendingRotation = null;
+                state.pendingRotationAction = null;
+                if (!pending) {
+                    render();
+                    return;
+                }
+
+                saveTournamentState();
+                if (pending.type === 'MATCH_OVER') matchOver();
+                else rotateMatch(pending.swapSide !== false);
+            }
+
+            function resumePendingPitTransition() {
+                if (!ensureCurrentRegiaLease()) return;
+                if (!state.pendingRotationAction || window.pendingRotation) return;
+                const dueAt = Number(state.pendingRotationAction.dueAt) || Date.now();
+                const remaining = Math.max(0, dueAt - Date.now());
+                window.pendingRotation = setTimeout(runPendingPitTransition, remaining);
+                render();
+            }
+
+            function schedulePitTransition(type = 'ROTATE', swapSide = true, delay = 3000) {
+                if (!ensureCurrentRegiaLease()) return false;
+                if (window.pendingRotation || state.pendingRotationAction) {
+                    log("ROTAZIONE PIT GIÀ PROGRAMMATA: comando duplicato ignorato");
+                    return false;
+                }
+
+                state.pendingRotationAction = {
+                    type: type,
+                    swapSide: swapSide,
+                    dueAt: Date.now() + delay
+                };
+                saveTournamentState();
+                resumePendingPitTransition();
+                return true;
+            }
+
+            function cancelPendingPitTransition() {
+                if (window.pendingRotation) clearTimeout(window.pendingRotation);
+                window.pendingRotation = null;
+                state.pendingRotationAction = null;
+            }
 
             function handleTechPause(teamId) {
                 // Allow if PAUSED (from Interval) OR directly in INTERVAL
                 if (!((state.mode === 'PAUSED' && state.prevMode === 'INTERVAL') || state.mode === 'INTERVAL')) {
                     log("Pausa tecnica possibile solo durante l'intervallo!");
-                    return;
+                    return false;
+                }
+
+                if (!state.teams[teamId]) {
+                    log("Pausa tecnica rifiutata: squadra non valida.");
+                    return false;
                 }
 
                 // Valid only if > 10s remaining
                 if (state.timer <= 10) {
                     log(`TENTATIVO PAUSA TECNICA ${state.teams[teamId].name} (RIFIUTATO: ${formatTimeMs(state.timer)} < 10s)`);
                     showSmartAlert(`RIFIUTATO: < 10s`, 'danger');
-                    return;
+                    return false;
                 }
 
                 const team = state.teams[teamId];
                 if (team.techUsed) {
                     log(`${team.name} ha già usato la pausa tecnica!`);
-                    return;
+                    return false;
                 }
                 saveStateToHistory();
                 team.techUsed = true;
@@ -3429,9 +4073,14 @@
                 showSmartAlert(`TECH: ${team.name}`, 'tech');
                 if (state.tournament.active) saveMatchState(state.tournament.currentIndex, false, false);
                 render();
+                broadcastState(true);
+                return true;
             }
             function startInter(type = 'point') {
-                if (window.pendingRotation) { clearTimeout(window.pendingRotation); window.pendingRotation = null; }
+                if (window.pendingRotation || state.pendingRotationAction) {
+                    log("COMANDO BLOCCATO: rotazione pit in corso");
+                    return false;
+                }
                 if (typeof type !== 'string') type = 'point'; // Safety check for event objects
                 state.mode = 'INTERVAL';
                 state.timerMode = 'INTERVAL';
@@ -3445,13 +4094,16 @@
                 saveTournamentState();
                 startTimerLoop();
                 broadcastState(true); // Sync istantaneo dei dati squadre
+                return true;
             }
             function startPoint() {
-                if (window.pendingRotation) { clearTimeout(window.pendingRotation); window.pendingRotation = null; }
+                if (window.pendingRotation || state.pendingRotationAction) {
+                    log("START POINT BLOCCATO: rotazione pit in corso");
+                    return false;
+                }
                 // If in Golden Break, "Start Point" should start the Golden Point instead!
                 if (state.mode === 'GOLDEN_BREAK') {
-                    startOvertime(true);
-                    return;
+                    return startOvertime(true);
                 }
 
                 state.mode = 'POINT';
@@ -3466,9 +4118,13 @@
                 saveTournamentState();
                 startTimerLoop();
                 broadcastState(true); // Sync istantaneo dei dati squadre
+                return true;
             }
             function pause(isAutoPause = false) {
-                if (window.pendingRotation) { clearTimeout(window.pendingRotation); window.pendingRotation = null; }
+                if (window.pendingRotation || state.pendingRotationAction) {
+                    log("PAUSA BLOCCATA: rotazione pit in corso");
+                    return false;
+                }
                 if (state.mode === 'POINT' || state.mode === 'INTERVAL' || state.mode === 'OVERTIME') {
                     stopTimerLoop();
                     if (state.mode === 'POINT' || state.mode === 'OVERTIME') state.gameTimeRemaining = state.timer;
@@ -3483,6 +4139,8 @@
                     log(`PAUSA (${state.prevMode})`);
                     saveTournamentState();
                     render();
+                    broadcastState(true);
+                    return true;
                 }
                 else if (state.mode === 'PAUSED' || state.mode === 'TECH_PAUSED') {
                     state.mode = state.prevMode || 'IDLE';
@@ -3491,20 +4149,25 @@
                     saveTournamentState();
                     startTimerLoop();
                     render();
+                    broadcastState(true);
+                    return true;
                 }
+                return false;
             }
             function techPause(side) {
                 try {
+                    if (side !== 'left' && side !== 'right') return false;
                     let teamId = !state.basesSwapped ? (side === 'left' ? 'A' : 'B') : (side === 'left' ? 'B' : 'A');
-                    handleTechPause(teamId);
+                    return handleTechPause(teamId);
                 } catch (e) {
                     console.error("Critical TechPause Error:", e);
                     alert("ERRORE TECH PAUSE: " + e.message);
+                    return false;
                 }
             }
             function startOvertime(isAuto = false) {
-                if (state.mode === 'POINT' || state.mode === 'TECH_PAUSED') { alert("Non puoi avviare il Golden Point durante il gioco o pausa tecnica!"); return; }
-                if (!isAuto && !confirm("Avviare GOLDEN POINT? Il timer verrà impostato a " + (CONFIG.goldenTime / 60) + " minuti.")) return;
+                if (state.mode === 'POINT' || state.mode === 'TECH_PAUSED') { alert("Non puoi avviare il Golden Point durante il gioco o pausa tecnica!"); return false; }
+                if (!isAuto && !confirm("Avviare GOLDEN POINT? Il timer verrà impostato a " + (CONFIG.goldenTime / 60) + " minuti.")) return false;
                 state.basesSwapped = false; // Official Rule: Return to original sides
                 state.mode = 'OVERTIME'; state.timerMode = 'GAME'; state.timer = CONFIG.goldenTime; state.gameTimeRemaining = CONFIG.goldenTime; state.flags = { warn60: false };
                 log(`START GOLDEN POINT (Overtime: ${Math.floor(CONFIG.goldenTime / 60)} min)`);
@@ -3512,9 +4175,14 @@
                 render();
                 saveTournamentState();
                 startTimerLoop();
+                return true;
             }
 
             function handleTeamAction(side, action, bypassConfirm = false) {
+                if ((side !== 'left' && side !== 'right') || (action !== 'point' && action !== 'action')) {
+                    log(`BUTTON PRESS RIFIUTATO: lato o azione non validi`);
+                    return false;
+                }
                 log(`BUTTON PRESS: ${action.toUpperCase()} per lato ${side.toUpperCase()}`);
                 // Save state only for actions that change state immediately or start a process?
                 // Point request just opens modal, no state change yet (except modal open, which we don't undo usually).
@@ -3524,17 +4192,23 @@
                 const team = state.teams[teamId]; const opponentId = teamId === 'A' ? 'B' : 'A';
                 if (state.mode === 'INTERVAL') {
                     // Technical pauses are now handled exclusively by handleTechPause / handleSmartAction
+                    return false;
                 }
                 else if (state.mode === 'POINT' || state.mode === 'OVERTIME' || state.mode === 'IDLE' || state.mode === 'PAUSED') {
                     if (action === 'point') {
+                        if (window.pendingRotation || state.pendingRotationAction) {
+                            log(`RICHIESTA PUNTO BLOCCATA: rotazione pit in corso`);
+                            return false;
+                        }
                         // Guard: Only one point request at a time
                         if (!bypassConfirm && pendingPointSide) {
                             log(`RICHIESTA PUNTO IGNORATA: Una verifica è già in corso per ${pendingPointSide === 'left' ? 'Sinistra' : 'Destra'}`);
-                            return;
+                            return pendingPointSide === side;
                         }
 
                         // New Verification Flow
                         pendingPointSide = side;
+                        pendingPointOriginalMode = state.mode;
 
                         // Auto-pause if running
                         if (state.mode === 'POINT' || state.mode === 'INTERVAL' || state.mode === 'OVERTIME') {
@@ -3548,18 +4222,36 @@
                             document.getElementById('verify-title').innerText = `VERIFICA PUNTO: ${team.name}`;
                             document.getElementById('point-verify-modal').style.display = 'flex';
                             log(`RICHIESTA PUNTO da ${team.name}. In attesa di verifica. T: ${formatTimeMs(state.timer)}`);
+                            return true;
                         } else {
                             log(`RICHIESTA PUNTO DIRETTA (Buzzer) da ${team.name}`);
-                            confirmPoint('APPROVED');
+                            return confirmPoint('APPROVED');
                         }
                     }
                     else if (action === 'action') { // This is for TOWEL
-                        if (state.settings.confirmTowel && !bypassConfirm) { pendingTowelSide = side; document.getElementById('towel-confirm-modal').style.display = 'flex'; } else executeTowel(teamId, opponentId);
+                        if (state.settings.confirmTowel && !bypassConfirm) {
+                            pendingTowelSide = side;
+                            document.getElementById('towel-confirm-modal').style.display = 'flex';
+                            return true;
+                        }
+                        return executeTowel(teamId, opponentId);
                     }
                 }
+                return false;
             }
 
             function confirmPoint(decision) {
+                if (!pendingPointSide) {
+                    log(`CONFERMA PUNTO IGNORATA: nessuna verifica attiva (${decision || 'senza decisione'})`);
+                    document.getElementById('point-verify-modal').style.display = 'none';
+                    return false;
+                }
+
+                if (!['APPROVED', 'REVERSE', 'REJECT', 'NO_POINT'].includes(decision)) {
+                    log(`CONFERMA PUNTO RIFIUTATA: decisione non valida (${decision || 'vuota'})`);
+                    return false;
+                }
+
                 // Note: confirmPoint changes score. We should save state before applying decision if it changes score.
                 // But we might want to save state BEFORE the modal opened?
                 // Actually, simply undoing the score change is enough.
@@ -3617,22 +4309,28 @@
                 } else if (decision === 'REJECT') {
                     speak("Punto Non Approvato. Punto Non Approvato.", "Point Not Approved. Point Not Approved.");
                     log(`PUNTO NON APPROVATO (${team.name}). Nessun punteggio assegnato.`);
-                    // Resume logic restored as per user request:
-                    // Must restore mode from prevMode so tick() doesn't exit early.
-                    if (state.gameTimeRemaining > 0 && (state.prevMode === 'POINT' || state.prevMode === 'INTERVAL' || state.prevMode === 'OVERTIME')) {
-                        state.mode = state.prevMode;
+                    // Resume only when this verification itself paused live play.
+                    // If the match was already paused/idle, preserve that state.
+                    if (state.gameTimeRemaining > 0 &&
+                        (pendingPointOriginalMode === 'POINT' || pendingPointOriginalMode === 'INTERVAL' || pendingPointOriginalMode === 'OVERTIME')) {
+                        state.mode = pendingPointOriginalMode;
                         state.timer = state.gameTimeRemaining;
                         startTimerLoop();
                         log("TIMER RIPRISTINATO");
-                    } else if (state.mode === 'PAUSED' && state.prevMode) {
-                        // If it was already paused, stay paused but ensure mode is set correctly
-                        state.mode = 'PAUSED';
+                    } else {
+                        stopTimerLoop();
+                        state.mode = pendingPointOriginalMode || 'IDLE';
                     }
                     render();
+                    saveTournamentState();
+                    broadcastState(true);
                 } else if (decision === 'NO_POINT') {
                     speak("Nessun Punto. Nessun Punto.", "No Point. No Point.");
                     log(`DECISIONE NO POINT (${team.name}). Salto slot senza cambio campo.`);
-                    handleNoPoint();
+                    if (!handleNoPoint(true)) {
+                        document.getElementById('point-verify-modal').style.display = 'flex';
+                        return false;
+                    }
                 }
 
                 // Resume flow / Next Point (Interleaved Logic)
@@ -3643,13 +4341,22 @@
                     } else {
                         // Approved or Reversed -> Rotate Interleaved Match (Swap side by default)
                         log("CONFERMA PUNTO -> ROTATING MATCH SLOT (Delay 3s)");
-                        window.pendingRotation = setTimeout(() => { rotateMatch(); window.pendingRotation = null; }, 3000);
+                        schedulePitTransition('ROTATE');
                     }
                 }
                 pendingPointSide = null; // Clear pending state
+                pendingPointOriginalMode = null;
+                return true;
             }
 
             function executeTowel(teamId, opponentId) {
+                if (window.pendingRotation || state.pendingRotationAction) {
+                    pendingTowelSide = null;
+                    document.getElementById('towel-confirm-modal').style.display = 'none';
+                    log("TOWEL BLOCCATO: rotazione pit già in corso");
+                    return false;
+                }
+                if (!state.teams[teamId] || !state.teams[opponentId]) return false;
                 saveStateToHistory(); // Hook
                 state.teams[opponentId].score++;
 
@@ -3668,13 +4375,20 @@
                 stopTimerLoop();
                 state.gameTimeRemaining = state.timer;
                 state.mode = 'IDLE';
+                if (state.tournament.active) saveMatchState(state.tournament.currentIndex, false, false);
+                else saveTournamentState();
                 // Mercy checked inside rotateMatch
                 render();
                 log("TOWEL AVVENUTO -> ROTATING MATCH SLOT (Delay 3s)");
-                window.pendingRotation = setTimeout(() => { rotateMatch(); window.pendingRotation = null; }, 3000); // Towel ends the point
+                schedulePitTransition('ROTATE'); // Towel ends the point
+                return true;
             }
 
             function handleSmartAction(side, bypassConfirm = false) {
+                if (side !== 'left' && side !== 'right') {
+                    log('AZIONE SMART RIFIUTATA: lato non valido');
+                    return false;
+                }
                 // Determine phase
                 if (state.mode === 'POINT' || state.mode === 'OVERTIME') {
                     const teamId = !state.basesSwapped ? (side === 'left' ? 'A' : 'B') : (side === 'left' ? 'B' : 'A');
@@ -3684,23 +4398,29 @@
                     if (state.settings.confirmTowel && !bypassConfirm) {
                         pendingTowelSide = side; 
                         document.getElementById('towel-confirm-modal').style.display = 'flex'; 
-                        return;
+                        return true;
                     }
 
                     const opponentId = teamId === 'A' ? 'B' : 'A';
-                    executeTowel(teamId, opponentId);
+                    return executeTowel(teamId, opponentId);
                 } else if ((state.mode === 'PAUSED' && state.prevMode === 'INTERVAL') || state.mode === 'INTERVAL') {
                     // Interval phase -> TECH PAUSE
-                    techPause(side);
+                    return techPause(side);
                 } else {
                     log(`AZIONE SMART: Nessuna azione disponibile in modalità ${state.mode}`);
+                    return false;
                 }
             }
             function addPenalty(side, lvl) {
+                if ((side !== 'left' && side !== 'right') || ![1, 2, 3].includes(Number(lvl))) {
+                    log("PENALITA' BLOCCATA: lato o livello non validi.");
+                    return false;
+                }
+                lvl = Number(lvl);
                 // Penalties can only be added during active game play
                 if (state.mode !== 'POINT' && state.mode !== 'OVERTIME') {
                     log("PENALITA' BLOCCATA: Possibile solo durante il gioco.");
-                    return;
+                    return false;
                 }
 
                 saveStateToHistory(); // Hook
@@ -3730,7 +4450,7 @@
                 }
 
                 log(`PENALITA': ${state.teams[teamId].name} (+${lvl}). Tot: ${state.teams[teamId].penalties}`);
-                if (state.tournament.active) saveMatchState(state.tournament.currentIndex);
+                if (state.tournament.active) saveMatchState(state.tournament.currentIndex, null, false);
 
                 // AUTOMATIC POINT RULE (< 60s, Major/Gross i.e. lvl >= 2)
                 if (state.timer < 60 && lvl >= 2) {
@@ -3758,13 +4478,16 @@
                     stopTimerLoop();
                     state.gameTimeRemaining = state.timer;
                     state.mode = 'IDLE';
+                    if (state.tournament.active) saveMatchState(state.tournament.currentIndex, false, false);
+                    else saveTournamentState();
                     // Mercy checked inside rotateMatch
                     render();
                     log("PUNTO AUTOMATICO DA PENALITA' -> ROTATING MATCH SLOT (Delay 3s)");
-                    window.pendingRotation = setTimeout(() => { rotateMatch(); window.pendingRotation = null; }, 3000);
+                    schedulePitTransition('ROTATE');
                 }
 
                 render();
+                return true;
             }
             function editPenalty(side) {
                 let teamId = !state.basesSwapped ? (side === 'left' ? 'A' : 'B') : (side === 'left' ? 'B' : 'A');
@@ -3773,7 +4496,7 @@
                 if (newVal !== null && !isNaN(parseInt(newVal))) {
                     state.teams[teamId].penalties = parseInt(newVal);
                     log(`PENALITA EDIT: ${team.name} -> ${state.teams[teamId].penalties}`);
-                    if (state.tournament.active) saveMatchState(state.tournament.currentIndex);
+                    if (state.tournament.active) saveMatchState(state.tournament.currentIndex, null, false);
                     render();
                 }
             }
@@ -3829,7 +4552,7 @@
 
                         if (targetNextIdx !== -1) {
                             log("MATCH TERMINATO -> CARICAMENTO PROSSIMO SLOT");
-                            loadMatch(targetNextIdx);
+                            loadMatch(targetNextIdx, !!matches[targetNextIdx].savedState, false);
                             startInter('slot');
                         } else {
                             log("FINE TORNEO (Nessun altro match)");
@@ -3894,7 +4617,7 @@
                 state.teams[teamId].score += delta;
                 if (state.teams[teamId].score < 0) state.teams[teamId].score = 0;
                 log(`SCORE EDIT MANUALE: ${state.teams[teamId].name} ${delta > 0 ? '+' : ''}${delta} -> ${state.teams[teamId].score}`);
-                if (state.tournament.active) saveMatchState(state.tournament.currentIndex);
+                if (state.tournament.active) saveMatchState(state.tournament.currentIndex, null, false);
                 render();
             }
 
@@ -3932,8 +4655,14 @@
                     if (state.tournament.currentIndex === idx) {
                         state.teams.A.name = m.teamA;
                         state.teams.B.name = m.teamB;
+                        const wasFinished = !!(m.savedState && m.savedState.finished);
+                        saveMatchState(idx, wasFinished, false);
+                    } else {
+                        saveTournamentState();
                     }
+                    DoublePit.prepare(state.tournament.matches);
                     render();
+                    broadcastState(true);
                 }
             }
 
@@ -3952,6 +4681,8 @@
                     phase: 'GIRONI',
                     field: 'Campo 1'
                 });
+                DoublePit.prepare(state.tournament.matches);
+                saveTournamentState();
 
                 log(`PROGRAMMA AGGIUNTA: Nuovo Match inserito in fondo (${newTeamA.trim()} vs ${newTeamB.trim()})`);
                 
@@ -3961,6 +4692,7 @@
                     loadMatch(0);
                 } else {
                     render();
+                    broadcastState(true);
                 }
             }
 
@@ -3987,10 +4719,11 @@
                             
                             // Try to load the matching index (which is now the next match) if it exists
                             if (state.tournament.matches.length > idx) {
-                                loadMatch(idx);
+                                loadMatch(idx, !!state.tournament.matches[idx].savedState, false);
                             } else if (state.tournament.matches.length > 0) {
                                 // Or at least the previous one if it was the last
-                                loadMatch(state.tournament.matches.length - 1);
+                                const previousIdx = state.tournament.matches.length - 1;
+                                loadMatch(previousIdx, !!state.tournament.matches[previousIdx].savedState, false);
                             } else {
                                 state.teams.A.name = "";
                                 state.teams.B.name = "";
@@ -4002,16 +4735,27 @@
                     } else {
                         render();
                     }
+
+                    DoublePit.prepare(state.tournament.matches);
+                    saveTournamentState();
+                    broadcastState(true);
                 }
             }
 
             function clearEntireTournament() {
                 if (confirm(`⚠ SEI SICURO? ⚠\nQuesta opzione CANCELLERÀ TUTTE LE PARTITE IN PROGRAMMA E I PUNTEGGI DI QUESTO TORNEO!`)) {
                     if (confirm(`ULTIMO AVVISO!\nVuoi procedere all'azzeramento completo del pannello PROGRAMMA? (Azione irreversibile)`)) {
+                        cancelPendingPitTransition();
                         state.tournament.matches = [];
                         state.tournament.active = false;
                         state.tournament.currentIndex = -1;
                         state.tournament.name = "";
+                        state.tournament.date = "";
+                        state.tournament.location = "";
+                        state.tournament.field = "";
+                        state.tournament.layoutUrl = "";
+                        state.tournament.eventUrl = "";
+                        state.tournament.description = "";
                         state.tournament.delay = 0;
                         
                         resetAll(false);
@@ -4022,28 +4766,41 @@
                         document.getElementById('tournament-input').value = "";
                         
                         log(`⚠ TORNEO COMPLETAMENTE AZZERATO ⚠`);
+                        localStorage.removeItem('pm_runtime_checkpoint');
+                        saveTournamentState();
                         render();
+                        broadcastState(true);
                     }
                 }
             }
 
-            function handleNoPoint() {
+            function handleNoPoint(bypassConfirm = false) {
+                if (window.pendingRotation || state.pendingRotationAction) {
+                    log("NO POINT BLOCCATO: rotazione pit già in corso");
+                    return false;
+                }
+                if (state.settings.confirmNoPoint && !bypassConfirm &&
+                    !confirm('Confermare NO POINT? Le pit si alterneranno senza invertire i lati A/B.')) return false;
                 // Remote command or local button: proceed with standard rotation WITHOUT swapping sides
                 speak("Nessun Punto. Nessun Punto.", "No Point. No Point.");
                 log("NO POINT: Nessun buzzer toccato. Rotazione slot senza cambio campo.");
                 if (state.tournament.active) {
+                    if (state.mode === 'POINT' || state.mode === 'OVERTIME' ||
+                        (state.mode === 'PAUSED' && (state.prevMode === 'POINT' || state.prevMode === 'OVERTIME'))) {
+                        state.gameTimeRemaining = state.timer;
+                    }
+                    stopTimerLoop();
+                    state.mode = 'IDLE';
                     rotateMatch(false); // false = NO swap side
                 } else {
                     // Manual mode: just start a new interval
                     startInter('point');
                 }
+                return true;
             }
 
             function skipCurrentSlot() {
-                if (window.pendingRotation) {
-                    clearTimeout(window.pendingRotation);
-                    window.pendingRotation = null;
-                }
+                cancelPendingPitTransition();
 
                 if (!state.tournament.active || state.tournament.currentIndex === -1) {
                     matchOver(true);
@@ -4101,7 +4858,7 @@
                 saveStateToHistory();
                 state.basesSwapped = !state.basesSwapped;
                 log("MANUAL SWAP: Posizioni squadre invertite manualmente.");
-                if (state.tournament.active) saveMatchState(state.tournament.currentIndex, false, false); // Save current orientation
+                if (state.tournament.active) saveMatchState(state.tournament.currentIndex, null, false); // Save current orientation without reopening a result
                 render();
             }
 
@@ -4120,11 +4877,12 @@
                 if (state.mode === 'POINT' || state.mode === 'OVERTIME') state.gameTimeRemaining = state.timer;
                 updateTimerDisplay();
                 log(`TIMER EDIT MANUALE: ${delta > 0 ? '+' : ''}${delta}s. Ora: ${formatTimeSeconds(state.timer)}`);
-                if (state.tournament.active) saveMatchState(state.tournament.currentIndex);
+                if (state.tournament.active) saveMatchState(state.tournament.currentIndex, null, false);
             }
 
             function resetAll(resetMatch = true) {
                 if (resetMatch && !confirm("Reset?")) return;
+                if (resetMatch) cancelPendingPitTransition();
                 state.mode = 'IDLE'; state.timer = CONFIG.gameTime; state.timerMode = 'GAME'; state.gameTimeRemaining = CONFIG.gameTime; stopTimerLoop();
                 state.teams.A.score = 0; state.teams.B.score = 0; state.teams.A.timeouts = 1; state.teams.B.timeouts = 1; state.teams.A.penalties = 0; state.teams.B.penalties = 0; state.teams.A.techUsed = false; state.teams.B.techUsed = false;
                 state.basesSwapped = false; document.getElementById('mercy-msg').style.display = 'none';
@@ -4185,9 +4943,11 @@
                 return DoublePit.prepare(result);
             }
             // State Persistence
-            function saveMatchState(idx, finished = false, shouldSwapNext = true) {
+            function saveMatchState(idx, finished = null, shouldSwapNext = true) {
                 const m = state.tournament.matches[idx];
                 if (!m) return;
+                const previous = m.savedState || {};
+                const resolvedFinished = finished === null ? !!previous.finished : !!finished;
                 m.savedState = {
                     scoreA: state.teams.A.score,
                     scoreB: state.teams.B.score,
@@ -4195,9 +4955,14 @@
                     penaltiesB: state.teams.B.penalties,
                     techUsedA: state.teams.A.techUsed,
                     techUsedB: state.teams.B.techUsed,
-                    timer: state.timer,
+                    // savedState.timer is always the remaining match clock.
+                    // Interval/break countdowns are runtime UI state and must
+                    // never overwrite the clock restored on the next pit turn.
+                    timer: state.timerMode === 'GAME' ? state.timer : state.gameTimeRemaining,
                     basesSwappedNext: shouldSwapNext ? !state.basesSwapped : state.basesSwapped,
-                    finished: finished,
+                    finished: resolvedFinished,
+                    skipped: resolvedFinished ? !!previous.skipped : false,
+                    goldenPending: resolvedFinished ? false : !!previous.goldenPending,
                     history: state.currentMatchEvents || [], // Save Granular History
                     realStartTime: m.realStartTime,
                     realEndTime: m.realEndTime,
@@ -4227,18 +4992,56 @@
             }
 
             // Tournament Persistence
+            let lastRuntimeCheckpointTime = 0;
+
+            function persistRuntimeCheckpoint(force = false) {
+                if (!canControlRegiaState()) return;
+                if (!state.tournament || !state.tournament.active || state.tournament.currentIndex === -1) return;
+                const now = Date.now();
+                if (!force && now - lastRuntimeCheckpointTime < 1000) return;
+
+                const match = state.tournament.matches[state.tournament.currentIndex];
+                if (!match) return;
+                try {
+                    localStorage.setItem('pm_runtime_checkpoint', JSON.stringify({
+                        savedAt: now,
+                        currentIndex: state.tournament.currentIndex,
+                        matchKey: `${match.time || ''}|${match.teamA || ''}|${match.teamB || ''}`,
+                        mode: state.mode,
+                        prevMode: state.prevMode,
+                        timer: state.timer,
+                        timerMode: state.timerMode,
+                        gameTimeRemaining: state.gameTimeRemaining,
+                        basesSwapped: state.basesSwapped,
+                        pendingRotationAction: state.pendingRotationAction
+                    }));
+                    lastRuntimeCheckpointTime = now;
+                } catch (e) {
+                    console.warn("Checkpoint timer non salvato:", e);
+                }
+            }
+
             function saveTournamentState() {
-                localStorage.setItem('pm_tournament_state', JSON.stringify({
-                    tournament: state.tournament,
-                    teams: state.teams,
-                    matchLog: state.matchLog,
-                    mode: state.mode,
-                    timer: state.timer,
-                    timerMode: state.timerMode,
-                    gameTimeRemaining: state.gameTimeRemaining,
-                    basesSwapped: state.basesSwapped,
-                    currentMatchEvents: state.currentMatchEvents
-                }));
+                if (!canControlRegiaState()) return;
+                try {
+                    localStorage.setItem('pm_tournament_state', JSON.stringify({
+                        tournament: state.tournament,
+                        teams: state.teams,
+                        matchLog: state.matchLog,
+                        mode: state.mode,
+                        timer: state.timer,
+                        timerMode: state.timerMode,
+                        gameTimeRemaining: state.gameTimeRemaining,
+                        prevMode: state.prevMode,
+                        basesSwapped: state.basesSwapped,
+                        outdoorMode: state.outdoorMode,
+                        currentMatchEvents: state.currentMatchEvents,
+                        pendingRotationAction: state.pendingRotationAction
+                    }));
+                } catch (e) {
+                    console.error("Salvataggio torneo non riuscito:", e);
+                }
+                persistRuntimeCheckpoint(true);
             }
 
             function loadTournamentState() {
@@ -4246,25 +5049,63 @@
                 if (saved) {
                     try {
                         const data = JSON.parse(saved);
-                        state.tournament = data.tournament;
-                        if (state.tournament && Array.isArray(state.tournament.matches)) {
-                            DoublePit.prepare(state.tournament.matches);
+                        if (!data || !data.tournament || typeof data.tournament !== 'object' ||
+                            !Array.isArray(data.tournament.matches)) {
+                            throw new Error('Palinsesto salvato non valido');
                         }
-                        if (data.teams) state.teams = data.teams;
+                        state.tournament = data.tournament;
+                        DoublePit.prepare(state.tournament.matches);
+                        if (data.teams && typeof data.teams === 'object' &&
+                            data.teams.A && data.teams.B &&
+                            typeof data.teams.A.name === 'string' && typeof data.teams.B.name === 'string') {
+                            state.teams = data.teams;
+                        }
                         if (data.matchLog) state.matchLog = data.matchLog;
                         if (data.currentMatchEvents) state.currentMatchEvents = data.currentMatchEvents;
+                        if (typeof data.outdoorMode === 'boolean') {
+                            state.outdoorMode = data.outdoorMode;
+                            state.settings.outdoorMode = data.outdoorMode;
+                        }
 
                         // Cache restored values to prevent mangling during loadMatch
-                        const restoredMode = data.mode;
-                        const restoredTimer = data.timer;
-                        const restoredTimerMode = data.timerMode || 'GAME';
-                        const restoredGTR = data.gameTimeRemaining || CONFIG.gameTime;
-                        const restoredSwapped = data.basesSwapped || false;
+                        let restoredMode = data.mode;
+                        let restoredTimer = data.timer !== undefined ? data.timer : CONFIG.gameTime;
+                        let restoredTimerMode = data.timerMode || 'GAME';
+                        let restoredGTR = data.gameTimeRemaining !== undefined ? data.gameTimeRemaining : CONFIG.gameTime;
+                        let restoredSwapped = data.basesSwapped || false;
+                        let restoredPrevMode = data.prevMode || null;
+                        let restoredPendingRotationAction = data.pendingRotationAction || null;
+
+                        // Prefer the lightweight one-second checkpoint when it
+                        // belongs to the same scheduled match and is recent.
+                        try {
+                            const checkpoint = JSON.parse(localStorage.getItem('pm_runtime_checkpoint') || 'null');
+                            const checkpointMatch = state.tournament.matches[state.tournament.currentIndex];
+                            const expectedKey = checkpointMatch
+                                ? `${checkpointMatch.time || ''}|${checkpointMatch.teamA || ''}|${checkpointMatch.teamB || ''}`
+                                : '';
+                            if (checkpoint && checkpoint.currentIndex === state.tournament.currentIndex &&
+                                checkpoint.matchKey === expectedKey && Date.now() - checkpoint.savedAt < 86400000) {
+                                restoredMode = checkpoint.mode;
+                                restoredPrevMode = checkpoint.prevMode || null;
+                                restoredTimer = checkpoint.timer;
+                                restoredTimerMode = checkpoint.timerMode || restoredTimerMode;
+                                restoredGTR = checkpoint.gameTimeRemaining !== undefined ? checkpoint.gameTimeRemaining : restoredGTR;
+                                restoredSwapped = !!checkpoint.basesSwapped;
+                                if (Object.prototype.hasOwnProperty.call(checkpoint, 'pendingRotationAction')) {
+                                    restoredPendingRotationAction = checkpoint.pendingRotationAction;
+                                }
+                                log("CHECKPOINT TIMER RECENTE RIPRISTINATO");
+                            }
+                        } catch (e) {
+                            console.warn("Checkpoint timer non valido:", e);
+                        }
 
                         log("TORNEO RIPRISTINATO DA LOCAL STORAGE");
 
                         // If a match was active, load it without auto-starting inter/timer
                         if (state.tournament.active && state.tournament.currentIndex !== -1) {
+                            state.pendingRotationAction = restoredPendingRotationAction;
                             loadMatch(state.tournament.currentIndex, true, false);
 
                             // Re-apply correct state after loadMatch resets UI
@@ -4273,14 +5114,29 @@
                             state.timerMode = restoredTimerMode;
                             state.gameTimeRemaining = restoredGTR;
                             state.basesSwapped = restoredSwapped;
+                            state.prevMode = restoredPrevMode;
 
                             // Force PAUSED to prevent accidental countdown on refresh
                             if (state.mode === 'POINT' || state.mode === 'INTERVAL' || state.mode === 'OVERTIME' || state.mode === 'BREAK_MATCH' || state.mode === 'GOLDEN_BREAK') {
                                 state.prevMode = state.mode;
                                 state.mode = 'PAUSED';
                                 log("MATCH RIPRISTINATO IN PAUSA PER SICUREZZA");
+                            } else if (state.mode === 'PAUSED') {
+                                state.prevMode = restoredPrevMode || 'IDLE';
+                                log(`PAUSA RIPRISTINATA (provenienza: ${state.prevMode})`);
                             }
                             render();
+                            // loadMatch performs a safe UI reset while restoring.
+                            // Persist the re-applied runtime values so a second
+                            // refresh cannot fall back to that temporary reset.
+                            const restoredMatch = state.tournament.matches[state.tournament.currentIndex];
+                            saveMatchState(
+                                state.tournament.currentIndex,
+                                !!(restoredMatch && restoredMatch.savedState && restoredMatch.savedState.finished),
+                                false
+                            );
+                            broadcastState(true);
+                            resumePendingPitTransition();
                         } else {
                             render();
                         }
@@ -4304,8 +5160,8 @@
                                 teamA: m.teamA, teamB: m.teamB,
                                 scoreA: m.savedState ? m.savedState.scoreA : 0,
                                 scoreB: m.savedState ? m.savedState.scoreB : 0,
-                                finished: m.savedState ? m.savedState.finished : false,
-                                winner: (m.savedState && m.savedState.finished) ? (m.savedState.scoreA > m.savedState.scoreB ? 'A' : (m.savedState.scoreB > m.savedState.scoreA ? 'B' : null)) : null
+                                finished: m.savedState ? (m.savedState.finished && !m.savedState.skipped) : false,
+                                winner: (m.savedState && m.savedState.finished && !m.savedState.skipped) ? (m.savedState.scoreA > m.savedState.scoreB ? 'A' : (m.savedState.scoreB > m.savedState.scoreA ? 'B' : null)) : null
                             }));
                         if (roundMatches.length > 0) bracket.rounds.push({ name: p, matches: roundMatches });
                     });
@@ -4333,7 +5189,9 @@
                         }
                     });
 
-                    if (!m.savedState) return; // Any saved state counts for actual scores
+                    // Only a genuinely completed match affects standings. A
+                    // started, paused or skipped slot must not become a 0-0 draw.
+                    if (!m.savedState || !m.savedState.finished || m.savedState.skipped) return;
 
                     const teams = [
                         { id: 'A', name: m.teamA || `Team A (M${mIdx + 1})`, score: m.savedState.scoreA || 0, penalties: m.savedState.penaltiesA || 0, tech: m.savedState.techUsedA },
@@ -4399,10 +5257,10 @@
                     .map(s => ({ team: s.name, count: s.pen }))
                     .sort((a, b) => b.count - a.count);
 
-                // Match History (Completed Matches or Matches with Scores)
+                // Match History (only genuinely completed matches)
                 const matchHistory = state.tournament.matches
                     .map((m, idx) => ({ m, idx }))
-                    .filter(item => item.m.savedState && (item.m.savedState.scoreA > 0 || item.m.savedState.scoreB > 0 || item.m.savedState.finished))
+                    .filter(item => item.m.savedState && item.m.savedState.finished && !item.m.savedState.skipped)
                     .map(item => ({
                         id: item.idx + 1,
                         teamA: item.m.teamA,
@@ -4524,9 +5382,10 @@
                 }
             }
 
-            function loadMatch(i, resume = false, autoStart = true) {
+            function loadMatch(i, resume = false, autoStart = true, reopenFinished = false) {
                 if (i >= 0 && i < state.tournament.matches.length) {
                     const m = state.tournament.matches[i];
+                    const wasFinished = !!(m.savedState && m.savedState.finished);
                     state.tournament.currentIndex = i;
                     state.tournament.active = true;
 
@@ -4558,8 +5417,10 @@
                         state.currentMatchEvents = [];
                     }
 
-                    // Ensure basic match state is saved immediately so it appears (as 0-0) in stats
-                    saveMatchState(i, false, false);
+                    // Preserve the terminal state during recovery or inspection.
+                    // Only an explicit "reopen" action may turn a finished match active again.
+                    const keepFinished = resume && wasFinished && !reopenFinished;
+                    saveMatchState(i, keepFinished, false);
 
 
                     log(`CARICATO MATCH ${i + 1}: ${m.teamA} vs ${m.teamB}`);
@@ -4579,6 +5440,49 @@
                     }
                     broadcastState(true); // Forza l'aggiornamento immediato delle statistiche in vMix e altri display
                 }
+            }
+
+            function selectScheduledMatch(idx) {
+                const matches = state.tournament.matches;
+                if (idx < 0 || idx >= matches.length) return;
+
+                if (window.pendingRotation || state.pendingRotationAction) {
+                    log(`PROGRAMMA BLOCCATO: attendere il completamento della rotazione pit`);
+                    return;
+                }
+
+                const target = matches[idx];
+                const targetFinished = !!(target.savedState && target.savedState.finished);
+                if (state.tournament.currentIndex === idx && !targetFinished) {
+                    log(`PROGRAMMA: Match ${idx + 1} è già quello attivo`);
+                    return;
+                }
+
+                if (targetFinished && !confirm(`Il Match ${idx + 1} è concluso. Vuoi RIAPRIRLO mantenendo punteggio e cronologia?`)) return;
+
+                const currentIdx = state.tournament.currentIndex;
+                const switchingLiveMatch = state.tournament.active && currentIdx !== -1 &&
+                    (state.mode === 'POINT' || state.mode === 'OVERTIME' || state.mode === 'INTERVAL' ||
+                        state.mode === 'PAUSED' || state.mode === 'TECH_PAUSED' ||
+                        state.mode === 'BREAK_MATCH' || state.mode === 'GOLDEN_BREAK');
+                if (switchingLiveMatch && !confirm(`Mettere in pausa il match corrente e aprire il Match ${idx + 1}?`)) return;
+
+                if (state.tournament.active && currentIdx !== -1 && matches[currentIdx]) {
+                    if (state.mode === 'POINT' || state.mode === 'OVERTIME' ||
+                        (state.mode === 'PAUSED' && (state.prevMode === 'POINT' || state.prevMode === 'OVERTIME'))) {
+                        state.gameTimeRemaining = state.timer;
+                    }
+                    stopTimerLoop();
+                    const currentFinished = !!(matches[currentIdx].savedState && matches[currentIdx].savedState.finished);
+                    saveMatchState(currentIdx, currentFinished, false);
+                }
+
+                state.showNextMatchOverlay = false;
+                loadMatch(idx, !!target.savedState, false, targetFinished);
+                log(targetFinished
+                    ? `PROGRAMMA: Match ${idx + 1} riaperto manualmente`
+                    : `PROGRAMMA: Passaggio manuale al Match ${idx + 1}`);
+                saveTournamentState();
             }
 
             // ... (Update nextPoint to use rotateMatch if needed, or remove nextPoint usage?)
@@ -4736,14 +5640,20 @@
                 // Main Game Controls Safety
                 const isPlaying = (state.mode === 'POINT' || state.mode === 'OVERTIME');
                 const isInterval = (state.mode === 'INTERVAL' || state.mode === 'BREAK_MATCH');
+                const isPaused = (state.mode === 'PAUSED' || state.mode === 'TECH_PAUSED');
+                const isRotationPending = !!window.pendingRotation || !!state.pendingRotationAction;
 
                 const btnStartPoint = document.getElementById('btn-start-point');
                 const btnOvertime = document.getElementById('btn-overtime');
                 const btnStartInter = document.getElementById('btn-start-inter');
+                const btnPause = document.getElementById('btn-pause');
+                const btnNoPoint = document.getElementById('btn-no-point');
 
-                if (btnStartPoint) btnStartPoint.disabled = isPlaying;
-                if (btnOvertime) btnOvertime.disabled = isPlaying;
-                if (btnStartInter) btnStartInter.disabled = isInterval;
+                if (btnStartPoint) btnStartPoint.disabled = isPlaying || isPaused || isRotationPending;
+                if (btnOvertime) btnOvertime.disabled = isPlaying || isPaused || isRotationPending;
+                if (btnStartInter) btnStartInter.disabled = isInterval || isPaused || isRotationPending;
+                if (btnPause) btnPause.disabled = isRotationPending;
+                if (btnNoPoint) btnNoPoint.disabled = isRotationPending;
 
                 // PENALTY BUTTONS LOGIC
                 const penDisabled = !(state.mode === 'POINT' || state.mode === 'OVERTIME');
@@ -4807,10 +5717,11 @@
                                 </div>
                                 <div class="si-info">${m.field || 'Campo 1'}</div>
                             `;
-                            // Explicit click listener to load match and PREVENT bubbling to timer
+                            // Explicit click listener: preserve an existing score
+                            // and require confirmation before reopening a result.
                             item.onclick = (e) => {
                                 e.stopPropagation();
-                                loadMatch(idx);
+                                selectScheduledMatch(idx);
                             };
                             list.appendChild(item);
                         });
@@ -4948,11 +5859,11 @@
             function undoLastAction() {
                 if (historyStack.length === 0) {
                     log("Ops: Nessuna azione da annullare.");
-                    return;
+                    return false;
                 }
-                if (state.settings.confirmUndo && !confirm("Sei sicuro di voler annullare l'ultima azione?")) return;
+                if (state.settings.confirmUndo && !confirm("Sei sicuro di voler annullare l'ultima azione?")) return false;
                 
-                if (window.pendingRotation) { clearTimeout(window.pendingRotation); window.pendingRotation = null; }
+                cancelPendingPitTransition();
 
                 const snapshot = historyStack.pop();
                 // Restore state
@@ -4969,15 +5880,12 @@
                 render();
                 log("AZIONE ANNULLATA (Undo eseguito).");
                 speak("Annullato", "Undone");
+                saveTournamentState();
+                broadcastState(true);
+                return true;
             }
 
 
-
-            if (document.getElementById('btn-undo')) {
-                document.getElementById('btn-undo').addEventListener('click', undoLastAction);
-            } else {
-                console.warn("btn-undo not found during init");
-            }
 
             // --- SOUND DATABASE & CUSTOM AUDIO ---
             const soundLibrary = [
@@ -5365,10 +6273,14 @@
             });
 
             populateVoiceList();
-            initPeer();
-            startWsHostLoop(); // relay WebSocket (server.js): trasporto preferito
+            const hasRegiaLeadership = acquireRegiaLeadership();
+            if (hasRegiaLeadership) {
+                initPeer();
+                startWsHostLoop(); // relay WebSocket (server.js): trasporto preferito
+            }
             loadTournamentState(); // Load persistent tournament
             render();
+            if (hasRegiaLeadership) startRegiaStateHeartbeat();
 
             // Audio Context Resume on first click anywhere
             document.body.addEventListener('click', () => {
@@ -5392,6 +6304,9 @@
 
             document.getElementById('opt-outdoor-mode').addEventListener('change', (e) => {
                 state.outdoorMode = e.target.checked;
+                state.settings.outdoorMode = state.outdoorMode;
+                localStorage.setItem('pm_settings', JSON.stringify(state.settings));
+                saveTournamentState();
                 broadcastState();
             });
 
@@ -5407,9 +6322,38 @@
             const tm = document.getElementById('timer-edit-modal');
             document.getElementById('game-timer').addEventListener('dblclick', () => { tm.style.display = 'flex'; document.getElementById('edit-min').value = Math.floor(state.timer / 60); document.getElementById('edit-sec').value = (state.timer % 60).toString().padStart(2, '0'); });
             document.getElementById('cancel-edit-btn').addEventListener('click', () => tm.style.display = 'none');
-            document.getElementById('confirm-edit-btn').addEventListener('click', () => { state.timer = (parseInt(document.getElementById('edit-min').value) * 60) + parseInt(document.getElementById('edit-sec').value); resetAudioFlags(); if (state.mode === 'POINT' || state.mode === 'OVERTIME') state.gameTimeRemaining = state.timer; updateTimerDisplay(); tm.style.display = 'none'; });
-            document.getElementById('cancel-towel-btn').addEventListener('click', () => { document.getElementById('towel-confirm-modal').style.display = 'none'; });
-            document.getElementById('confirm-towel-btn').addEventListener('click', () => { if (pendingTowelSide) { let tId = !state.basesSwapped ? (pendingTowelSide === 'left' ? 'A' : 'B') : (pendingTowelSide === 'left' ? 'B' : 'A'); executeTowel(tId, tId === 'A' ? 'B' : 'A'); } document.getElementById('towel-confirm-modal').style.display = 'none'; });
+            document.getElementById('confirm-edit-btn').addEventListener('click', () => {
+                const minutes = Math.max(0, parseInt(document.getElementById('edit-min').value, 10) || 0);
+                const seconds = Math.min(59, Math.max(0, parseInt(document.getElementById('edit-sec').value, 10) || 0));
+                saveStateToHistory();
+                state.timer = (minutes * 60) + seconds;
+                resetAudioFlags();
+                if (state.mode === 'POINT' || state.mode === 'OVERTIME' ||
+                    (state.mode === 'PAUSED' && (state.prevMode === 'POINT' || state.prevMode === 'OVERTIME'))) {
+                    state.gameTimeRemaining = state.timer;
+                }
+                updateTimerDisplay();
+                if (state.tournament.active && state.tournament.currentIndex !== -1) {
+                    const current = state.tournament.matches[state.tournament.currentIndex];
+                    saveMatchState(state.tournament.currentIndex, !!(current && current.savedState && current.savedState.finished), false);
+                } else {
+                    saveTournamentState();
+                }
+                broadcastState(true);
+                tm.style.display = 'none';
+            });
+            document.getElementById('cancel-towel-btn').addEventListener('click', () => {
+                pendingTowelSide = null;
+                document.getElementById('towel-confirm-modal').style.display = 'none';
+            });
+            document.getElementById('confirm-towel-btn').addEventListener('click', () => {
+                const side = pendingTowelSide;
+                pendingTowelSide = null;
+                document.getElementById('towel-confirm-modal').style.display = 'none';
+                if (!side) return;
+                const tId = !state.basesSwapped ? (side === 'left' ? 'A' : 'B') : (side === 'left' ? 'B' : 'A');
+                executeTowel(tId, tId === 'A' ? 'B' : 'A');
+            });
 
             // Point Verify
             document.getElementById('btn-verify-approve').addEventListener('click', () => confirmPoint('APPROVED'));
@@ -5435,6 +6379,7 @@
                 document.getElementById('opt-outdoor-mode').checked = state.outdoorMode; // NEW
                 document.getElementById('mercy-diff-input').value = state.settings.mercyDiff;
                 document.getElementById('match-id-input').value = state.settings.matchId || "";
+                document.getElementById('control-pin-input').value = state.settings.controlPin || "";
 
                 // Populate Styling Inputs
                 const style = TEAM_STYLE;
@@ -5450,11 +6395,19 @@
             });
             document.getElementById('close-settings-btn').addEventListener('click', () => {
                 try {
+                    const previousControlPin = String(state.settings.controlPin || '');
+                    const newControlPin = document.getElementById('control-pin-input').value.replace(/\D/g, '');
+                    if (!/^\d{6}$/.test(newControlPin)) {
+                        alert('Il PIN arbitro deve contenere esattamente 6 cifre.');
+                        return;
+                    }
                     state.settings.confirmTowel = document.getElementById('opt-confirm-towel').checked;
                     state.settings.confirmSkipSlot = document.getElementById('opt-confirm-skip').checked;
                     state.settings.confirmNoPoint = document.getElementById('opt-confirm-no-point').checked;
                     state.settings.confirmUndo = document.getElementById('opt-confirm-undo').checked;
                     state.settings.hapticReferee = document.getElementById('opt-haptic-referee').checked;
+                    state.settings.controlPin = newControlPin;
+                    state.settings.outdoorMode = state.outdoorMode;
                     state.settings.logPassword = document.getElementById('log-password-input').value;
                     state.settings.mercyDiff = parseInt(document.getElementById('mercy-diff-input').value) || 2;
                     CONFIG.mercyDiff = state.settings.mercyDiff;
@@ -5503,12 +6456,7 @@
                     localStorage.setItem('pm_team_style', JSON.stringify(TEAM_STYLE));
 
                     // If matchId changed, re-init Peer instead of reloading
-                    let newMatchId = document.getElementById('match-id-input').value.trim().toUpperCase();
-                    // Normalizza il prefisso: prima un ID digitato senza "IPBA-" veniva
-                    // silenziosamente sostituito dal default 1674 dentro initPeer().
-                    if (newMatchId && !newMatchId.startsWith("IPBA-")) {
-                        newMatchId = "IPBA-" + newMatchId;
-                    }
+                    const newMatchId = normalizeMatchIdValue(document.getElementById('match-id-input').value);
                     if (newMatchId && newMatchId !== state.settings.matchId) {
                         state.settings.matchId = newMatchId;
                         localStorage.setItem('pm_settings', JSON.stringify(state.settings));
@@ -5519,6 +6467,14 @@
                         if (peerCloud && !peerCloud.destroyed) peerCloud.destroy();
                         initPeer();
                         restartWsHost(); // il relay si ricollega con il nuovo Match ID
+                    } else if (newControlPin !== previousControlPin) {
+                        log('PIN CONTROLLO ARBITRO AGGIORNATO. Riconnessione relay...');
+                        restartWsHost();
+                    }
+
+                    const updatedRefLink = document.getElementById('referee-link');
+                    if (updatedRefLink) {
+                        updatedRefLink.href = `referee.html?id=${encodeURIComponent(state.settings.matchId || 'IPBA-1674')}&pin=${encodeURIComponent(state.settings.controlPin)}`;
                     }
 
                     broadcastState(); // Sync changes immediately
@@ -5533,11 +6489,27 @@
             document.getElementById('btn-reset-tournament').addEventListener('click', () => {
                 if (!confirm("ATTENZIONE: Stai per cancellare COMPLETAMENTE il torneo (match, history, punteggi).\n\nSei sicuro di voler procedere?")) return;
 
-                state.tournament.matches = [];
-                state.tournament.active = false;
-                state.tournament.currentIndex = -1;
+                cancelPendingPitTransition();
+                stopTimerLoop();
+                state.tournament = {
+                    active: false,
+                    matches: [],
+                    currentIndex: -1,
+                    name: '',
+                    date: '',
+                    location: '',
+                    field: '',
+                    layoutUrl: '',
+                    eventUrl: '',
+                    description: '',
+                    delay: 0
+                };
                 state.matchLog = [];
                 state.currentMatchEvents = [];
+                state.prevMode = null;
+                state.timerMode = 'GAME';
+                state.gameTimeRemaining = CONFIG.gameTime;
+                state.basesSwapped = false;
 
                 // Clear UI elements that might hold old text
                 const tourneyInput = document.getElementById('tournament-input');
@@ -5550,9 +6522,11 @@
                 Object.assign(state.teams, defaultTeams);
                 state.timer = CONFIG.gameTime;
                 state.mode = 'IDLE';
+                localStorage.removeItem('pm_runtime_checkpoint');
+                saveTournamentState();
                 updateTimerDisplay();
                 render();
-                broadcastState();
+                broadcastState(true);
 
                 alert("Dati Torneo resettati COMPLETAMENTE.\nSe hai altre schede aperte (Referee, Control), chiudile e riaprile per evitare sovrascritture.");
                 document.getElementById('settings-modal').style.display = 'none';
@@ -5868,6 +6842,68 @@
                 log("DATI TORNEO SALVATI");
                 saveTournamentState();
                 document.getElementById('tournament-modal').style.display = 'none';
+            });
+
+            function exportCompleteEventBackup() {
+                try {
+                    if (!window.EventBackup) throw new Error('Modulo backup non disponibile');
+                    saveTournamentState();
+                    persistRuntimeCheckpoint(true);
+                    const backup = EventBackup.build(localStorage);
+                    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    const safeName = String(state.tournament.name || 'evento')
+                        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                        .replace(/[^a-z0-9_-]+/gi, '_').replace(/^_+|_+$/g, '') || 'evento';
+                    link.href = url;
+                    link.download = `ipba_backup_${safeName}_${new Date().toISOString().slice(0, 10)}.json`;
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                    log(`BACKUP COMPLETO EVENTO ESPORTATO (${backup.metadata.matchCount} match)`);
+                } catch (e) {
+                    console.error('Backup evento:', e);
+                    alert('Backup non riuscito: ' + e.message);
+                }
+            }
+
+            async function importCompleteEventBackup(file) {
+                if (!file) return;
+                try {
+                    if (!window.EventBackup) throw new Error('Modulo backup non disponibile');
+                    const parsed = EventBackup.parse(await file.text());
+                    const label = parsed.metadata.tournamentName || 'Evento senza nome';
+                    const warning = `Ripristinare il backup "${label}" con ${parsed.metadata.matchCount} match?\n\n` +
+                        'Lo stato corrente verrà sostituito e la Regia si riavvierà in pausa.';
+                    if (!confirm(warning)) return;
+
+                    const result = EventBackup.restore(localStorage, parsed);
+                    // Ferma la sessione corrente solo dopo che tutte le scritture
+                    // del backup sono riuscite. Se lo storage rifiuta il restore,
+                    // il match in corso continua normalmente.
+                    stopTimerLoop();
+                    if (window.pendingRotation) {
+                        clearTimeout(window.pendingRotation);
+                        window.pendingRotation = null;
+                    }
+                    console.log('Backup evento ripristinato:', result);
+                    location.reload();
+                } catch (e) {
+                    console.error('Ripristino backup evento:', e);
+                    alert('Backup non valido o ripristino non riuscito: ' + e.message);
+                }
+            }
+
+            document.getElementById('btn-event-backup-export').addEventListener('click', exportCompleteEventBackup);
+            document.getElementById('btn-event-backup-import').addEventListener('click', () => {
+                document.getElementById('event-backup-file-input').click();
+            });
+            document.getElementById('event-backup-file-input').addEventListener('change', (event) => {
+                const file = event.target.files && event.target.files[0];
+                if (file) importCompleteEventBackup(file);
+                event.target.value = '';
             });
 
             // ===== IMPORT EVENTO DA IPBA.IT =====
@@ -6207,7 +7243,7 @@
                 });
                 if (state.tournament && state.tournament.matches) {
                     state.tournament.matches.forEach(m => {
-                        if (m.savedState && m.savedState.finished) {
+                        if (m.savedState && m.savedState.finished && !m.savedState.skipped) {
                             add(m.teamA, m.teamB, m.savedState.scoreA || 0, m.savedState.scoreB || 0, state.tournament.name || 'Torneo in corso', state.tournament.date || '');
                         }
                     });
@@ -6249,7 +7285,7 @@
                 });
                 if (state.tournament && state.tournament.matches) {
                     state.tournament.matches.forEach(m => {
-                        if (!m.savedState || !m.savedState.finished) return;
+                        if (!m.savedState || !m.savedState.finished || m.savedState.skipped) return;
                         const na = h2hNorm(m.teamA), nb = h2hNorm(m.teamB);
                         if (na !== N && nb !== N) return;
                         const mio = na === N ? (m.savedState.scoreA || 0) : (m.savedState.scoreB || 0);
@@ -6445,7 +7481,7 @@
                 const list = document.getElementById('history-list');
                 list.innerHTML = '';
                 state.tournament.matches.forEach((m, idx) => {
-                    if (!m.savedState) return; // Show only saved/finished matches
+                    if (!m.savedState || !m.savedState.finished || m.savedState.skipped) return;
                     const row = document.createElement('tr');
 
                     const time = m.time || "00:00";
@@ -6499,6 +7535,7 @@
                 document.getElementById('history-edit-area').style.display = 'none';
                 renderHistory();
                 saveTournamentState();
+                broadcastState(true);
             });
 
             // PDF EXPORT LOGIC
@@ -6807,7 +7844,8 @@
                     btnContinue.style.display = 'block';
                     btnContinue.onclick = () => {
                         modal.style.display = 'none';
-                        loadMatch(nextIdx);
+                        const nextMatch = state.tournament.matches[nextIdx];
+                        loadMatch(nextIdx, !!(nextMatch && nextMatch.savedState), false);
                         startInter();
                     };
                     btnWizard.innerText = "🚀 CONFIGURA NUOVA FASE (Wizard)";
@@ -7334,8 +8372,12 @@
                 }
 
                 // Construct URL with Match ID if present
-                const matchIdParam = state.settings.matchId ? `?matchId=${state.settings.matchId}` : "?matchId=1674";
-                const targetUrl = `${baseUrl}/${page}${matchIdParam}`;
+                const query = new URLSearchParams();
+                query.set('matchId', state.settings.matchId || '1674');
+                if (page === 'referee.html' || page === 'streaming.html') {
+                    query.set('pin', state.settings.controlPin || '');
+                }
+                const targetUrl = `${baseUrl}/${page}?${query.toString()}`;
 
                 document.getElementById('qr-title').innerHTML = `${icon} ${title}`;
                 document.getElementById('qr-url').innerText = targetUrl;
@@ -7392,7 +8434,12 @@
                 }
 
                 let targetUrl = "";
-                const matchIdParam = `?matchId=${mId}`;
+                const query = new URLSearchParams();
+                query.set('matchId', mId);
+                if (page === 'referee.html' || page === 'streaming.html') {
+                    query.set('pin', state.settings.controlPin || '');
+                }
+                const matchIdParam = `?${query.toString()}`;
 
                 if (location.protocol === 'file:') {
                     targetUrl = `https://italianpaintball.github.io/regia/${page}${matchIdParam}`;

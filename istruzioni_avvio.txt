@@ -9,8 +9,8 @@ Un unico server locale (porta 9000) fa due cose:
  2. fa da "relay": la Regia gli manda lo stato una volta sola
     e lui lo inoltra a tutti gli schermi. I comandi degli
     arbitri tornano alla Regia per la stessa strada.
-Niente piu' WebRTC/PeerJS per l'uso locale: piu' stabile,
-niente Match ID "occupati", meno problemi di rete.
+Niente piu' WebRTC/PeerJS per l'uso locale: piu' stabile e
+meno problemi di rete. Il Match ID e' protetto dalla Regia.
 Il vecchio sistema PeerJS resta come RISERVA automatica
 (e per board.html visto da casa tramite cloud).
 
@@ -28,13 +28,20 @@ Requisito: Node.js installato (https://nodejs.org, versione LTS).
 
 FASE 2: AVVIARE LA REGIA (INDEX.HTML)
 -----------------------------------------------
-1. Apri "index.html" sul PC principale (o http://localhost:9000).
+1. Apri http://localhost:9000 sul PC principale.
 2. La Regia si collega DA SOLA al relay: il Match ID in alto
    diventa VERDE (default: 1674).
 3. Per cambiare ID: Impostazioni -> campo MATCH ID (basta il
    numero, il prefisso IPBA- si aggiunge da solo).
 4. Spunta "CLOUD": accendila SOLO se qualcuno deve guardare
    board.html da casa (fuori dalla rete del campo).
+5. In Impostazioni trovi il PIN CONTROLLO ARBITRO di 6 cifre.
+   Comunicalo solo agli arbitri autorizzati.
+
+Puoi lasciare aperta una seconda scheda Regia come riserva:
+resta automaticamente in sola lettura. Se serve, premi
+"PRENDI IL CONTROLLO"; punteggi, timer e impostazioni vengono
+riallineati prima della riconnessione.
 
 
 FASE 3: APRIRE GLI SCHERMI SECONDARI
@@ -64,6 +71,21 @@ Parametri URL utili:
   &nocloud=1         non tentare mai il cloud
   &norelay=1         salta il relay (solo vecchio PeerJS)
 
+Quando apri referee.html inserisci il PIN CONTROLLO di 6 cifre.
+Il PIN eventualmente presente nel QR/link viene rimosso dalla
+barra dell'indirizzo appena la pagina lo ha letto.
+
+
+REGOLA DOPPIA PIT
+-----------------------------------------------
+- Due match con lo stesso orario formano un unico blocco Pit A/B.
+- Dopo un punto il sistema passa all'altro match; al turno
+  successivo torna al primo, finche' uno dei due termina.
+- NO POINT passa all'altro match ma NON inverte i lati A/B
+  delle squadre nel round successivo.
+- SALTA SLOT chiude entrambi i match del blocco corrente e
+  avanza al successivo orario, senza restare in loop su una pit.
+
 NOVITA': se una pagina non riceve piu' dati per 15 secondi,
 compare il badge rosso "DATI NON AGGIORNATI" in alto a destra.
 Se lo vedi, controlla server e Regia: quello che c'e' sullo
@@ -77,10 +99,13 @@ RISOLUZIONE PROBLEMI
   e ricarica la Regia.
 
 - "ALTRA REGIA ATTIVA!":
-  un'altra finestra della Regia (anche una scheda dimenticata,
-  anche su un altro PC) ha preso il controllo dello stesso
-  Match ID. Chiudi il doppione e clicca sull'ID per riprendere
-  il controllo.
+  un'altra Regia usa lo stesso Match ID. Se e' una seconda
+  scheda sullo stesso PC, vedrai "REGIA SECONDARIA": chiudila
+  oppure usa "PRENDI IL CONTROLLO". Se e' un altro PC, usa la
+  Regia originale o riavvia il server solo quando e' sicuro.
+
+- L'arbitro viene rifiutato dopo un cambio PIN:
+  riapri il collegamento e inserisci il nuovo PIN di 6 cifre.
 
 - Il .bat si chiude subito:
   leggi il messaggio: o manca Node.js, o la porta 9000 e' gia'

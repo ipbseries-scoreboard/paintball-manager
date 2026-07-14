@@ -20,6 +20,8 @@
  * Uso:
  *   const conn = PMClient.connect({
  *       id: '1674',                      // con o senza prefisso IPBA-
+ *       role: 'viewer',                  // viewer (default) oppure controller
+ *       token: '',                       // PIN richiesto ai controller
  *       onData:   (packet) => { ... },   // pacchetti di stato (mai PING/servizio)
  *       onStatus: (msg, isError) => {},  // testo di stato per la UI
  *       onOpen:   () => { ... },         // connessione alla Regia stabilita
@@ -74,9 +76,10 @@
 
     function normalizeId(raw) {
         if (!raw) return null;
-        var id = String(raw).trim().toUpperCase();
+        var id = String(raw).trim().toUpperCase().replace(/[\u0000-\u001f\u007f-\u009f]/g, '');
         if (!id) return null;
-        return id.indexOf('IPBA-') === 0 ? id : 'IPBA-' + id;
+        if (id.indexOf('IPBA-') !== 0) id = 'IPBA-' + id;
+        return id.slice(0, 80);
     }
 
     function getUrlId() {
@@ -87,11 +90,24 @@
     function parseHostParam(value) {
         // "192.168.1.50" oppure "192.168.1.50:9100"
         if (!value) return null;
+        value = String(value).trim();
+        if (/^wss?:\/\//i.test(value)) {
+            try {
+                var parsed = new URL(value);
+                var secureUrl = parsed.protocol === 'wss:';
+                return {
+                    host: parsed.hostname,
+                    port: parsed.port ? parseInt(parsed.port, 10) : (secureUrl ? 443 : 80),
+                    secure: secureUrl
+                };
+            } catch (e) { return null; }
+        }
         var parts = value.split(':');
-        return { host: parts[0], port: parts[1] ? parseInt(parts[1], 10) : 9000 };
+        var secure = global.location.protocol === 'https:';
+        return { host: parts[0], port: parts[1] ? parseInt(parts[1], 10) : (secure ? 443 : 9000), secure: secure };
     }
 
-    function buildCandidates() {
+    function buildCandidates(role) {
         var p = new URLSearchParams(global.location.search);
         var list = [];
         var seen = {};
@@ -99,20 +115,23 @@
         var forced = parseHostParam(p.get('host'));
         var pageHost = null;
         var hn = global.location.hostname;
-        if (hn && hn !== 'localhost' && hn !== '127.0.0.1' && hn.indexOf('github.io') === -1) {
-            pageHost = { host: hn, port: 9000 };
+        if (hn && hn.indexOf('github.io') === -1) {
+            var pagePort = parseInt(global.location.port, 10);
+            if (!pagePort) pagePort = global.location.protocol === 'https:' ? 443 : 80;
+            pageHost = { host: hn, port: pagePort, secure: global.location.protocol === 'https:' };
         }
-        var localHost = { host: 'localhost', port: 9000 };
+        var localHost = { host: 'localhost', port: 9000, secure: false };
 
         function addWs(target, label) {
             if (!target) return;
-            var key = 'ws:' + target.host + ':' + target.port;
+            var scheme = target.secure ? 'wss://' : 'ws://';
+            var key = scheme + target.host + ':' + target.port;
             if (seen[key]) return;
             seen[key] = true;
             list.push({
                 kind: 'ws',
                 label: 'relay ' + label + ' (' + target.host + ':' + target.port + ')',
-                url: 'ws://' + target.host + ':' + target.port + '/ws',
+                url: scheme + target.host + ':' + target.port + '/ws',
                 watchdog: WS_WATCHDOG_MS
             });
         }
@@ -125,7 +144,7 @@
             list.push({
                 kind: 'peer',
                 label: 'PeerJS ' + label + ' (' + target.host + ':' + target.port + ')',
-                options: { secure: false, host: target.host, port: target.port, path: '/', config: ICE_CONFIG, debug: 1 },
+                options: { secure: !!target.secure, host: target.host, port: target.port, path: '/', config: ICE_CONFIG, debug: 1 },
                 watchdog: PEER_WATCHDOG_MS
             });
         }
@@ -138,25 +157,32 @@
         }
 
         // 2. PeerJS locale (compatibilità col vecchio server "peer")
-        addPeer(forced, 'indicato');
-        addPeer(pageHost, 'della pagina');
-        addPeer(localHost, 'locale');
+        // PeerJS non verifica i token: resta disponibile solo ai viewer legacy.
+        // I controller devono usare il relay WebSocket autenticato.
+        if (role === 'viewer') {
+            addPeer(forced, 'indicato');
+            addPeer(pageHost, 'della pagina');
+            addPeer(localHost, 'locale');
 
-        // 3. Cloud PeerJS (board.html da casa)
-        if (p.get('nocloud') !== '1') {
-            list.push({
-                kind: 'peer',
-                label: 'cloud PeerJS',
-                options: { secure: true, host: '0.peerjs.com', port: 443, path: '/', config: ICE_CONFIG, debug: 1 },
-                watchdog: PEER_WATCHDOG_MS
-            });
+            // 3. Cloud PeerJS (board.html da casa)
+            if (p.get('nocloud') !== '1') {
+                list.push({
+                    kind: 'peer',
+                    label: 'cloud PeerJS',
+                    options: { secure: true, host: '0.peerjs.com', port: 443, path: '/', config: ICE_CONFIG, debug: 1 },
+                    watchdog: PEER_WATCHDOG_MS
+                });
+            }
         }
         return list;
     }
 
     function connect(cfg) {
+        cfg = cfg || {};
         var hostId = normalizeId(cfg.id);
-        var candidates = buildCandidates();
+        var role = cfg.role === 'controller' || cfg.role === 'host' ? cfg.role : 'viewer';
+        var token = cfg.token == null ? '' : String(cfg.token);
+        var candidates = buildCandidates(role);
         var candIdx = 0;
         var peer = null;      // trasporto PeerJS attivo
         var conn = null;      // DataConnection PeerJS attiva
@@ -168,7 +194,9 @@
         var watchdog = null;
         var currentLabel = '';
         var everOpened = false;
-        var lastAlive = 0;
+        var lastTransportAlive = 0;
+        var lastStateReceived = 0;
+        var hostConnectedAt = 0;
         // Ogni tentativo incrementa "gen": gli handler dei tentativi vecchi
         // si auto-disattivano (evita i loop di riconnessione sovrapposti).
         var gen = 0;
@@ -178,18 +206,33 @@
             if (isError) { console.warn('[PMClient]', msg); } else { console.log('[PMClient]', msg); }
         }
 
-        function touch() { lastAlive = Date.now(); }
+        function touchTransport() { lastTransportAlive = Date.now(); }
 
         function fireOpen(label) {
+            if (!connOpen) {
+                hostConnectedAt = Date.now();
+                lastStateReceived = 0;
+            }
             connOpen = true;
             everOpened = true;
-            touch();
+            touchTransport();
             status('Connesso via ' + label);
             if (cfg.onOpen) { try { cfg.onOpen(); } catch (e) { console.error('[PMClient] onOpen:', e); } }
         }
 
+        function isRegiaStatePacket(d) {
+            if (!d || typeof d !== 'object') return false;
+            return d.type === 'FULL_SYNC' || d.type === 'PARTIAL_SYNC' ||
+                Number.isFinite(Number(d.stateRevision)) ||
+                (Object.prototype.hasOwnProperty.call(d, 'timer') &&
+                    (d.teamLeft || d.teamRight || d.mode));
+        }
+
         function fireData(d) {
-            touch();
+            touchTransport();
+            // ACK e altri messaggi applicativi dimostrano che il collegamento ÃƒÂ¨
+            // vivo, ma non che il tabellone abbia ricevuto uno stato aggiornato.
+            if (isRegiaStatePacket(d)) lastStateReceived = Date.now();
             if (cfg.onData) { try { cfg.onData(d); } catch (e) { console.error('[PMClient] onData:', e); } }
         }
 
@@ -222,6 +265,8 @@
         // ---------- TRASPORTO 1: RELAY WEBSOCKET ----------
         function tryWs(cand, myGen) {
             var s;
+            var authRejected = false;
+            var authRetryAllowed = false;
             try {
                 s = new WebSocket(cand.url);
             } catch (e) {
@@ -232,7 +277,12 @@
 
             s.onopen = function () {
                 if (destroyed || myGen !== gen) return;
-                s.send(JSON.stringify({ type: 'hello', role: 'client', room: hostId }));
+                var hello = { type: 'hello', role: role, token: token, room: hostId };
+                if (role === 'host') {
+                    hello.hostToken = cfg.hostToken == null ? token : String(cfg.hostToken);
+                    hello.controlToken = cfg.controlToken == null ? token : String(cfg.controlToken);
+                }
+                s.send(JSON.stringify(hello));
             };
 
             s.onmessage = function (ev) {
@@ -240,14 +290,23 @@
                 var d;
                 try { d = JSON.parse(ev.data); } catch (e) { return; }
                 if (!d) return;
-                touch();
+                touchTransport();
 
                 if (d.type && d.type.charAt(0) === '_') {
                     // Messaggi di servizio del relay
-                    if (d.type === '_welcome') {
+                    if (d.type === '_authError') {
+                        authRejected = true;
+                        authRetryAllowed = d.code === 'REGIA_NOT_READY';
+                        if (watchdog) { clearTimeout(watchdog); watchdog = null; }
+                        status('Accesso negato dal relay: ' + (d.message || 'credenziali non valide.'), true);
+                        fireClose();
+                        try { s.close(); } catch (e) { }
+                    } else if (d.type === '_welcome') {
                         if (watchdog) { clearTimeout(watchdog); watchdog = null; }
                         parked = true;
-                        if (d.hostOnline) {
+                        if (role === 'host') {
+                            fireOpen(cand.label);
+                        } else if (d.hostOnline) {
                             fireOpen(cand.label);
                             try { s.send(JSON.stringify({ type: 'requestState' })); } catch (e) { }
                         } else {
@@ -262,7 +321,8 @@
                         status('Regia disconnessa. Resto in attesa che torni...', true);
                         fireClose();
                     }
-                    // _hb: solo touch() (già fatto sopra)
+                    // _hb aggiorna solo il trasporto (già fatto sopra), non la
+                    // freschezza dei dati prodotti dalla Regia.
                     return;
                 }
 
@@ -278,7 +338,11 @@
                 var wasParked = parked;
                 parked = false;
                 fireClose();
-                if (wasParked) {
+                if (authRejected) {
+                    // Il token puÃ² diventare valido quando parte la Regia o
+                    // dopo un cambio PIN: riprova senza martellare il relay.
+                    if (authRetryAllowed) scheduleNext(END_OF_CYCLE_PAUSE);
+                } else if (wasParked) {
                     // Il relay funzionava: riprova subito lo stesso candidato
                     status('Connessione al relay persa. Riconnessione...', true);
                     candIdx = Math.max(0, candIdx - 1);
@@ -323,7 +387,7 @@
                     }
                     if (!d) return;
                     if (d.type === 'PING') {
-                        touch();
+                        touchTransport();
                         try { c.send({ type: 'PONG', ts: d.ts }); } catch (e) { }
                         return;
                     }
@@ -368,6 +432,10 @@
 
         function tryCandidate() {
             if (destroyed) return;
+            if (!candidates.length) {
+                status('Nessun relay sicuro disponibile per il controller.', true);
+                return;
+            }
             cleanup();
             var myGen = gen;
             var cand = candidates[candIdx % candidates.length];
@@ -396,7 +464,13 @@
                 if (destroyed) { clearInterval(badgeTimer); return; }
                 // Dati "vecchi" se: la Regia non è più raggiungibile (anche se il
                 // relay è vivo e manda heartbeat), oppure non arriva più nulla.
-                var stale = everOpened && (!connOpen || (Date.now() - lastAlive > STALE_AFTER_MS));
+                var now = Date.now();
+                var transportStale = connOpen && lastTransportAlive &&
+                    (now - lastTransportAlive > STALE_AFTER_MS);
+                var stateReference = lastStateReceived || hostConnectedAt;
+                var stateStale = connOpen && stateReference &&
+                    (now - stateReference > STALE_AFTER_MS);
+                var stale = everOpened && (!connOpen || transportStale || stateStale);
                 if (stale && !badgeEl) {
                     badgeEl = document.createElement('div');
                     badgeEl.id = 'pm-stale-badge';

@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="referrer" content="no-referrer">
     <title>Referee Field Control - IPBA</title>
     <script src="lib/peerjs.min.js"></script>
     <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" crossorigin="anonymous"><\/script>');</script>
@@ -53,7 +54,7 @@
             position: fixed;
             inset: 0;
             background: #000;
-            z-index: 9999;
+            z-index: 30000;
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -178,6 +179,62 @@
             box-shadow: 0 0 15px #22c55e;
         }
 
+        #command-feedback {
+            position: fixed;
+            top: 14px;
+            left: 50%;
+            z-index: 20000;
+            display: none;
+            max-width: calc(100vw - 190px);
+            padding: 10px 16px;
+            border: 2px solid transparent;
+            border-radius: 12px;
+            background: #172033;
+            color: white;
+            font-size: 15px;
+            font-weight: 900;
+            text-align: center;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55);
+            transform: translateX(-50%);
+            pointer-events: none;
+        }
+
+        #command-feedback.sending {
+            display: block;
+            border-color: var(--warning);
+            color: #fbbf24;
+        }
+
+        #command-feedback.success {
+            display: block;
+            border-color: var(--success);
+            background: #052e16;
+            color: #86efac;
+        }
+
+        #command-feedback.failure {
+            display: block;
+            border-color: var(--danger);
+            background: #450a0a;
+            color: #fecaca;
+        }
+
+        .modal-btn:disabled {
+            opacity: 0.45;
+            cursor: wait;
+        }
+
+        @media (max-width: 600px) {
+            #command-feedback {
+                top: 12px;
+                left: 12px;
+                max-width: calc(100vw - 95px);
+                padding: 8px 10px;
+                font-size: 13px;
+                transform: none;
+            }
+        }
+
         /* TIMER AREA */
         #timer-container {
             display: flex;
@@ -188,6 +245,20 @@
             align-items: center;
             justify-content: center;
             gap: 20px;
+        }
+
+        .ref-settings-btn {
+            position: fixed;
+            top: 12px;
+            right: 12px;
+            z-index: 9000;
+            border: 2px solid #64748b;
+            border-radius: 12px;
+            background: rgba(15, 23, 42, 0.92);
+            color: #e2e8f0;
+            padding: 10px 14px;
+            font-size: 16px;
+            font-weight: 900;
         }
 
         #timer {
@@ -536,9 +607,12 @@
 <body>
 
     <div id="connection-status"></div>
+    <div id="command-feedback" role="status" aria-live="assertive"></div>
     <div id="connect-ui">
         <h1 style="font-family: 'Oswald'; font-size: 40px; margin: 0;">REFEREE CONTROL</h1>
         <input type="text" id="host-id" placeholder="MATCH ID">
+        <input type="password" id="control-pin" placeholder="PIN CONTROLLO" inputmode="numeric"
+            autocomplete="one-time-code" maxlength="6">
         <div id="my-id-display" style="color: #475569; font-size: 11px;">Inserisci il MATCH ID e premi CONNETTI</div>
 
         <div
@@ -558,6 +632,7 @@
     </div>
 
     <div id="app">
+        <button class="ref-settings-btn" onclick="openSettings()" aria-label="Impostazioni intervalli">⚙ INTERVALLI</button>
         <div id="timer-container">
             <div id="timer">00:00</div>
             <div id="timer-phase">GARA</div>
@@ -614,11 +689,11 @@
     <!-- POINT CONFIRMATION MODAL -->
     <div id="point-modal" class="modal">
         <div id="modal-team-name" class="modal-title">VERIFICA PUNTO</div>
-        <button class="modal-btn btn-confirm" onclick="submitPoint('APPROVED')">CONFIRMED POINT</button>
-        <button class="modal-btn btn-reverse" onclick="submitPoint('REVERSE')">REVERSE POINT</button>
-        <button class="modal-btn btn-reject" onclick="submitPoint('REJECT')">POINT NOT APPROVED</button>
-        <button class="modal-btn btn-nopoint" onclick="submitPoint('NO_POINT')">NO POINT</button>
-        <button class="modal-btn btn-cancel" onclick="closeModal()">CANCEL / CLOSE</button>
+        <button class="modal-btn btn-confirm" data-point-decision="APPROVED" onclick="submitPoint('APPROVED')">CONFIRMED POINT</button>
+        <button class="modal-btn btn-reverse" data-point-decision="REVERSE" onclick="submitPoint('REVERSE')">REVERSE POINT</button>
+        <button class="modal-btn btn-reject" data-point-decision="REJECT" onclick="submitPoint('REJECT')">POINT NOT APPROVED</button>
+        <button class="modal-btn btn-nopoint" data-point-decision="NO_POINT" onclick="submitPoint('NO_POINT')">NO POINT</button>
+        <button class="modal-btn btn-cancel" data-point-decision="REJECT" onclick="closeModal()">CANCEL / CLOSE</button>
     </div>
 
     <!-- SETTINGS MODAL -->
@@ -628,11 +703,13 @@
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <label>Int. Punto (sec)</label>
                 <input type="number" id="point-interval-duration"
+                    value="30" min="1"
                     style="width: 80px; padding: 10px; border-radius: 8px; border: 1px solid #333; background: #111; color: white; text-align: center;">
             </div>
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <label>Int. Slot (sec)</label>
                 <input type="number" id="slot-interval-duration"
+                    value="120" min="1"
                     style="width: 80px; padding: 10px; border-radius: 8px; border: 1px solid #333; background: #111; color: white; text-align: center;">
             </div>
             <button class="modal-btn btn-confirm" style="margin-top: 20px;" onclick="saveSettings()">SALVA E
@@ -643,25 +720,43 @@
     </div>
 
     <script>
-        const syncChannel = new BroadcastChannel('pm_sync');
+        const syncChannelAvailable = typeof BroadcastChannel === 'function';
+        const syncChannel = syncChannelAvailable
+            ? new BroadcastChannel('pm_sync')
+            : { postMessage: () => { }, onmessage: null };
 
         // NEW: Zero-latency Local sync (Listen for state updates)
         syncChannel.onmessage = (event) => {
-            if (event.data && event.data.type === 'STATE_UPDATE') {
-                updateUI(event.data.payload);
+            const data = event.data;
+            if (!data) return;
+            if (data.type === 'COMMAND_ACK') {
+                handleCommandAck(data.payload || data);
+            } else if (data.type === 'STATE_UPDATE') {
+                updateUI(data.payload);
             }
         };
 
         let conn = null;
         let currentMode = 'IDLE';
         let pendingSide = null;
+        let pointRequestPromise = null;
+        let pointRequestPayload = null;
+        let pointRequestAccepted = false;
+        let pointDecisionPayload = null;
+        let lockedPointDecision = null;
+        let pointModalBusy = false;
         let chosenLayout = 'phone';
+        let controlToken = '';
         let lastTimerSecond = -1;
         let lastPensLeft = 0;
         let lastPensRight = 0;
         let lastPenaltyTimeLeft = 0;
         let lastPenaltyTimeRight = 0;
         let vibrationEnabled = true; // Global flag
+        const pendingCommands = new Map();
+        const COMMAND_RETRY_DELAYS = [800, 1500, 3000, 5000];
+        const CONTROL_PIN_STORAGE_KEY = 'pm_referee_control_pin';
+        let feedbackHideTimer = null;
 
         function triggerVibration(pattern) {
             if (!vibrationEnabled) return;
@@ -689,12 +784,264 @@
             console.log("STATUS:", msg);
         }
 
+        function requestPinCorrection(message) {
+            const connectUi = document.getElementById('connect-ui');
+            const btnConnect = document.getElementById('btn-connect');
+            connectUi.style.display = 'flex';
+            btnConnect.disabled = false;
+            btnConnect.innerText = 'RIPROVA';
+            setStatus(message || 'Controlla il PIN controllo', 'var(--danger)');
+            setTimeout(() => {
+                const pinEl = document.getElementById('control-pin');
+                if (pinEl) {
+                    pinEl.focus();
+                    pinEl.select();
+                }
+            }, 50);
+        }
+
+        function showCommandFeedback(kind, message, autoHideMs = 0) {
+            const el = document.getElementById('command-feedback');
+            if (!el) return;
+            if (feedbackHideTimer) {
+                clearTimeout(feedbackHideTimer);
+                feedbackHideTimer = null;
+            }
+            el.className = kind || '';
+            el.innerText = message || '';
+            if (autoHideMs > 0) {
+                feedbackHideTimer = setTimeout(() => {
+                    if (pendingCommands.size === 0) {
+                        el.className = '';
+                        el.innerText = '';
+                    }
+                }, autoHideMs);
+            }
+        }
+
+        function commandLabel(payload) {
+            const labels = {
+                POINT: 'VERIFICA PUNTO',
+                CONFIRM_POINT: 'DECISIONE PUNTO',
+                PENALTY: 'PENALITÀ',
+                ACTION: 'TOWEL',
+                TECH: 'PAUSA TECNICA',
+                START_POINT: 'START',
+                START_INTER: 'INTERVALLO',
+                PAUSE: 'PAUSA/RIPRESA',
+                UPDATE_SETTINGS: 'IMPOSTAZIONI'
+            };
+            return labels[payload.type] || payload.type || 'COMANDO';
+        }
+
+        function pinStorageKey(matchId) {
+            const normalized = (window.PMClient && PMClient.normalizeId)
+                ? PMClient.normalizeId(matchId)
+                : String(matchId || '').trim().toUpperCase();
+            return `${CONTROL_PIN_STORAGE_KEY}:${normalized || 'default'}`;
+        }
+
+        function rememberControlPin(matchId, pin) {
+            try {
+                localStorage.setItem(CONTROL_PIN_STORAGE_KEY, pin);
+                localStorage.setItem(pinStorageKey(matchId), pin);
+            } catch (err) {
+                console.warn('Impossibile ricordare il PIN controllo:', err);
+            }
+        }
+
+        function readRememberedControlPin(matchId) {
+            try {
+                return localStorage.getItem(pinStorageKey(matchId)) ||
+                    localStorage.getItem(CONTROL_PIN_STORAGE_KEY) || '';
+            } catch (err) {
+                return '';
+            }
+        }
+
+        function refreshPointModalButtons() {
+            document.querySelectorAll('#point-modal .modal-btn').forEach(button => {
+                const decision = button.dataset.pointDecision || '';
+                button.disabled = pointModalBusy || (!!lockedPointDecision && decision !== lockedPointDecision);
+            });
+        }
+
+        function setPointModalBusy(busy) {
+            pointModalBusy = !!busy;
+            refreshPointModalButtons();
+        }
+
+        function lockPointDecision(decision = null) {
+            lockedPointDecision = decision || null;
+            refreshPointModalButtons();
+        }
+
+        function settlePendingCommand(entry, result) {
+            if (!entry || entry.settled) return;
+            entry.settled = true;
+            if (entry.timer) clearTimeout(entry.timer);
+            pendingCommands.delete(entry.payload.commandId);
+            entry.resolve(result);
+        }
+
+        function failPendingCommand(entry, reason) {
+            if (!entry || entry.settled) return;
+            const message = reason || 'nessuna risposta dalla Regia';
+            settlePendingCommand(entry, {
+                accepted: false,
+                commandId: entry.payload.commandId,
+                message: message,
+                timedOut: true
+            });
+            showCommandFeedback('failure', `NON RICEVUTO · ${commandLabel(entry.payload)} · ${message}`, 8000);
+            triggerVibration('warning');
+        }
+
+        function handleLatePointAck(ack) {
+            const commandId = String(ack && ack.commandId || '');
+            const isPointRequest = !!pointRequestPayload &&
+                String(pointRequestPayload.commandId) === commandId;
+            const isPointDecision = !!pointDecisionPayload &&
+                String(pointDecisionPayload.commandId) === commandId;
+
+            if (!isPointRequest && !isPointDecision) return false;
+
+            const accepted = ack.accepted === true;
+            const terminalRejection = isTerminalPointRejection(ack);
+            const reason = ack.message || 'comando rifiutato dalla Regia';
+            const payload = isPointDecision ? pointDecisionPayload : pointRequestPayload;
+
+            if (accepted) {
+                showCommandFeedback('success', `CONFERMATO · ${commandLabel(payload)}`, 1800);
+                triggerVibration('point');
+                if (isPointDecision) {
+                    clearPointVerificationModal();
+                } else {
+                    pointRequestAccepted = true;
+                    pointRequestPromise = null;
+                    // Un duplicato tardivo del POINT può arrivare mentre la
+                    // decisione è già in volo: in quel caso i tasti restano bloccati.
+                    if (!pointDecisionPayload) setPointModalBusy(false);
+                }
+                return true;
+            }
+
+            showCommandFeedback('failure', `RIFIUTATO · ${commandLabel(payload)} · ${reason}`, 8000);
+            triggerVibration('warning');
+            if (/pin|credenzial|accesso negato/i.test(reason)) requestPinCorrection(reason);
+
+            if (terminalRejection) {
+                clearPointVerificationModal();
+            } else {
+                if (isPointDecision) lockPointDecision(pointDecisionPayload.decision);
+                if (isPointDecision || !pointDecisionPayload) setPointModalBusy(false);
+            }
+            return true;
+        }
+
+        function handleCommandAck(ack) {
+            if (!ack || ack.type !== 'COMMAND_ACK' || !ack.commandId) return false;
+            const entry = pendingCommands.get(String(ack.commandId));
+            if (!entry || entry.settled) {
+                handleLatePointAck(ack);
+                return true;
+            }
+
+            if (ack.accepted === true) {
+                settlePendingCommand(entry, ack);
+                showCommandFeedback('success', `CONFERMATO · ${commandLabel(entry.payload)}`, 1800);
+                if (entry.payload.type === 'PENALTY' && entry.payload.side && entry.payload.level) {
+                    triggerFlash(entry.payload.side, entry.payload.level == 1 ? 'yellow' : 'red');
+                }
+                if (entry.payload.type !== 'TIMER_SYNC') triggerVibration('point');
+            } else {
+                const reason = ack.message || 'comando rifiutato dalla Regia';
+                settlePendingCommand(entry, ack);
+                showCommandFeedback('failure', `RIFIUTATO · ${commandLabel(entry.payload)} · ${reason}`, 8000);
+                triggerVibration('warning');
+                if (/pin|credenzial|accesso negato/i.test(reason)) requestPinCorrection(reason);
+            }
+            return true;
+        }
+
+        function transmitPendingCommand(entry) {
+            if (!entry || entry.settled) return;
+            if (entry.timer) {
+                clearTimeout(entry.timer);
+                entry.timer = null;
+            }
+
+            entry.attempts += 1;
+            let localAttempted = false;
+            let networkSent = false;
+
+            if (syncChannelAvailable) {
+                try {
+                    syncChannel.postMessage({ type: 'REMOTE_COMMAND', payload: entry.payload });
+                    localAttempted = true;
+                } catch (err) {
+                    console.error('Invio locale fallito:', err);
+                }
+            }
+
+            if (conn && conn.open) {
+                try {
+                    networkSent = conn.send(entry.payload) === true;
+                } catch (err) {
+                    console.error('Invio rete fallito:', err);
+                }
+            }
+
+            const routeNote = networkSent ? '' : (localAttempted ? ' · rete in attesa' : ' · nessun collegamento');
+            showCommandFeedback(
+                'sending',
+                `INVIO · ${commandLabel(entry.payload)} · tentativo ${entry.attempts}/${COMMAND_RETRY_DELAYS.length}${routeNote}`
+            );
+
+            const retryDelay = COMMAND_RETRY_DELAYS[Math.min(entry.attempts - 1, COMMAND_RETRY_DELAYS.length - 1)];
+            entry.timer = setTimeout(() => {
+                if (entry.settled) return;
+                if (entry.attempts >= COMMAND_RETRY_DELAYS.length) {
+                    failPendingCommand(entry, 'nessuna conferma dalla Regia');
+                } else {
+                    transmitPendingCommand(entry);
+                }
+            }, retryDelay);
+        }
+
+        function retryPendingCommandsNow() {
+            pendingCommands.forEach(entry => {
+                if (!entry.settled && entry.attempts < COMMAND_RETRY_DELAYS.length) {
+                    entry.payload.controlToken = controlToken;
+                    transmitPendingCommand(entry);
+                }
+            });
+        }
+
+        function handleIncomingData(data) {
+            if (!data) return;
+            if (data.type === 'COMMAND_ACK') {
+                handleCommandAck(data.payload || data);
+                return;
+            }
+            updateUI(data);
+        }
+
         function connectToHost() {
             let idInput = document.getElementById('host-id').value.trim();
             if (!idInput) {
                 setStatus("Inserisci un ID", "var(--danger)");
                 return;
             }
+
+            const pinInput = document.getElementById('control-pin').value.trim();
+            if (!/^\d{6}$/.test(pinInput)) {
+                setStatus("Inserisci un PIN di 6 cifre", "var(--danger)");
+                showCommandFeedback('failure', 'PIN CONTROLLO: SERVONO 6 CIFRE', 6000);
+                return;
+            }
+            controlToken = pinInput;
+            rememberControlPin(idInput, controlToken);
 
             const btnConnect = document.getElementById('btn-connect');
             btnConnect.disabled = true;
@@ -705,11 +1052,16 @@
             if (conn) conn.destroy();
             conn = PMClient.connect({
                 id: idInput,
+                role: 'controller',
+                token: controlToken,
+                staleBadge: true,
                 onStatus: (msg, isError) => {
                     setStatus(msg, isError ? "var(--danger)" : "var(--btn-accent)");
                     if (isError) {
                         btnConnect.disabled = false;
                         btnConnect.innerText = "RIPROVA";
+                        showCommandFeedback('failure', msg, 6000);
+                        if (/pin|credenzial|accesso negato/i.test(msg)) requestPinCorrection(msg);
                     }
                 },
                 onOpen: () => {
@@ -721,11 +1073,16 @@
                     app.className = `layout-${chosenLayout}`;
                     app.style.display = (chosenLayout === 'tablet') ? 'grid' : 'flex';
                     document.getElementById('connection-status').classList.add('online');
+                    btnConnect.disabled = false;
+                    btnConnect.innerText = "CONNETTI";
+                    if (pendingCommands.size > 0) retryPendingCommandsNow();
+                    else showCommandFeedback('success', 'REGIA CONNESSA', 1600);
                 },
                 onClose: () => {
                     document.getElementById('connection-status').classList.remove('online');
+                    showCommandFeedback('failure', 'REGIA DISCONNESSA · riconnessione in corso');
                 },
-                onData: updateUI
+                onData: handleIncomingData
             });
         }
 
@@ -915,24 +1272,116 @@
         }
 
         function openPointModal(side) {
+            if (pendingSide || pointModalBusy) {
+                showCommandFeedback('failure', 'È GIÀ ATTIVA UNA VERIFICA PUNTO', 5000);
+                return;
+            }
             pendingSide = side;
+            pointRequestPromise = null;
+            pointRequestPayload = null;
+            pointRequestAccepted = false;
+            pointDecisionPayload = null;
+            lockPointDecision(null);
             const name = side === 'left' ? document.getElementById('name-left').innerText : document.getElementById('name-right').innerText;
-
-            // Notify host to open point verification (handles pausing)
-            sendCommand('POINT', side);
-
             document.getElementById('modal-team-name').innerText = `PUNTO PER: ${name}`;
             document.getElementById('point-modal').style.display = 'flex';
+            setPointModalBusy(true);
+
+            // Prima di accettare la decisione dell'arbitro, la Regia deve aver
+            // confermato l'apertura della verifica punto.
+            ensurePointRequestAcknowledged().then(result => {
+                if (pendingSide === side) setPointModalBusy(false);
+                if (!result.accepted && pendingSide === side) {
+                    showCommandFeedback('failure', 'VERIFICA PUNTO NON APERTA · premi di nuovo una decisione per riprovare', 8000);
+                }
+            });
         }
 
         function closeModal() {
-            document.getElementById('point-modal').style.display = 'none';
+            return finishPointDecision('CONFIRM_POINT', 'REJECT');
         }
 
         function submitPoint(decision) {
-            sendCommand('CONFIRM_POINT', pendingSide, null, decision);
-            if (decision === 'APPROVED') triggerVibration('point');
-            closeModal();
+            return finishPointDecision('CONFIRM_POINT', decision);
+        }
+
+        function ensurePointRequestAcknowledged() {
+            if (!pendingSide) {
+                return Promise.resolve({ accepted: false, message: 'nessun punto in verifica' });
+            }
+            if (pointRequestAccepted) {
+                return Promise.resolve({ accepted: true, message: 'verifica già aperta' });
+            }
+            if (!pointRequestPromise) {
+                const requestedSide = pendingSide;
+                if (!pointRequestPayload) pointRequestPayload = createCommandPayload('POINT', requestedSide);
+                pointRequestPromise = queueCommandPayload(pointRequestPayload).then(result => {
+                    if (pendingSide === requestedSide) {
+                        pointRequestAccepted = result.accepted === true;
+                    }
+                    pointRequestPromise = null;
+                    return result;
+                });
+            }
+            return pointRequestPromise;
+        }
+
+        function isTerminalPointRejection(result) {
+            const message = String(result && result.message || '').toLowerCase();
+            return result && result.accepted === false &&
+                message.includes('verifica punto non') && message.includes('attiva');
+        }
+
+        function clearPointVerificationModal() {
+            pendingSide = null;
+            pointRequestPromise = null;
+            pointRequestPayload = null;
+            pointRequestAccepted = false;
+            pointDecisionPayload = null;
+            lockedPointDecision = null;
+            pointModalBusy = false;
+            refreshPointModalButtons();
+            document.getElementById('point-modal').style.display = 'none';
+        }
+
+        function finishPointDecision(commandType, decision) {
+            if (pointModalBusy || !pendingSide) {
+                if (!pendingSide) showCommandFeedback('failure', 'NESSUN PUNTO IN VERIFICA', 5000);
+                return Promise.resolve({ accepted: false, message: 'verifica non disponibile' });
+            }
+
+            const side = pendingSide;
+            if (pointDecisionPayload && pointDecisionPayload.decision !== decision) {
+                showCommandFeedback(
+                    'failure',
+                    `DECISIONE ${pointDecisionPayload.decision} GIÀ IN ATTESA · usa lo stesso pulsante per ritentare`,
+                    8000
+                );
+                return Promise.resolve({ accepted: false, message: 'una diversa decisione è già in attesa' });
+            }
+
+            setPointModalBusy(true);
+            return ensurePointRequestAcknowledged().then(openAck => {
+                if (!openAck.accepted) return { stage: 'POINT', result: openAck };
+                if (!pointDecisionPayload) {
+                    pointDecisionPayload = createCommandPayload(commandType, side, null, decision);
+                }
+                return queueCommandPayload(pointDecisionPayload).then(result => ({ stage: 'DECISION', result }));
+            }).then(outcome => {
+                const result = outcome.result;
+                const decisionFinished = outcome.stage === 'DECISION' &&
+                    (result.accepted === true || isTerminalPointRejection(result));
+
+                if (decisionFinished && pendingSide === side) {
+                    clearPointVerificationModal();
+                } else {
+                    if (outcome.stage === 'DECISION' && pointDecisionPayload) {
+                        lockPointDecision(pointDecisionPayload.decision);
+                    }
+                    setPointModalBusy(false);
+                }
+                return result;
+            });
         }
 
         function parseTimerToSeconds(mmss) {
@@ -949,32 +1398,69 @@
             }
         }
 
-        function sendCommand(type, side, level, decision, extraSettings) {
-            const payload = { type: type, side: side, level: level, decision: decision };
+        function createCommandPayload(type, side, level, decision, extraSettings) {
+            const sentAt = Date.now();
+            const commandId = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+                ? crypto.randomUUID()
+                : `${sentAt}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+            const payload = {
+                type: type,
+                side: side,
+                level: level,
+                decision: decision,
+                commandId: commandId,
+                sentAt: sentAt,
+                controlToken: controlToken
+            };
             if (extraSettings) payload.settings = extraSettings;
+            return payload;
+        }
 
-            // Send via BroadcastChannel for local zero-latency
-            syncChannel.postMessage({ type: 'REMOTE_COMMAND', payload: payload });
-
-            if (!conn || !conn.open) {
-                console.error("COMMAND FAILED: Connection not open.");
-                document.getElementById('connection-status').classList.remove('online');
-                // Optional: alert only if it's a critical action like Start/Point
-                if (type === 'START' || type === 'POINT') alert("Comando non inviato: regia disconnessa!");
-                return;
+        function queueCommandPayload(payload) {
+            if (!controlToken) {
+                const failure = { accepted: false, message: 'PIN controllo mancante' };
+                showCommandFeedback('failure', 'COMANDO NON INVIATO · PIN CONTROLLO MANCANTE', 8000);
+                return Promise.resolve(failure);
+            }
+            if (!payload || !payload.commandId) {
+                return Promise.resolve({ accepted: false, message: 'payload comando non valido' });
             }
 
-            // Visual feedback for penalty (Local feedback)
-            if (type === 'PENALTY' && side && level) {
-                const color = (level == 1) ? 'yellow' : 'red';
-                triggerFlash(side, color);
-            }
+            const existing = pendingCommands.get(payload.commandId);
+            if (existing && !existing.settled) return existing.promise;
 
-            console.log("SENDING COMMAND:", payload);
-            conn.send(payload);
+            // Un ritento manuale conserva integralmente il comando originario.
+            // L'unico campo aggiornabile è il PIN, nel caso sia stato corretto.
+            payload.controlToken = controlToken;
 
-            // Vibrate on success
-            if (type !== 'TIMER_SYNC') triggerVibration('point');
+            // Il PIN viaggia nel payload ma non deve finire nella console del browser.
+            console.log("QUEUE COMMAND:", {
+                type: payload.type,
+                side: payload.side,
+                level: payload.level,
+                decision: payload.decision,
+                commandId: payload.commandId,
+                sentAt: payload.sentAt
+            });
+
+            let resolveCommand;
+            const promise = new Promise(resolve => { resolveCommand = resolve; });
+            const entry = {
+                payload: payload,
+                attempts: 0,
+                timer: null,
+                settled: false,
+                resolve: resolveCommand,
+                promise: promise
+            };
+            const commandId = payload.commandId;
+            pendingCommands.set(commandId, entry);
+            transmitPendingCommand(entry);
+            return promise;
+        }
+
+        function sendCommand(type, side, level, decision, extraSettings) {
+            return queueCommandPayload(createCommandPayload(type, side, level, decision, extraSettings));
         }
 
         function triggerFlash(side, color) {
@@ -990,7 +1476,9 @@
         }
 
         function handlePauseToggle() {
-            if (currentMode === 'PAUSED' || currentMode === 'TECH_PAUSED' || currentMode === 'IDLE' || currentMode === 'INTERVAL' || currentMode === 'GOLDEN_BREAK') {
+            if (currentMode === 'PAUSED' || currentMode === 'TECH_PAUSED') {
+                sendCommand('PAUSE');
+            } else if (currentMode === 'IDLE' || currentMode === 'INTERVAL' || currentMode === 'GOLDEN_BREAK') {
                 sendCommand('START_POINT');
             } else if (currentMode === 'BREAK_MATCH') {
                 sendCommand('START_INTER');
@@ -999,11 +1487,65 @@
             }
         }
 
+        function openSettings() {
+            document.getElementById('settings-modal').style.display = 'flex';
+        }
+
+        function saveSettings() {
+            const pointIntervalDuration = Number(document.getElementById('point-interval-duration').value);
+            const slotIntervalDuration = Number(document.getElementById('slot-interval-duration').value);
+
+            if (!Number.isFinite(pointIntervalDuration) || pointIntervalDuration <= 0 ||
+                !Number.isFinite(slotIntervalDuration) || slotIntervalDuration <= 0) {
+                alert('Inserisci durate positive valide per entrambi gli intervalli.');
+                return;
+            }
+
+            sendCommand('UPDATE_SETTINGS', null, null, null, {
+                pointIntervalDuration: pointIntervalDuration,
+                slotIntervalDuration: slotIntervalDuration
+            }).then(result => {
+                if (result.accepted === true) {
+                    document.getElementById('settings-modal').style.display = 'none';
+                }
+            });
+        }
+
         const params = new URLSearchParams(window.location.search);
         const id = params.get('id') || params.get('matchId');
+        const pinFromUrl = params.get('pin');
         if (id) {
             document.getElementById('host-id').value = id;
+        }
+        const initialPin = pinFromUrl || readRememberedControlPin(id || 'default');
+        if (initialPin) document.getElementById('control-pin').value = initialPin;
+        if (pinFromUrl && id) rememberControlPin(id, pinFromUrl);
+
+        // Dopo averlo memorizzato, togli il PIN dalla barra indirizzi e dalla
+        // cronologia: il QR continua a funzionare, ma il segreto non resta visibile.
+        if (pinFromUrl && window.history && typeof window.history.replaceState === 'function') {
+            params.delete('pin');
+            const cleanQuery = params.toString();
+            const cleanUrl = window.location.pathname + (cleanQuery ? `?${cleanQuery}` : '') + window.location.hash;
+            window.history.replaceState(null, '', cleanUrl);
+        }
+
+        document.getElementById('host-id').addEventListener('change', event => {
+            if (pinFromUrl) return;
+            const remembered = readRememberedControlPin(event.target.value);
+            if (remembered) document.getElementById('control-pin').value = remembered;
+        });
+
+        ['host-id', 'control-pin'].forEach(inputId => {
+            document.getElementById(inputId).addEventListener('keydown', event => {
+                if (event.key === 'Enter') connectToHost();
+            });
+        });
+
+        if (id && initialPin) {
             setTimeout(connectToHost, 500);
+        } else if (id) {
+            setStatus('Inserisci il PIN controllo', 'var(--warning)');
         }
     </script>
 </body>
