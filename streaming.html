@@ -2760,7 +2760,13 @@
             const inner = doc.querySelector('.small-box .inner');
             if (inner) {
                 const h3 = inner.querySelector('h3');
-                if (h3) out.name = h3.textContent.replace(/\s+/g, ' ').trim();
+                if (h3) {
+                    // Il sito 2026 mette lo stato ("Concluso", "Iscrizioni aperte")
+                    // in uno <span class="event-status"> dentro l'h3: va tolto dal nome.
+                    const hc = h3.cloneNode(true);
+                    hc.querySelectorAll('.event-status').forEach(x => x.remove());
+                    out.name = hc.textContent.replace(/\s+/g, ' ').trim();
+                }
                 const p = inner.querySelector('p');
                 if (p) {
                     const b = p.querySelector('b');
@@ -2777,6 +2783,44 @@
             for (const t of doc.querySelectorAll('.box-title')) {
                 if (/calendario gare/i.test(t.textContent)) { calRoot = t.closest('.box') || doc; break; }
             }
+            // Nuovo layout ipba (2026): <div class="event-schedule-match"> con label
+            // "9:30 - Girone C [- mercy 2]" (a volte solo "Preliminari"), squadre in
+            // .event-schedule-team e punteggio in .event-schedule-score.
+            const schedMatches = calRoot.querySelectorAll('.event-schedule-match');
+            if (schedMatches.length) {
+                let schedPhase = '';
+                schedMatches.forEach(mEl => {
+                    const clean = (s) => s.replace(/\s+/g, ' ').trim();
+                    // Nomi dai contenitori home/away: le squadre estere (es. "Polonia" al
+                    // Mondiale) non hanno il link team.aspx. Almeno un link deve esserci
+                    // per scartare i segnaposto del tabellone ("Vincente girone A"...).
+                    const home = mEl.querySelector('.event-schedule-team-home');
+                    const away = mEl.querySelector('.event-schedule-team-away');
+                    if (!home || !away) return;
+                    if (!mEl.querySelector("a[href*='team.aspx']")) return;
+                    const teamA = clean(home.textContent);
+                    const teamB = clean(away.textContent);
+                    if (!teamA || !teamB) return;
+                    const labelEl = mEl.querySelector('.event-schedule-label');
+                    let resto = clean(labelEl ? labelEl.textContent : '');
+                    const tm = resto.match(/^(\d{1,2})[.:](\d{2})\b/);
+                    if (tm) resto = resto.slice(tm[0].length).replace(/^[\s\-–]+/, '');
+                    const fm = resto.match(/^(girone[^-]*|pool[^-]*|ottavi[^-]*|quarti[^-]*|semifinal[^-]*|final[^-]*|playout[^-]*|preliminar[^-]*)/i);
+                    if (fm) schedPhase = fm[1].trim().toUpperCase();
+                    const scoreEl = mEl.querySelector('.event-schedule-score');
+                    const sm = scoreEl ? (scoreEl.textContent || '').replace(/ /g, ' ').match(/(\d+)\s*:\s*(\d+)/) : null;
+                    out.matches.push({
+                        teamA: teamA,
+                        teamB: teamB,
+                        phase: schedPhase,
+                        scoreA: sm ? parseInt(sm[1]) : null,
+                        scoreB: sm ? parseInt(sm[2]) : null
+                    });
+                });
+                return out;
+            }
+
+            // Vecchio layout (fino a metà 2026): righe <div> orario + <table><tr> con i team
             const ownText = (el) => { let s = ''; for (const n of el.childNodes) if (n.nodeType === 3) s += n.textContent + ' '; return s.replace(/\s+/g, ' ').trim(); };
             let currentPhase = '';
             calRoot.querySelectorAll('div, tr, h4, h5, b, strong').forEach(el => {

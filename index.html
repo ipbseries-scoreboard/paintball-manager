@@ -7414,7 +7414,13 @@
                 const inner = doc.querySelector('.small-box .inner');
                 if (inner) {
                     const h3 = inner.querySelector('h3');
-                    if (h3) out.name = h3.textContent.replace(/\s+/g, ' ').trim();
+                    if (h3) {
+                        // Il sito 2026 mette lo stato ("Concluso", "Iscrizioni aperte")
+                        // in uno <span class="event-status"> dentro l'h3: va tolto dal nome.
+                        const hc = h3.cloneNode(true);
+                        hc.querySelectorAll('.event-status').forEach(x => x.remove());
+                        out.name = hc.textContent.replace(/\s+/g, ' ').trim();
+                    }
                     const p = inner.querySelector('p');
                     if (p) {
                         const b = p.querySelector('b');
@@ -7449,8 +7455,67 @@
                 const pod = calText.match(/Limite POD:\s*(\d+)/);
                 if (pod) out.pods = pod[1];
 
-                // Partite: ogni riga è <div>9.00 - mercy 5 - 15 min - 3 pod</div> seguito da
-                // <table><tr><td><a href=team.aspx>TeamA</a></td><td>3 : 6</td><td><a>TeamB</a></td></tr></table>
+                // Partite — nuovo layout ipba (2026): <section class="event-schedule-slot"> con
+                // <div class="event-schedule-match">, label "9:30 - Girone C [- mercy 2]"
+                // (a volte solo "Preliminari", senza orario), squadre in .event-schedule-team
+                // e punteggio in .event-schedule-score ("0<span>:</span>1").
+                const schedMatches = calRoot.querySelectorAll('.event-schedule-match');
+                if (schedMatches.length) {
+                    let schedPhase = '';
+                    schedMatches.forEach(mEl => {
+                        const clean = (s) => s.replace(/\s+/g, ' ').trim();
+                        // Nomi dai contenitori home/away: le squadre estere (es. "Polonia" al
+                        // Mondiale) non hanno il link team.aspx. Almeno un link deve esserci
+                        // per scartare i segnaposto del tabellone ("Vincente girone A"...).
+                        const home = mEl.querySelector('.event-schedule-team-home');
+                        const away = mEl.querySelector('.event-schedule-team-away');
+                        if (!home || !away) return;
+                        if (!mEl.querySelector("a[href*='team.aspx']")) return;
+                        const teamA = clean(home.textContent);
+                        const teamB = clean(away.textContent);
+                        if (!teamA || !teamB) return;
+                        const labelEl = mEl.querySelector('.event-schedule-label');
+                        const label = clean(labelEl ? labelEl.textContent : '');
+                        let time = '00:00';
+                        let resto = label;
+                        const tm = label.match(/^(\d{1,2})[.:](\d{2})\b/);
+                        if (tm) { time = tm[1] + ':' + tm[2]; resto = label.slice(tm[0].length).replace(/^[\s\-–]+/, ''); }
+                        const fm = resto.match(/^(girone[^-]*|pool[^-]*|ottavi[^-]*|quarti[^-]*|semifinal[^-]*|final[^-]*|playout[^-]*|preliminar[^-]*)/i);
+                        if (fm) schedPhase = fm[1].trim().toUpperCase();
+                        // Le regole ora sono ripetute nella label ("mercy 2", "15 min", "3 pod")
+                        if (!out.system) { const m = resto.match(/mercy\s*(?:rule\s*|to\s*)?(\d+)/i); if (m) out.system = 'Mercy to ' + m[1]; }
+                        if (!out.matchTime) { const m = resto.match(/(\d+)\s*min\b/i); if (m) out.matchTime = m[1]; }
+                        if (!out.pods) { const m = resto.match(/(\d+)\s*pod\b/i); if (m) out.pods = m[1]; }
+                        const scoreEl = mEl.querySelector('.event-schedule-score');
+                        const sm = scoreEl ? (scoreEl.textContent || '').replace(/ /g, ' ').match(/(\d+)\s*:\s*(\d+)/) : null;
+                        out.matches.push({
+                            time: time,
+                            teamA: teamA,
+                            teamB: teamB,
+                            phase: schedPhase,
+                            scoreA: sm ? parseInt(sm[1]) : null,
+                            scoreB: sm ? parseInt(sm[2]) : null
+                        });
+                    });
+                    // Il riepilogo "Sistema gioco / Match time / Limite POD" non esiste più:
+                    // le regole stanno nelle "Informazioni utili" dell'evento, es.
+                    // "Girone A, B, C: Mercy rule 3 - 8 minuti tempo partita - no over time".
+                    if (!out.system || !out.matchTime || !out.pods) {
+                        const pageText = (doc.body ? doc.body.textContent : '').replace(/\s+/g, ' ');
+                        if (!out.system) { const m = pageText.match(/mercy\s*(?:rule\s*|to\s*)?(\d+)/i); if (m) out.system = 'Mercy to ' + m[1]; }
+                        if (!out.matchTime) {
+                            const m = pageText.match(/(\d+)\s*minut[oi]\s*(?:di\s*)?tempo\s*(?:di\s*)?partita/i)
+                                || pageText.match(/tempo\s*(?:di\s*)?partita\s*[:\-]?\s*(\d+)/i)
+                                || pageText.match(/match\s*time\s*[:\-]?\s*(\d+)/i);
+                            if (m) out.matchTime = m[1];
+                        }
+                        if (!out.pods) { const m = pageText.match(/limite\s*pod\s*[:\-]?\s*(\d+)/i); if (m) out.pods = m[1]; }
+                    }
+                    return out;
+                }
+
+                // Vecchio layout (fino a metà 2026): ogni riga è <div>9.00 - mercy 5 - 15 min - 3 pod</div>
+                // seguito da <table><tr><td><a href=team.aspx>TeamA</a></td><td>3 : 6</td><td><a>TeamB</a></td></tr></table>
                 const ownText = (el) => {
                     let s = '';
                     for (const n of el.childNodes) if (n.nodeType === 3) s += n.textContent + ' ';
