@@ -833,6 +833,13 @@
         table.ci-standings td { padding: 6px 8px; border-bottom: 1px dashed rgba(148,163,184,.15); }
         table.ci-standings tr:first-child td { color: #fbbf24; font-weight: 700; }
         .ci-num { text-align: center; }
+        /* Scheda "Match in corso" (come caster.html) */
+        #ci-live-row { display: flex; align-items: center; justify-content: center; gap: 26px; font-family: 'Oswald', sans-serif; }
+        #ci-live-row .ci-live-name { font-size: 36px; font-weight: 700; flex: 1; }
+        #ci-live-row .ci-live-name.left { text-align: right; }
+        #ci-live-score { font-size: 48px; font-weight: 700; color: var(--accent-color); white-space: nowrap; }
+        #ci-live-sub { text-align: center; margin-top: 6px; font-size: 21px; color: #94a3b8; }
+        #ci-live-sub b { color: #f1f5f9; }
 
         /* Custom scrollbar for better aesthetics */
         .stats-scroll-area::-webkit-scrollbar,
@@ -2592,7 +2599,7 @@
                 s += `<div class="ci-fact">Partite IPBA (tutte le stagioni): <span class="val">${th.played}</span> — ` +
                     `<span style="color:#4ade80">${th.wins}V</span> · <span style="color:#f87171">${th.losses}S</span>${th.draws ? ' · ' + th.draws + 'P' : ''}</div>`;
                 if (th.eventiVinti && th.eventiVinti.length) {
-                    const ultimi = th.eventiVinti.slice(-2).reverse()
+                    const ultimi = th.eventiVinti.slice(-3).reverse()
                         .map(e => ciEsc(e.name) + (e.date ? ` <span class="ci-muted">(${ciMeseAnno(e.date)})</span>` : '')).join(' · ');
                     s += `<div class="ci-fact">🏆 Eventi vinti: <span class="val">${th.eventiVinti.length}</span> <span class="ci-muted">— ultimi:</span> ${ultimi}</div>`;
                 }
@@ -2617,12 +2624,21 @@
             const fp = JSON.stringify([d.h2h, d.teamHistory, d.archivioTop, d.nextMatch,
                 d.standingsData && d.standingsData.standings,
                 d.teamLeft && d.teamLeft.name, d.teamRight && d.teamRight.name]);
-            if (fp === lastCasterFp) return;
+            // Punteggio/timer cambiano di continuo: li aggiorna renderCasterLive()
+            // sugli elementi esistenti, senza ricostruire tutte le schede.
+            if (fp === lastCasterFp) { renderCasterLive(); return; }
             lastCasterFp = fp;
 
             const nomeA = d.teamLeft ? d.teamLeft.name : null;
             const nomeB = d.teamRight ? d.teamRight.name : null;
             const cards = [];
+
+            // MATCH IN CORSO (come caster.html)
+            cards.push(`<div class="ci-card" style="grid-column: span 2;"><h3>🔴 Match in corso</h3>` +
+                `<div id="ci-live-row"><div class="ci-live-name left" id="ci-live-a">—</div>` +
+                `<div id="ci-live-score">0 : 0</div>` +
+                `<div class="ci-live-name" id="ci-live-b">—</div></div>` +
+                `<div id="ci-live-sub">—</div></div>`);
 
             // SCONTRI DIRETTI
             const hc = d.h2h ? d.h2h.current : null;
@@ -2656,7 +2672,7 @@
             if (sd && sd.standings && sd.standings.some(s => (s.played || 0) > 0)) {
                 const played = sd.standings.filter(s => (s.played || 0) > 0);
                 const F = [];
-                if (sd.records && sd.records[0]) F.push(`⚡ <b>Punto più veloce:</b> ${ciEsc(sd.records[0].team)} <span class="val">${Math.round(sd.records[0].duration)}s</span>`);
+                if (sd.records && sd.records[0]) F.push(`⚡ <b>Punto più veloce:</b> ${ciEsc(sd.records[0].team)} <span class="val">${Math.round(sd.records[0].duration)}s</span>${sd.records[0].match ? ' <span class="ci-muted">(' + ciEsc(sd.records[0].match) + ')</span>' : ''}`);
                 if (sd.averageTimes && sd.averageTimes[0]) F.push(`🎯 <b>Punto medio più rapido:</b> ${ciEsc(sd.averageTimes[0].team)} <span class="val">${Math.round(sd.averageTimes[0].avg)}s</span>`);
                 if (sd.slowestRounds && sd.slowestRounds[0]) F.push(`🐌 <b>Punto più combattuto:</b> ${ciEsc(sd.slowestRounds[0].team)} <span class="val">${Math.round(sd.slowestRounds[0].duration)}s</span>`);
                 if (sd.mercyKillers && sd.mercyKillers[0]) F.push(`💀 <b>Re del mercy:</b> ${ciEsc(sd.mercyKillers[0].team)} <span class="val">${sd.mercyKillers[0].count}</span>`);
@@ -2666,6 +2682,13 @@
                 if (att && att.rw > 0) F.push(`🔥 <b>Miglior attacco:</b> ${ciEsc(att.name)} <span class="val">${att.rw} punti</span>`);
                 const def = [...played].sort((x, y) => ((x.rl || 0) - (y.rl || 0)) || ((y.played || 0) - (x.played || 0)))[0];
                 if (def) F.push(`🛡️ <b>Miglior difesa:</b> ${ciEsc(def.name)} <span class="val">${def.rl} subiti</span>`);
+                const totPunti = played.reduce((t, s) => t + (s.rw || 0), 0);
+                let progress = '';
+                if (d.tournament && d.tournament.matches && d.tournament.matches.length) {
+                    const fin = d.tournament.matches.filter(m => m.savedState && m.savedState.finished).length;
+                    progress = `${fin}/${d.tournament.matches.length} match · `;
+                }
+                F.push(`📊 <b>Il torneo:</b> <span class="val">${progress}${totPunti} punti totali</span>`);
                 cards.push(`<div class="ci-card"><h3>📊 Statistiche torneo</h3>` +
                     F.map(f => `<div class="ci-fact">${f}</div>`).join('') + `</div>`);
 
@@ -2694,6 +2717,24 @@
             }
 
             box.innerHTML = cards.join('');
+            renderCasterLive();
+        }
+
+        // Aggiorna solo nomi/punteggio/timer/fase nella scheda "Match in corso"
+        // (chiamata a ogni pacchetto: niente innerHTML sulle altre schede).
+        function renderCasterLive() {
+            const d = currentData || {};
+            const a = document.getElementById('ci-live-a');
+            if (!a) return;
+            a.innerText = (d.teamLeft && d.teamLeft.name) || '—';
+            document.getElementById('ci-live-b').innerText = (d.teamRight && d.teamRight.name) || '—';
+            document.getElementById('ci-live-score').innerText =
+                ((d.teamLeft && d.teamLeft.score) || 0) + ' : ' + ((d.teamRight && d.teamRight.score) || 0);
+            const parts = [];
+            if (d.timer) parts.push('⏱ <b>' + ciEsc(d.timer) + '</b>');
+            if (d.statusText) parts.push(ciEsc(d.statusText));
+            if (d.phase) parts.push('Fase: <b>' + ciEsc(d.phase) + '</b>');
+            document.getElementById('ci-live-sub').innerHTML = parts.join(' &nbsp;•&nbsp; ') || '—';
         }
 
         // ============================================================
