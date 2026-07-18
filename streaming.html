@@ -10,6 +10,14 @@
     <script src="lib/peerjs.min.js"></script>
     <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');</script>
     <script src="pm-client.js?v=2.1.1-controller-cloud"></script>
+    <!-- QRCode.js: copia locale, CDN come riserva (per il QR del pubblico) -->
+    <script src="lib/qrcode.min.js"></script>
+    <script>window.QRCode || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" crossorigin="anonymous"><\/script>');</script>
+    <!-- Modalità pubblico (?fan=1): la pagina diventa la vista mobile per gli spettatori -->
+    <script>
+        window.__FAN_MODE__ = new URLSearchParams(location.search).get('fan') === '1';
+        if (window.__FAN_MODE__) document.documentElement.classList.add('fan-mode');
+    </script>
     <!-- Google Fonts -->
     <link
         href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Bebas+Neue&family=Orbitron:wght@600&family=Black+Ops+One&family=Roboto:wght@400;700&display=swap"
@@ -840,6 +848,26 @@
         #ci-live-score { font-size: 48px; font-weight: 700; color: var(--accent-color); white-space: nowrap; }
         #ci-live-sub { text-align: center; margin-top: 6px; font-size: 21px; color: #94a3b8; }
         #ci-live-sub b { color: #f1f5f9; }
+        /* Notifica "RECORD BATTUTO" (statistiche torneo) */
+        #record-toast {
+            position: absolute; top: 120px; left: 50%; z-index: 6000;
+            transform: translateX(-50%) translateY(-40px);
+            background: linear-gradient(135deg, #78350f, #b45309);
+            border: 3px solid #fbbf24; border-radius: 16px;
+            padding: 16px 44px; text-align: center;
+            box-shadow: 0 0 45px rgba(251, 191, 36, 0.55);
+            font-family: 'Oswald', sans-serif; white-space: nowrap;
+            opacity: 0; pointer-events: none;
+            transition: opacity .45s ease, transform .45s ease;
+        }
+        #record-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); animation: rt-glow 1.2s ease-in-out infinite alternate; }
+        #record-toast .rt-title { font-size: 34px; color: #fbbf24; letter-spacing: 4px; font-weight: 700; }
+        #record-toast .rt-text { font-size: 30px; color: #ffffff; margin-top: 4px; }
+        #record-toast .rt-text .val { color: #fde68a; font-weight: 700; }
+        @keyframes rt-glow {
+            from { box-shadow: 0 0 25px rgba(251, 191, 36, 0.35); }
+            to { box-shadow: 0 0 60px rgba(251, 191, 36, 0.75); }
+        }
 
         /* Custom scrollbar for better aesthetics */
         .stats-scroll-area::-webkit-scrollbar,
@@ -1203,6 +1231,168 @@
             }
         }
     </style>
+    <style id="fan-style">
+        /* ============== MODULO PUBBLICO (FAN) ============== */
+
+        /* --- Modalità pubblico: nasconde la console, sblocca lo scroll --- */
+        html.fan-mode, html.fan-mode body { overflow: auto !important; height: auto !important; background: #0b1220 !important; }
+        html.fan-mode #scaler, html.fan-mode #connect-ui { display: none !important; }
+
+        /* --- Pagina pubblica mobile --- */
+        #fan-page { display: none; }
+        html.fan-mode #fan-page {
+            display: block; max-width: 560px; margin: 0 auto; padding: 12px 14px 40px;
+            font-family: 'Roboto', sans-serif; color: #f1f5f9; box-sizing: border-box;
+        }
+        #fan-page h3 { margin: 0 0 8px; font-family: 'Oswald', sans-serif; font-size: 1.05rem; letter-spacing: 1.5px; color: #fbbf24; }
+        .fanp-conn { text-align: center; font-size: .8rem; color: #94a3b8; padding: 4px 0; min-height: 18px; }
+        .fanp-header { background: #111b2e; border: 1px solid #223252; border-radius: 14px; padding: 14px; text-align: center; }
+        .fanp-tourney { font-family: 'Oswald', sans-serif; font-size: 1.05rem; letter-spacing: 1px; color: #22d3ee; text-transform: uppercase; }
+        .fanp-phase { font-size: .8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 2px; margin-top: 2px; }
+        .fanp-score { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
+        .fanp-team { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; align-items: center; }
+        .fanp-team span { font-family: 'Oswald', sans-serif; font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+        .fanp-team b { font-family: 'Oswald', sans-serif; font-size: 2.6rem; line-height: 1; }
+        .fanp-timer { font-family: 'Oswald', sans-serif; font-size: 1.7rem; color: #fff; background: #0b1220; border: 1px solid #223252; border-radius: 10px; padding: 6px 12px; white-space: nowrap; }
+        .fanp-status { margin-top: 8px; font-family: 'Oswald', sans-serif; letter-spacing: 2px; color: #4ade80; text-transform: uppercase; font-size: .95rem; }
+        .fanp-next, .fanp-count { margin-top: 6px; font-size: .8rem; color: #94a3b8; }
+        .fanp-offline { margin: 14px 0 0; background: #7f1d1d33; border: 1px solid #ef4444; border-radius: 12px; padding: 14px; text-align: center; font-family: 'Oswald', sans-serif; letter-spacing: 1px; color: #fca5a5; }
+        .fanp-offline small { display: block; margin-top: 6px; font-family: 'Roboto', sans-serif; letter-spacing: 0; color: #94a3b8; }
+        .fanp-card { background: #111b2e; border: 1px solid #223252; border-left: 4px solid #22d3ee; border-radius: 14px; padding: 14px; margin-top: 14px; }
+        .fanp-muted { color: #94a3b8; font-size: .8rem; }
+        .fanp-card input, .fanp-card textarea {
+            width: 100%; box-sizing: border-box; background: #0b1220; color: #f1f5f9; border: 1px solid #334155;
+            border-radius: 10px; padding: 10px 12px; font-size: 16px; margin-top: 8px; font-family: 'Roboto', sans-serif;
+        }
+        .fanp-card textarea { resize: vertical; min-height: 70px; }
+        .fanp-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
+        .fanp-btn {
+            background: #0e7490; color: #fff; border: none; border-radius: 10px; padding: 12px 18px;
+            font-family: 'Oswald', sans-serif; font-size: 1rem; letter-spacing: 1px; cursor: pointer; min-height: 44px;
+        }
+        .fanp-btn:disabled { opacity: .45; }
+        .fanp-opt {
+            display: block; width: 100%; box-sizing: border-box; text-align: left; margin-top: 8px; padding: 12px 14px;
+            background: #16233b; color: #f1f5f9; border: 1px solid #334155; border-radius: 10px; font-size: 1rem;
+            font-family: 'Roboto', sans-serif; cursor: pointer; min-height: 44px; position: relative; overflow: hidden;
+        }
+        .fanp-opt .fanp-bar { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(34, 211, 238, 0.16); pointer-events: none; }
+        .fanp-opt .fanp-lbl { position: relative; z-index: 1; display: flex; justify-content: space-between; gap: 8px; }
+        .fanp-opt.voted { border-color: #22d3ee; box-shadow: 0 0 0 1px #22d3ee inset; }
+        .fanp-opt:disabled { cursor: default; opacity: .85; }
+        .fanp-reactions { display: flex; gap: 10px; justify-content: space-between; margin-top: 6px; }
+        .fanp-react-btn { flex: 1; font-size: 1.7rem; padding: 10px 0; background: #16233b; border: 1px solid #334155; border-radius: 12px; cursor: pointer; min-height: 52px; }
+        .fanp-react-btn:disabled { opacity: .4; }
+        #fanp-toast {
+            position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: #0e7490; color: #fff;
+            padding: 10px 18px; border-radius: 999px; font-family: 'Oswald', sans-serif; letter-spacing: 1px;
+            font-size: .9rem; opacity: 0; pointer-events: none; transition: opacity .3s; z-index: 50; white-space: nowrap;
+        }
+        #fanp-toast.show { opacity: 1; }
+
+        /* --- Pannello PUBBLICO nella console --- */
+        #fan-admin-overlay {
+            position: absolute; top: 0; left: 0; width: 1920px; height: 1080px;
+            background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(25px); z-index: 3000; display: none;
+            flex-direction: column; padding: 40px 60px; box-sizing: border-box; color: white;
+            animation: fadeIn 0.4s ease-out; overflow: hidden;
+        }
+        #fan-tabs { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+        .fan-tab-btn {
+            background: rgba(30, 41, 59, 0.9); color: #e2e8f0; border: 1px solid #334155; border-radius: 10px;
+            padding: 10px 22px; font-family: 'Oswald', sans-serif; font-size: 20px; letter-spacing: 2px; cursor: pointer;
+        }
+        .fan-tab-btn.active { background: #0e7490; border-color: #22d3ee; color: #fff; }
+        .fan-badge { background: #ef4444; color: #fff; border-radius: 999px; padding: 1px 9px; font-size: 15px; margin-left: 6px; }
+        .fan-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
+        .fan-box { background: rgba(30, 41, 59, 0.75); border: 1px solid rgba(34, 211, 238, 0.25); border-left: 5px solid var(--accent-color); border-radius: 12px; padding: 18px 22px; margin-bottom: 22px; }
+        .fan-box h3 { margin: 0 0 12px; font-size: 22px; text-transform: uppercase; letter-spacing: 2px; color: #fbbf24; font-family: 'Oswald', sans-serif; }
+        .fan-line { padding: 5px 0; border-bottom: 1px dashed rgba(148, 163, 184, 0.2); font-size: 19px; }
+        .fan-line b { color: var(--accent-color); }
+        .fan-muted { color: #94a3b8; font-size: 17px; margin-top: 8px; min-height: 20px; }
+        .fan-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+        .fan-actions.center { justify-content: center; }
+        .fan-btn {
+            background: rgba(30, 41, 59, 0.9); color: #e2e8f0; border: 1px solid #475569; border-radius: 8px;
+            padding: 8px 16px; font-family: 'Oswald', sans-serif; font-size: 17px; letter-spacing: 1px; cursor: pointer;
+        }
+        .fan-btn.ok { background: #14532d; border-color: #4ade80; }
+        .fan-btn.danger { background: #7f1d1d; border-color: #ef4444; }
+        .fan-btn.small { font-size: 14px; padding: 4px 10px; }
+        .fan-box input[type="text"], .fan-box input[type="number"], .fan-box textarea, .fan-box select, #fan-url {
+            width: 100%; box-sizing: border-box; background: #0b1220; color: #f1f5f9; border: 1px solid #334155;
+            border-radius: 8px; padding: 9px 12px; font-size: 17px; margin-top: 8px; font-family: 'Roboto', sans-serif;
+        }
+        .fan-box label { display: block; margin-top: 8px; font-size: 17px; color: #cbd5e1; }
+        .fan-box input[type="number"] { width: 110px; }
+        #fan-qr { display: inline-block; background: #fff; padding: 12px; border-radius: 12px; margin-top: 4px; min-width: 220px; min-height: 220px; }
+        #fan-qr img, #fan-qr canvas { display: block; }
+        .fan-item { background: rgba(15, 23, 42, 0.6); border: 1px solid #223252; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; font-size: 18px; }
+        .fan-item .fan-chip { display: inline-block; border-radius: 999px; padding: 1px 12px; font-size: 14px; font-family: 'Oswald', sans-serif; letter-spacing: 1px; margin-left: 8px; vertical-align: middle; }
+        .fan-chip.DRAFT { background: #475569; } .fan-chip.OPEN { background: #14532d; color: #4ade80; }
+        .fan-chip.PAUSED { background: #78350f; color: #fbbf24; } .fan-chip.CLOSED { background: #7f1d1d; color: #fca5a5; }
+        .fan-chip.ARCHIVED { background: #1e293b; color: #64748b; }
+        .fan-chip.PENDING { background: #78350f; color: #fbbf24; } .fan-chip.APPROVED { background: #14532d; color: #4ade80; }
+        .fan-chip.REJECTED { background: #7f1d1d; color: #fca5a5; } .fan-chip.PINNED { background: #0e7490; color: #fff; }
+        .fan-chip.ANSWERED { background: #1e3a8a; color: #93c5fd; }
+        .fan-pollbar { position: relative; background: #0b1220; border-radius: 6px; height: 26px; margin-top: 6px; overflow: hidden; }
+        .fan-pollbar > div { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(34, 211, 238, 0.35); }
+        .fan-pollbar span { position: relative; z-index: 1; display: flex; justify-content: space-between; padding: 2px 10px; font-size: 16px; }
+        table.fan-table { width: 100%; border-collapse: collapse; font-size: 17px; }
+        table.fan-table th { text-align: left; color: #94a3b8; font-weight: 500; padding: 4px 8px; border-bottom: 1px solid rgba(148,163,184,.3); }
+        table.fan-table td { padding: 5px 8px; border-bottom: 1px dashed rgba(148,163,184,.15); }
+
+        /* --- Overlay domanda in streaming --- */
+        #fan-question-overlay {
+            position: absolute; left: 50%; bottom: 60px; transform: translateX(-50%) translateY(40px);
+            background: linear-gradient(135deg, rgba(8, 47, 73, 0.96), rgba(14, 116, 144, 0.96));
+            border: 2px solid #22d3ee; border-radius: 16px; padding: 18px 40px; max-width: 1100px;
+            text-align: center; z-index: 5500; opacity: 0; pointer-events: none;
+            transition: opacity .45s ease, transform .45s ease; box-shadow: 0 0 40px rgba(34, 211, 238, 0.35);
+        }
+        #fan-question-overlay.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+        #fan-question-overlay .fq-title { font-family: 'Oswald', sans-serif; font-size: 26px; letter-spacing: 3px; color: #22d3ee; }
+        #fan-question-overlay .fq-nick { font-family: 'Oswald', sans-serif; font-size: 24px; color: #fbbf24; margin-top: 6px; }
+        #fan-question-overlay .fq-text { font-size: 30px; color: #fff; margin-top: 4px; font-style: italic; }
+        #fan-question-overlay .fq-close {
+            position: absolute; top: 6px; right: 10px; background: none; border: none; color: #94a3b8;
+            font-size: 22px; cursor: pointer; padding: 2px 6px;
+        }
+
+        /* --- Overlay risultati sondaggio in streaming --- */
+        #fan-poll-overlay {
+            position: absolute; left: 40px; bottom: 60px; width: 560px; transform: translateY(40px);
+            background: rgba(15, 23, 42, 0.94); border: 2px solid #fbbf24; border-radius: 16px; padding: 20px 26px;
+            z-index: 5500; opacity: 0; pointer-events: none; transition: opacity .45s ease, transform .45s ease;
+            box-shadow: 0 0 40px rgba(251, 191, 36, 0.3);
+        }
+        #fan-poll-overlay.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+        #fan-poll-overlay .fp-title { font-family: 'Oswald', sans-serif; font-size: 26px; letter-spacing: 2px; color: #fbbf24; padding-right: 30px; }
+        #fan-poll-overlay .fp-row { margin-top: 12px; }
+        #fan-poll-overlay .fp-lbl { display: flex; justify-content: space-between; font-family: 'Oswald', sans-serif; font-size: 22px; }
+        #fan-poll-overlay .fp-lbl .pct { color: #22d3ee; }
+        #fan-poll-overlay .fp-row.lead .pct { color: #4ade80; }
+        #fan-poll-overlay .fp-bar { height: 14px; background: #0b1220; border-radius: 7px; overflow: hidden; margin-top: 4px; }
+        #fan-poll-overlay .fp-bar div { height: 100%; background: #22d3ee; width: 0; transition: width .6s ease; }
+        #fan-poll-overlay .fp-row.lead .fp-bar div { background: #4ade80; }
+        #fan-poll-overlay .fp-total { margin-top: 14px; text-align: center; font-family: 'Oswald', sans-serif; font-size: 20px; color: #94a3b8; letter-spacing: 2px; }
+        #fan-poll-overlay .fq-close {
+            position: absolute; top: 6px; right: 10px; background: none; border: none; color: #94a3b8;
+            font-size: 22px; cursor: pointer; padding: 2px 6px;
+        }
+
+        /* --- Reazioni animate in streaming --- */
+        #fan-reactions-layer { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; pointer-events: none; z-index: 5400; overflow: hidden; }
+        .fan-float {
+            position: absolute; bottom: 90px; font-size: 52px; font-family: 'Oswald', sans-serif; color: #fff;
+            animation: fanFloatUp 2.5s ease-out forwards; text-shadow: 0 2px 8px rgba(0,0,0,.6); white-space: nowrap;
+        }
+        @keyframes fanFloatUp {
+            0% { transform: translateY(0) scale(.8); opacity: 0; }
+            15% { opacity: 1; transform: translateY(-40px) scale(1.05); }
+            100% { transform: translateY(-340px) scale(1); opacity: 0; }
+        }
+    </style>
     <style id="dynamic-style-left"></style>
     <style id="dynamic-style-right"></style>
 </head>
@@ -1235,6 +1425,31 @@
                 ⚡ RECORD DEL GIORNO <span id="tb-record-val" class="tb-record-val" style="margin: 0;">00:00</span>
                 <span id="tb-record-team" style="color:white; font-family: 'Oswald', sans-serif;">--</span>
             </div>
+
+            <!-- NOTIFICA RECORD BATTUTO (statistiche torneo) -->
+            <div id="record-toast">
+                <div class="rt-title">🏆 RECORD BATTUTO!</div>
+                <div class="rt-text" id="record-toast-text"></div>
+            </div>
+
+            <!-- DOMANDA DAL PUBBLICO (mostrata solo manualmente dal pannello PUBBLICO) -->
+            <div id="fan-question-overlay">
+                <button class="fq-close" onclick="FanModule.hideQuestionOverlay()" title="Nascondi subito">✕</button>
+                <div class="fq-title">💬 DOMANDA DAL PUBBLICO</div>
+                <div class="fq-nick" id="fan-q-nick"></div>
+                <div class="fq-text" id="fan-q-text"></div>
+            </div>
+
+            <!-- RISULTATI SONDAGGIO IN STREAMING -->
+            <div id="fan-poll-overlay">
+                <button class="fq-close" onclick="FanModule.hidePollOverlay()" title="Nascondi subito">✕</button>
+                <div class="fp-title" id="fan-poll-ov-title"></div>
+                <div id="fan-poll-ov-rows"></div>
+                <div class="fp-total" id="fan-poll-ov-total"></div>
+            </div>
+
+            <!-- REAZIONI DEL PUBBLICO (effetto leggero, opzionale) -->
+            <div id="fan-reactions-layer"></div>
 
             <!-- MAIN GRID CONTENT -->
             <div class="team-panel" id="panel-left">
@@ -1292,6 +1507,7 @@
                     <button class="btn-extra" onclick="toggleSchedule()">🗓️ LIST</button>
                     <button class="btn-extra" onclick="toggleLayout()">📐 LAYOUT</button>
                     <button class="btn-extra" onclick="toggleCasterInfo()">⚔️ INFO</button>
+                    <button class="btn-extra" onclick="FanModule.togglePanel()">👥 PUBBLICO</button>
                 </div>
             </div>
 
@@ -1521,6 +1737,167 @@
                 </div>
             </div>
 
+            <!-- PANNELLO PUBBLICO (gestione interazione spettatori) -->
+            <div id="fan-admin-overlay">
+                <button class="close-overlay-btn" onclick="FanModule.togglePanel()">CHIUDI X</button>
+                <div class="stats-title">👥 PUBBLICO — INTERAZIONE SPETTATORI</div>
+                <div id="fan-tabs">
+                    <button class="fan-tab-btn active" data-tab="stato" onclick="FanModule.showTab('stato')">STATO</button>
+                    <button class="fan-tab-btn" data-tab="sondaggi" onclick="FanModule.showTab('sondaggi')">SONDAGGI</button>
+                    <button class="fan-tab-btn" data-tab="mvp" onclick="FanModule.showTab('mvp')">MVP</button>
+                    <button class="fan-tab-btn" data-tab="domande" onclick="FanModule.showTab('domande')">DOMANDE
+                        <span class="fan-badge" id="fan-tab-qbadge" style="display:none;">0</span></button>
+                    <button class="fan-tab-btn" data-tab="reazioni" onclick="FanModule.showTab('reazioni')">REAZIONI</button>
+                    <button class="fan-tab-btn" data-tab="impostazioni" onclick="FanModule.showTab('impostazioni')">IMPOSTAZIONI</button>
+                </div>
+                <div class="stats-scroll-area">
+                    <!-- TAB STATO -->
+                    <div class="fan-tab" id="fan-tab-stato">
+                        <div class="fan-grid2">
+                            <div class="fan-box">
+                                <h3>Stanza pubblico</h3>
+                                <div class="fan-line">Stato: <b id="fan-room-status">SPENTA</b></div>
+                                <div class="fan-line">Match ID: <b id="fan-room-match">—</b></div>
+                                <div class="fan-line">Spettatori online: <b id="fan-room-online">0</b>
+                                    &nbsp;(picco <span id="fan-room-peak">0</span> · collegamenti totali <span id="fan-room-joins">0</span>)</div>
+                                <div class="fan-line">Ultimo nuovo collegamento: <span id="fan-room-lastjoin">—</span></div>
+                                <div class="fan-line">Sondaggio attivo: <b id="fan-room-poll">—</b></div>
+                                <div class="fan-line">Voti ricevuti: <b id="fan-room-votes">0</b> · duplicati/rifiutati: <span id="fan-room-dup">0</span></div>
+                                <div class="fan-line">Domande in attesa: <b id="fan-room-pending">0</b></div>
+                                <div class="fan-line">Reazioni ricevute: <b id="fan-room-react">0</b></div>
+                                <div class="fan-actions">
+                                    <button class="fan-btn ok" onclick="FanModule.startHost()">▶ AVVIA STANZA</button>
+                                    <button class="fan-btn" onclick="FanModule.restartHost()">🔄 RIAVVIA STANZA</button>
+                                    <button class="fan-btn danger" onclick="FanModule.stopHost()">⏹ CHIUDI STANZA</button>
+                                </div>
+                                <div class="fan-actions">
+                                    <button class="fan-btn" onclick="FanModule.exportState()">💾 ESPORTA JSON</button>
+                                    <button class="fan-btn" onclick="document.getElementById('fan-import-file').click()">📁 IMPORTA JSON</button>
+                                    <input type="file" id="fan-import-file" accept=".json,application/json" style="display:none">
+                                    <button class="fan-btn danger" onclick="FanModule.resetState()">🗑 AZZERA INTERAZIONI</button>
+                                </div>
+                                <div class="fan-muted" id="fan-admin-note"></div>
+                            </div>
+                            <div class="fan-box" style="text-align:center;">
+                                <h3>QR per il pubblico</h3>
+                                <div id="fan-qr"></div>
+                                <input id="fan-url" readonly value="">
+                                <div class="fan-actions center">
+                                    <button class="fan-btn" onclick="FanModule.copyUrl()">📋 COPIA URL</button>
+                                    <button class="fan-btn" onclick="FanModule.openFanPage()">🔗 APRI PAGINA PUBBLICO</button>
+                                </div>
+                                <div class="fan-muted">Gli spettatori inquadrano il QR: nessun PIN, nessuna registrazione.</div>
+                            </div>
+                        </div>
+                        <div class="fan-box">
+                            <h3>Spettatori collegati</h3>
+                            <div id="fan-spectator-list" class="fan-muted">Nessuno spettatore collegato.</div>
+                        </div>
+                    </div>
+                    <!-- TAB SONDAGGI -->
+                    <div class="fan-tab" id="fan-tab-sondaggi" style="display:none;">
+                        <div class="fan-grid2">
+                            <div class="fan-box">
+                                <h3>Nuovo sondaggio</h3>
+                                <input type="text" id="fan-poll-q" maxlength="120" placeholder="Domanda del sondaggio">
+                                <textarea id="fan-poll-opts" rows="5" placeholder="Una opzione per riga (da 2 a 6)"></textarea>
+                                <label><input type="checkbox" id="fan-poll-showres" checked> Mostra risultati durante il voto</label>
+                                <label><input type="checkbox" id="fan-poll-matchref" checked> Associa al match corrente</label>
+                                <label>Durata in minuti (0 = chiusura manuale): <input type="number" id="fan-poll-dur" value="0" min="0" max="180"></label>
+                                <div class="fan-actions">
+                                    <button class="fan-btn" onclick="FanModule.uiCreatePoll(false)">SALVA BOZZA</button>
+                                    <button class="fan-btn ok" onclick="FanModule.uiCreatePoll(true)">APRI SONDAGGIO</button>
+                                    <button class="fan-btn" onclick="FanModule.createPrediction()">⚔ PRONOSTICO MATCH</button>
+                                </div>
+                                <div class="fan-muted">Il pronostico crea "CHI VINCERÀ IL MATCH?" con le due squadre in campo.</div>
+                            </div>
+                            <div class="fan-box">
+                                <h3>Sondaggi</h3>
+                                <div id="fan-poll-list" class="fan-muted">Nessun sondaggio.</div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- TAB MVP -->
+                    <div class="fan-tab" id="fan-tab-mvp" style="display:none;">
+                        <div class="fan-grid2">
+                            <div class="fan-box">
+                                <h3>Nuova votazione MVP del pubblico</h3>
+                                <input type="text" id="fan-mvp-title" maxlength="60" value="MVP DEL MATCH" placeholder="Titolo">
+                                <textarea id="fan-mvp-cands" rows="6" placeholder="Un candidato per riga: Nome | Squadra (da 2 a 12)"></textarea>
+                                <div class="fan-actions">
+                                    <button class="fan-btn small" onclick="FanModule.prefillMvpTeams()">+ SQUADRE IN CAMPO</button>
+                                    <button class="fan-btn" onclick="FanModule.uiCreateMvp(false)">SALVA BOZZA</button>
+                                    <button class="fan-btn ok" onclick="FanModule.uiCreateMvp(true)">APRI VOTAZIONE</button>
+                                </div>
+                                <div class="fan-muted">È l'MVP DEL PUBBLICO: non modifica alcun dato ufficiale del match.</div>
+                            </div>
+                            <div class="fan-box">
+                                <h3>Votazioni MVP</h3>
+                                <div id="fan-mvp-list" class="fan-muted">Nessuna votazione.</div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- TAB DOMANDE -->
+                    <div class="fan-tab" id="fan-tab-domande" style="display:none;">
+                        <div class="fan-box">
+                            <h3>Domande dal pubblico</h3>
+                            <label>Filtro:
+                                <select id="fan-q-filter" onchange="FanModule.renderQuestions()">
+                                    <option value="">TUTTE</option>
+                                    <option value="PENDING" selected>IN ATTESA</option>
+                                    <option value="APPROVED">APPROVATE</option>
+                                    <option value="PINNED">EVIDENZIATE</option>
+                                    <option value="ANSWERED">RISPOSTE</option>
+                                    <option value="REJECTED">RIFIUTATE</option>
+                                    <option value="ARCHIVED">ARCHIVIATE</option>
+                                </select>
+                            </label>
+                            <div id="fan-question-list" class="fan-muted" style="margin-top:12px;">Nessuna domanda.</div>
+                        </div>
+                    </div>
+                    <!-- TAB REAZIONI -->
+                    <div class="fan-tab" id="fan-tab-reazioni" style="display:none;">
+                        <div class="fan-box">
+                            <h3>Reazioni ricevute</h3>
+                            <div id="fan-reaction-totals" style="font-size:34px; font-family:'Oswald',sans-serif; display:flex; gap:40px; flex-wrap:wrap;"></div>
+                            <div class="fan-actions">
+                                <label style="margin-top:0;"><input type="checkbox" id="fan-react-onstream" onchange="FanModule.toggleReactionsOnStream(this.checked)"> MOSTRA REAZIONI IN STREAM</label>
+                            </div>
+                            <div class="fan-actions">
+                                <button class="fan-btn danger" onclick="FanModule.resetReactions()">AZZERA CONTATORI</button>
+                            </div>
+                            <div class="fan-muted">Effetto leggero: le reazioni salgono dal basso, aggregate e limitate. Si spegne da solo in caso di flood.</div>
+                        </div>
+                    </div>
+                    <!-- TAB IMPOSTAZIONI -->
+                    <div class="fan-tab" id="fan-tab-impostazioni" style="display:none;">
+                        <div class="fan-grid2">
+                            <div class="fan-box">
+                                <h3>Funzioni pubblico</h3>
+                                <label><input type="checkbox" id="fs-enabled"> Abilita interazione pubblico</label>
+                                <label><input type="checkbox" id="fs-polls"> Abilita sondaggi</label>
+                                <label><input type="checkbox" id="fs-predictions"> Abilita pronostici</label>
+                                <label><input type="checkbox" id="fs-mvp"> Abilita MVP</label>
+                                <label><input type="checkbox" id="fs-questions"> Abilita domande</label>
+                                <label><input type="checkbox" id="fs-nicknames"> Abilita nickname</label>
+                                <label><input type="checkbox" id="fs-reactions"> Abilita reazioni</label>
+                                <label><input type="checkbox" id="fs-showres"> Mostra risultati ai fan</label>
+                                <label><input type="checkbox" id="fs-showcount"> Mostra numero spettatori</label>
+                                <label><input type="checkbox" id="fs-shownext"> Mostra prossimo match</label>
+                            </div>
+                            <div class="fan-box">
+                                <h3>Parametri</h3>
+                                <label>Durata overlay domanda (secondi): <input type="number" id="fs-qdur" min="3" max="120"></label>
+                                <label>Durata overlay sondaggio (secondi, 0 = manuale): <input type="number" id="fs-polldur" min="0" max="300"></label>
+                                <label>Rate limit domande (secondi): <input type="number" id="fs-qrate" min="5" max="600"></label>
+                                <label>Massimo domande per spettatore: <input type="number" id="fs-qmax" min="1" max="50"></label>
+                                <div class="fan-muted">Le impostazioni sono salvate per questo Match ID e applicate subito ai fan collegati.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- ROSTER OVERLAY -->
             <div id="roster-overlay">
                 <button class="close-overlay-btn" id="roster-back-btn" onclick="goBackToClans()"
@@ -1537,6 +1914,55 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- PAGINA PUBBLICA (?fan=1): vista mobile per gli spettatori -->
+    <div id="fan-page">
+        <div class="fanp-conn" id="fanp-conn">CONNESSIONE IN CORSO...</div>
+        <div class="fanp-header">
+            <div class="fanp-tourney" id="fanp-tourney">PAINTBALL LIVE</div>
+            <div class="fanp-phase" id="fanp-phase"></div>
+            <div class="fanp-score">
+                <div class="fanp-team"><span id="fanp-name-a">—</span><b id="fanp-score-a">0</b></div>
+                <div class="fanp-timer" id="fanp-timer">--:--</div>
+                <div class="fanp-team"><span id="fanp-name-b">—</span><b id="fanp-score-b">0</b></div>
+            </div>
+            <div class="fanp-status" id="fanp-status">IN ATTESA DELLA DIRETTA</div>
+            <div class="fanp-next" id="fanp-next" style="display:none;"></div>
+            <div class="fanp-count" id="fanp-count" style="display:none;"></div>
+        </div>
+        <div class="fanp-offline" id="fanp-offline" style="display:none;">
+            INTERAZIONE NON DISPONIBILE
+            <small>La diretta e il punteggio possono continuare normalmente.</small>
+        </div>
+        <div class="fanp-card" id="fanp-poll-card" style="display:none;">
+            <h3>📊 SONDAGGIO</h3>
+            <div id="fanp-poll-q" style="font-size:1.05rem; margin-bottom:4px;"></div>
+            <div id="fanp-poll-opts"></div>
+            <div id="fanp-poll-note" class="fanp-muted"></div>
+        </div>
+        <div class="fanp-card" id="fanp-mvp-card" style="display:none;">
+            <h3>🏆 MVP</h3>
+            <div id="fanp-mvp-title" style="font-size:1.05rem; margin-bottom:4px;"></div>
+            <div id="fanp-mvp-opts"></div>
+            <div id="fanp-mvp-note" class="fanp-muted"></div>
+        </div>
+        <div class="fanp-card" id="fanp-q-card" style="display:none;">
+            <h3>💬 DOMANDA</h3>
+            <div class="fanp-muted">Fai una domanda ai telecronisti</div>
+            <input type="text" id="fanp-nick" maxlength="30" placeholder="Nickname (facoltativo)" autocomplete="off">
+            <textarea id="fanp-q-text" maxlength="240" rows="3" placeholder="Scrivi qui la tua domanda..."></textarea>
+            <div class="fanp-row">
+                <span class="fanp-muted" id="fanp-q-count">0/240</span>
+                <button class="fanp-btn" id="fanp-q-send">INVIA</button>
+            </div>
+            <div id="fanp-q-note" class="fanp-muted"></div>
+        </div>
+        <div class="fanp-card" id="fanp-react-card" style="display:none;">
+            <h3>🔥 REAZIONI</h3>
+            <div class="fanp-reactions" id="fanp-reactions"></div>
+        </div>
+        <div id="fanp-toast"></div>
     </div>
 
     <script>
@@ -1579,7 +2005,7 @@
 
         // Initial Load
         window.addEventListener('scroll', noScroll);
-        function noScroll() { window.scrollTo(0, 0); }
+        function noScroll() { if (window.__FAN_MODE__) return; window.scrollTo(0, 0); }
 
         // --- GitHub Logo Fetcher ---
         let githubFilesList = [];
@@ -1782,6 +2208,7 @@
         let smokeSystemStarted = false;
 
         function startClient(hostId) {
+            if (window.__FAN_MODE__) return; // la pagina fan non si collega mai alla Regia
             if (!hostId) return alert("Inserisci ID");
             controlPin = pinInput.value.replace(/\D/g, '');
             if (controlPin && !/^\d{6}$/.test(controlPin)) {
@@ -1859,6 +2286,81 @@
 
             oldData = JSON.parse(JSON.stringify(currentData));
             updateBoard(currentData);
+        }
+
+        // ===== NOTIFICA "RECORD BATTUTO" (statistiche torneo) =====
+        // Confronta i primati del pannello 📊 (punto più veloce, re del mercy, miglior
+        // attacco...) con l'ultimo valore visto: quando uno viene battuto mostra il
+        // banner #record-toast sulla schermata principale. Il primo pacchetto fa solo
+        // da riferimento (niente notifiche all'apertura o alla riconnessione).
+        let recordBaseline = null;
+        let recordBaselineTourney = '';
+        const recordToastQueue = [];
+        let recordToastBusy = false;
+
+        function tourneySnapshot(d) {
+            const sd = d.standingsData;
+            if (!sd || !sd.standings) return null;
+            const played = sd.standings.filter(s => (s.played || 0) > 0);
+            if (!played.length) return null;
+            const att = [...played].sort((x, y) => (y.rw || 0) - (x.rw || 0))[0];
+            const def = [...played].sort((x, y) => ((x.rl || 0) - (y.rl || 0)) || ((y.played || 0) - (x.played || 0)))[0];
+            const top = (arr, valKey, round) => (arr && arr[0] && arr[0].team)
+                ? { team: arr[0].team, val: round ? Math.round(arr[0][valKey]) : arr[0][valKey] } : null;
+            return {
+                veloce: top(sd.records, 'duration', true),
+                media: top(sd.averageTimes, 'avg', true),
+                combattuto: top(sd.slowestRounds, 'duration', true),
+                mercy: top(sd.mercyKillers, 'count'),
+                pen: top(sd.badBoys, 'count'),
+                attacco: (att && att.rw > 0) ? { team: att.name, val: att.rw } : null,
+                difesa: def ? { team: def.name, val: def.rl } : null
+            };
+        }
+
+        function checkTourneyRecords(d) {
+            const snap = tourneySnapshot(d);
+            if (!snap) return;
+            const tourney = (d.tournament && d.tournament.name) || '';
+            if (!recordBaseline || tourney !== recordBaselineTourney) {
+                recordBaseline = snap;              // riferimento silenzioso (avvio o nuovo torneo)
+                recordBaselineTourney = tourney;
+                return;
+            }
+            const prev = recordBaseline;
+            recordBaseline = snap;
+            recordBaselineTourney = tourney;
+
+            const fire = (txt) => { recordToastQueue.push(txt); pumpRecordToast(); };
+            const cmp = (key, migliore, testo) => {
+                const n = snap[key], p = prev[key];
+                if (n && p && migliore(n, p)) fire(testo(n));
+            };
+            // Valore migliorato (stessa metrica del pannello 📊)
+            cmp('veloce', (n, p) => n.val < p.val, n => `⚡ Punto più veloce: ${ciEsc(n.team)} <span class="val">${n.val}s</span>`);
+            cmp('combattuto', (n, p) => n.val > p.val, n => `🐌 Punto più combattuto: ${ciEsc(n.team)} <span class="val">${n.val}s</span>`);
+            cmp('mercy', (n, p) => n.val > p.val, n => `💀 Re del mercy: ${ciEsc(n.team)} <span class="val">${n.val}</span>`);
+            cmp('pen', (n, p) => n.val > p.val, n => `🚨 Più penalizzata: ${ciEsc(n.team)} <span class="val">${n.val} penalità</span>`);
+            // Cambio di leader con valore davvero migliore (evita i pareggi che si alternano)
+            cmp('media', (n, p) => n.team !== p.team && n.val < p.val, n => `🎯 Punto medio più rapido: ora ${ciEsc(n.team)} <span class="val">${n.val}s</span>`);
+            cmp('attacco', (n, p) => n.team !== p.team && n.val > p.val, n => `🔥 Miglior attacco: ora ${ciEsc(n.team)} <span class="val">${n.val} punti</span>`);
+            cmp('difesa', (n, p) => n.team !== p.team && n.val < p.val, n => `🛡️ Miglior difesa: ora ${ciEsc(n.team)} <span class="val">${n.val} subiti</span>`);
+        }
+
+        function pumpRecordToast() {
+            if (recordToastBusy) return;
+            const txt = recordToastQueue.shift();
+            if (!txt) return;
+            recordToastBusy = true;
+            const el = document.getElementById('record-toast');
+            const body = document.getElementById('record-toast-text');
+            if (!el || !body) { recordToastBusy = false; return; }
+            body.innerHTML = txt; // i nomi squadra sono già escapati con ciEsc
+            el.classList.add('show');
+            setTimeout(() => {
+                el.classList.remove('show');
+                setTimeout(() => { recordToastBusy = false; pumpRecordToast(); }, 600);
+            }, 7000);
         }
 
         function updateBoard(d) {
@@ -1965,6 +2467,9 @@
             } else {
                 topBarRec.style.display = 'none';
             }
+
+            // Notifica a schermo se un primato del pannello 📊 è stato battuto
+            checkTourneyRecords(d);
 
             // Layout URL — un'immagine diretta (es. screenshot gunzup) va in <img>
             // per adattarla al riquadro; le pagine web restano nell'iframe
@@ -3231,6 +3736,7 @@
 
         // Load ID from URL or Storage
         window.addEventListener('DOMContentLoaded', () => {
+            if (window.__FAN_MODE__) return; // modalità pubblico: gestita da FanModule
             const params = new URLSearchParams(window.location.search);
             const id = params.get('id') || params.get('matchId');
             const lastId = localStorage.getItem('last_match_id');
@@ -3242,6 +3748,1207 @@
                 input.value = lastId;
             }
         });
+    </script>
+
+    <script>
+        // ============================================================
+        //  MODULO PUBBLICO (FAN) — interazione spettatori via QR code
+        //  Console (default): host PeerJS della stanza "IPBA-FAN-<id>",
+        //  pannello 👥 PUBBLICO, moderazione, overlay in streaming.
+        //  Pagina fan (?fan=1): client mobile collegato alla stanza.
+        //  Tutto separato dalla connessione Regia: i messaggi del
+        //  pubblico non vengono MAI inoltrati a clientConn/PMClient.
+        // ============================================================
+        const FanModule = (() => {
+            'use strict';
+            const IS_FAN = !!window.__FAN_MODE__;
+
+            // ---------- costanti ----------
+            const SCHEMA_VERSION = 1;
+            const MSG_FAN = ['FAN_HELLO', 'FAN_STATE_REQUEST', 'FAN_POLL_VOTE', 'FAN_MVP_VOTE', 'FAN_QUESTION_SUBMIT', 'FAN_REACTION', 'FAN_PING', 'FAN_PONG'];
+            const MSG_HOST = ['FAN_WELCOME', 'FAN_PUBLIC_STATE', 'FAN_POLL_UPDATE', 'FAN_MVP_UPDATE', 'FAN_QUESTION_ACK', 'FAN_REACTION_ACK', 'FAN_ERROR', 'FAN_CONFIG_UPDATE'];
+            const REACTIONS = ['🔥', '👏', '😮', '💪', '🎯'];
+            const MAX_PAYLOAD = 4096;
+            const MAX_QUESTIONS = 500, MAX_POLLS = 100, MAX_MVP = 50, MAX_VOTERS = 5000, MAX_FANS = 200;
+            const ID_RE = /^[A-Za-z0-9_-]{1,48}$/;
+
+            // ---------- utilità ----------
+            const now = () => Date.now();
+            const $id = (x) => document.getElementById(x);
+            const rid = (p) => p + '-' + now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 7).toUpperCase();
+            const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            // Testo pubblico: niente HTML, niente caratteri di controllo, spazi compattati
+            function cleanText(s, max) {
+                return String(s == null ? '' : s)
+                    .replace(/[<>]/g, ' ')
+                    .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028\u2029\ufeff]/g, ' ')
+                    .replace(/\s+/g, ' ').trim().slice(0, max || 240);
+            }
+            function normBase(raw) {
+                const s = String(raw || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 40);
+                return s.replace(/^IPBA-/, '');
+            }
+            const oraFmt = (ts) => { const d = new Date(ts); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+            function safeSend(conn, msg) { try { if (conn && conn.open) conn.send(msg); } catch (e) { /* connessione morta: la pulizia la rimuove */ } }
+
+            // =========================================================
+            //  STATO CONSOLE
+            // =========================================================
+            let matchBase = '';
+            let db = null;
+            let hostPeer = null;
+            let hostRoom = '';
+            let hostStatus = 'SPENTA';
+            let fans = new Map();          // chiave interna -> {conn, spectatorId, sessionId, nick, lastSeen, joinedAt}
+            let counters = { dup: 0, rejected: 0 };
+            let sessionStats = { peak: 0, joins: 0, lastJoin: 0 };
+            const rate = new Map();        // "spectatorId|azione" -> ts
+            let hostTick = null;
+            let saveTimer = null;
+            let dirtyPoll = false, dirtyMvp = false, dirtyCfg = false;
+            let lastStateSent = 0, lastStateFp = '', lastPollSent = 0, lastMvpSent = 0;
+            let panelOpen = false, activeTab = 'stato', lastPanelRender = 0, lastQrUrl = '';
+            let reactionBuffer = {};       // emoji -> conteggio da mostrare nell'effetto
+            let floatCount = 0, floodStrikes = 0;
+            let noteTimer = null;
+
+            function defaultSettings() {
+                return {
+                    enabled: true, polls: true, predictions: true, mvp: true, questions: true,
+                    nicknames: true, reactions: true, showResultsToFans: true, showSpectatorCount: true,
+                    showNextMatch: true, questionOverlaySec: 10, pollOverlaySec: 15,
+                    questionRateSec: 30, maxQuestionsPerSpectator: 5, reactionsOnStream: false
+                };
+            }
+            function storageKey() { return 'pm_fan_state::' + (matchBase || 'DEFAULT'); }
+            function loadFanState() {
+                db = null;
+                try {
+                    const raw = localStorage.getItem(storageKey());
+                    if (raw) {
+                        const p = JSON.parse(raw);
+                        if (p && p.schemaVersion === SCHEMA_VERSION && Array.isArray(p.polls)) {
+                            p.settings = Object.assign(defaultSettings(), p.settings || {});
+                            db = p;
+                        }
+                    }
+                } catch (e) { /* archivio illeggibile: si riparte pulito */ }
+                if (!db) db = { schemaVersion: SCHEMA_VERSION, settings: defaultSettings(), polls: [], mvpVotes: [], questions: [], blockedSpectators: [], reactionTotals: {}, stats: {} };
+            }
+            function saveFanState() {
+                clearTimeout(saveTimer);
+                saveTimer = setTimeout(() => {
+                    try { localStorage.setItem(storageKey(), JSON.stringify(db)); }
+                    catch (e) { note('⚠️ Salvataggio non riuscito (spazio pieno?)'); }
+                }, 600);
+            }
+            function detectMatchBase() {
+                const p = new URLSearchParams(location.search);
+                const inp = $id('match-id');
+                const raw = (inp && inp.value.trim()) || p.get('id') || p.get('matchId') || localStorage.getItem('last_match_id') || '';
+                return normBase(raw);
+            }
+            function refreshMatchContext() {
+                const nuovo = detectMatchBase();
+                if (nuovo && nuovo !== matchBase) { matchBase = nuovo; loadFanState(); }
+                else if (!db) loadFanState();
+            }
+            function fanRoomId() { return 'IPBA-FAN-' + matchBase; }
+            function matchRefNow() {
+                const d = (typeof currentData !== 'undefined' ? currentData : null) || {};
+                const a = d.teamLeft && d.teamLeft.name, b = d.teamRight && d.teamRight.name;
+                return (a && b) ? cleanText(a + ' vs ' + b, 90) : '';
+            }
+            function note(msg) {
+                const el = $id('fan-admin-note'); if (!el) return;
+                el.textContent = msg || '';
+                clearTimeout(noteTimer);
+                if (msg) noteTimer = setTimeout(() => { el.textContent = ''; }, 6000);
+            }
+
+            // =========================================================
+            //  HOST STANZA PUBBLICO (console)
+            // =========================================================
+            function startFanHost() {
+                refreshMatchContext();
+                if (!matchBase) { hostStatus = 'ERRORE: nessun Match ID'; renderPanel(true); return; }
+                if (!window.Peer) { hostStatus = 'ERRORE: PeerJS non disponibile'; renderPanel(true); return; }
+                stopFanHost(true);
+                hostRoom = fanRoomId();
+                hostStatus = 'AVVIO...';
+                renderPanel(true);
+                try { hostPeer = new Peer(hostRoom); } catch (e) { hostStatus = 'ERRORE: ' + e.message; renderPanel(true); return; }
+                hostPeer.on('open', () => { hostStatus = 'ATTIVA'; startHostTick(); renderPanel(true); });
+                hostPeer.on('error', (err) => {
+                    const t = (err && err.type) || 'rete';
+                    if (t === 'unavailable-id') hostStatus = 'ERRORE: stanza già attiva in un\'altra console';
+                    else if (hostStatus !== 'ATTIVA') hostStatus = 'ERRORE: ' + t;
+                    renderPanel(true);
+                });
+                hostPeer.on('disconnected', () => { try { if (hostPeer && !hostPeer.destroyed) hostPeer.reconnect(); } catch (e) { } });
+                hostPeer.on('connection', onFanConnection);
+            }
+            function stopFanHost(silent) {
+                if (hostTick) { clearInterval(hostTick); hostTick = null; }
+                fans.forEach(f => { try { f.conn.close(); } catch (e) { } });
+                fans.clear();
+                if (hostPeer) {
+                    // Prima di distruggere va tolto OGNI listener: durante destroy() PeerJS
+                    // emette 'disconnected' e il reconnect() automatico ri-registrerebbe
+                    // l'ID sul broker come zombie ("stanza già attiva" per sempre).
+                    try { if (hostPeer.removeAllListeners) hostPeer.removeAllListeners(); } catch (e) { }
+                    try { hostPeer.destroy(); } catch (e) { }
+                    hostPeer = null;
+                }
+                hostStatus = 'SPENTA';
+                if (!silent) renderPanel(true);
+            }
+            function onFanConnection(conn) {
+                if (fans.size >= MAX_FANS) { try { conn.close(); } catch (e) { } return; }
+                const rec = { conn, spectatorId: '', sessionId: '', nick: '', lastSeen: now(), joinedAt: now() };
+                const key = rid('C');
+                fans.set(key, rec);
+                conn.on('data', (m) => handleFanMessage(rec, m));
+                conn.on('close', () => { fans.delete(key); requestPanelRender(); });
+                conn.on('error', () => { });
+            }
+            function onlineCount() {
+                const t = now(); let n = 0;
+                fans.forEach(f => { if (f.conn && f.conn.open && t - f.lastSeen < 45000) n++; });
+                return n;
+            }
+            function broadcast(pkt) { fans.forEach(f => safeSend(f.conn, pkt)); }
+            function limited(sid, kind, ms) {
+                const k = sid + '|' + kind, t = rate.get(k) || 0;
+                if (now() - t < ms) return true;
+                rate.set(k, now()); return false;
+            }
+
+            function startHostTick() {
+                if (hostTick) clearInterval(hostTick);
+                hostTick = setInterval(() => {
+                    if (!hostPeer || hostPeer.destroyed) return;
+                    const t = now();
+                    // Stato match: solo se cambiato (max 2/s), keepalive ogni 10s
+                    const pkt = publicStatePacket();
+                    const fp = JSON.stringify(pkt);
+                    if ((fp !== lastStateFp && t - lastStateSent >= 500) || t - lastStateSent >= 10000) {
+                        lastStateFp = fp; lastStateSent = t; broadcast(pkt);
+                    }
+                    if (dirtyPoll && t - lastPollSent >= 500) {
+                        dirtyPoll = false; lastPollSent = t; broadcast(pollPacket());
+                        if (pollOverlayVisible) renderPollOverlay();
+                    }
+                    if (dirtyMvp && t - lastMvpSent >= 500) { dirtyMvp = false; lastMvpSent = t; broadcast(mvpPacket()); }
+                    if (dirtyCfg) { dirtyCfg = false; broadcast({ type: 'FAN_CONFIG_UPDATE', config: publicConfig() }); broadcast(pollPacket()); broadcast(mvpPacket()); }
+                    // Auto-chiusura sondaggi a tempo
+                    db.polls.forEach(p => {
+                        if (p.status === 'OPEN' && p.durationSec > 0 && p.openedAt && t >= p.openedAt + p.durationSec * 1000) pollAction(p.pollId, 'close');
+                    });
+                    // Pulizia connessioni chiuse e mappa rate limit
+                    fans.forEach((f, k) => { if ((!f.conn || !f.conn.open) && t - f.lastSeen > 60000) fans.delete(k); });
+                    if (rate.size > 4000) { rate.forEach((ts, k) => { if (t - ts > 600000) rate.delete(k); }); }
+                    sessionStats.peak = Math.max(sessionStats.peak, onlineCount());
+                    if (panelOpen && t - lastPanelRender >= 1000) renderPanel();
+                }, 500);
+            }
+
+            // =========================================================
+            //  MESSAGGI DAL PUBBLICO (whitelist + validazione)
+            // =========================================================
+            function validateFanMessage(m) {
+                if (!m || typeof m !== 'object' || Array.isArray(m)) return null;
+                let size = 0;
+                try { size = JSON.stringify(m).length; } catch (e) { return null; }
+                if (size > MAX_PAYLOAD) return null;
+                if (typeof m.type !== 'string' || MSG_FAN.indexOf(m.type) === -1) return null;
+                return m;
+            }
+            function fanErr(rec, code, message) { safeSend(rec.conn, { type: 'FAN_ERROR', code, message }); }
+
+            function handleFanMessage(rec, raw) {
+                const m = validateFanMessage(raw);
+                if (!m) { counters.rejected++; return; }
+                rec.lastSeen = now();
+                const sid = String(m.spectatorId || rec.spectatorId || '');
+                if (!ID_RE.test(sid)) { counters.rejected++; return; }
+                if (!rec.spectatorId) rec.spectatorId = sid;
+                const S = db.settings;
+                if (!S.enabled && m.type !== 'FAN_PING' && m.type !== 'FAN_PONG' && m.type !== 'FAN_HELLO') {
+                    fanErr(rec, 'DISABLED', 'Interazione disattivata'); return;
+                }
+                switch (m.type) {
+                    case 'FAN_HELLO':
+                        rec.sessionId = ID_RE.test(String(m.sessionId || '')) ? m.sessionId : '';
+                        rec.nick = cleanText(m.nick, 30);
+                        sessionStats.joins++; sessionStats.lastJoin = now();
+                        sessionStats.peak = Math.max(sessionStats.peak, onlineCount());
+                        safeSend(rec.conn, { type: 'FAN_WELCOME', config: publicConfig() });
+                        safeSend(rec.conn, publicStatePacket());
+                        safeSend(rec.conn, pollPacket());
+                        safeSend(rec.conn, mvpPacket());
+                        requestPanelRender();
+                        break;
+                    case 'FAN_PING': safeSend(rec.conn, { type: 'FAN_PONG', t: typeof m.t === 'number' ? m.t : 0 }); break;
+                    case 'FAN_PONG': break;
+                    case 'FAN_STATE_REQUEST':
+                        if (limited(sid, 'state', 3000)) { fanErr(rec, 'RATE', 'Attendi qualche secondo'); break; }
+                        safeSend(rec.conn, publicStatePacket());
+                        safeSend(rec.conn, pollPacket());
+                        safeSend(rec.conn, mvpPacket());
+                        break;
+                    case 'FAN_POLL_VOTE': handlePollVote(rec, sid, m); break;
+                    case 'FAN_MVP_VOTE': handleMvpVote(rec, sid, m); break;
+                    case 'FAN_QUESTION_SUBMIT': handleFanQuestion(rec, sid, m); break;
+                    case 'FAN_REACTION': handleFanReaction(rec, sid, m); break;
+                }
+            }
+
+            function handlePollVote(rec, sid, m) {
+                if (!db.settings.polls) return fanErr(rec, 'DISABLED', 'Sondaggi disattivati');
+                const pid = String(m.pollId || '');
+                if (!ID_RE.test(pid)) { counters.rejected++; return fanErr(rec, 'BAD', 'Sondaggio non valido'); }
+                const poll = db.polls.find(p => p.pollId === pid);
+                if (!poll) { counters.rejected++; return fanErr(rec, 'NOT_FOUND', 'Sondaggio non trovato'); }
+                if (poll.kind === 'MATCH_PREDICTION' && !db.settings.predictions) return fanErr(rec, 'DISABLED', 'Pronostici disattivati');
+                if (poll.status !== 'OPEN') return fanErr(rec, 'CLOSED', 'SONDAGGIO CHIUSO');
+                const opt = poll.options.find(o => o.optionId === String(m.optionId || ''));
+                if (!opt) { counters.rejected++; return fanErr(rec, 'BAD_OPTION', 'Opzione non valida'); }
+                poll.votedBy = poll.votedBy || {};
+                if (poll.votedBy[sid] !== undefined) { counters.dup++; requestPanelRender(); return fanErr(rec, 'ALREADY', 'VOTO GIÀ REGISTRATO'); }
+                if (Object.keys(poll.votedBy).length >= MAX_VOTERS) { note('⚠️ Limite voti (' + MAX_VOTERS + ') raggiunto per il sondaggio'); return fanErr(rec, 'FULL', 'Limite voti raggiunto'); }
+                poll.votedBy[sid] = opt.optionId;
+                opt.votes++;
+                saveFanState(); dirtyPoll = true; requestPanelRender();
+            }
+
+            function handleMvpVote(rec, sid, m) {
+                if (!db.settings.mvp) return fanErr(rec, 'DISABLED', 'Votazione MVP disattivata');
+                const vid = String(m.voteId || '');
+                if (!ID_RE.test(vid)) { counters.rejected++; return fanErr(rec, 'BAD', 'Votazione non valida'); }
+                const vote = db.mvpVotes.find(v => v.voteId === vid);
+                if (!vote) { counters.rejected++; return fanErr(rec, 'NOT_FOUND', 'Votazione non trovata'); }
+                if (vote.status !== 'OPEN') return fanErr(rec, 'CLOSED', 'VOTAZIONE CHIUSA');
+                const cand = vote.candidates.find(c => c.candidateId === String(m.candidateId || ''));
+                if (!cand) { counters.rejected++; return fanErr(rec, 'BAD_OPTION', 'Candidato non valido'); }
+                vote.votedBy = vote.votedBy || {};
+                if (vote.votedBy[sid] !== undefined) { counters.dup++; requestPanelRender(); return fanErr(rec, 'ALREADY', 'VOTO GIÀ REGISTRATO'); }
+                if (Object.keys(vote.votedBy).length >= MAX_VOTERS) return fanErr(rec, 'FULL', 'Limite voti raggiunto');
+                vote.votedBy[sid] = cand.candidateId;
+                cand.votes++;
+                saveFanState(); dirtyMvp = true; requestPanelRender();
+            }
+
+            function handleFanQuestion(rec, sid, m) {
+                const S = db.settings;
+                if (!S.questions) return fanErr(rec, 'DISABLED', 'Domande disattivate');
+                if (db.blockedSpectators.indexOf(sid) !== -1) return fanErr(rec, 'BLOCKED', 'Invio non disponibile');
+                const text = cleanText(m.text, 240);
+                if (text.length < 3) return fanErr(rec, 'TOO_SHORT', 'Domanda troppo corta');
+                if (!/[0-9A-Za-zÀ-ÿ]/.test(text)) return fanErr(rec, 'INVALID', 'Testo non valido');
+                const mie = db.questions.filter(q => q.spectatorId === sid);
+                if (mie.length >= (S.maxQuestionsPerSpectator || 5)) return fanErr(rec, 'MAX', 'Limite domande raggiunto per questo evento');
+                if (mie.some(q => q.text.toUpperCase() === text.toUpperCase())) return fanErr(rec, 'DUP', 'Domanda già inviata');
+                if (db.questions.length >= MAX_QUESTIONS) { note('⚠️ Limite di ' + MAX_QUESTIONS + ' domande raggiunto'); return fanErr(rec, 'FULL', 'Archivio domande pieno'); }
+                if (limited(sid, 'question', (S.questionRateSec || 30) * 1000)) return fanErr(rec, 'RATE', "ATTENDI PRIMA DI INVIARE UN'ALTRA DOMANDA");
+                db.questions.push({
+                    qid: rid('Q'), ts: now(), nick: S.nicknames ? cleanText(m.nick, 30) : '',
+                    text, spectatorId: sid, sessionId: rec.sessionId || '', status: 'PENDING', matchReference: matchRefNow()
+                });
+                saveFanState(); requestPanelRender(); renderQBadge();
+                safeSend(rec.conn, { type: 'FAN_QUESTION_ACK', ok: true, message: 'DOMANDA INVIATA' });
+            }
+
+            function handleFanReaction(rec, sid, m) {
+                if (!db.settings.reactions) return;
+                const emoji = String(m.emoji || '');
+                if (REACTIONS.indexOf(emoji) === -1) { counters.rejected++; return; }
+                if (limited(sid, 'react', 3000)) return fanErr(rec, 'RATE', 'Attendi un momento');
+                db.reactionTotals[emoji] = (db.reactionTotals[emoji] || 0) + 1;
+                reactionBuffer[emoji] = (reactionBuffer[emoji] || 0) + 1;
+                ensureReactionTick();
+                saveFanState(); requestPanelRender();
+                safeSend(rec.conn, { type: 'FAN_REACTION_ACK' });
+            }
+
+            // =========================================================
+            //  PACCHETTI PUBBLICI (solo dati non riservati)
+            // =========================================================
+            function publicConfig() {
+                const S = db.settings;
+                return {
+                    enabled: !!S.enabled, polls: !!(S.enabled && S.polls), mvp: !!(S.enabled && S.mvp),
+                    questions: !!(S.enabled && S.questions), nicknames: !!S.nicknames,
+                    reactions: !!(S.enabled && S.reactions), showResults: !!S.showResultsToFans,
+                    showSpectatorCount: !!S.showSpectatorCount,
+                    questionRateSec: S.questionRateSec || 30, maxQuestions: S.maxQuestionsPerSpectator || 5
+                };
+            }
+            function publicStatePacket() {
+                const d = (typeof currentData !== 'undefined' ? currentData : null) || {};
+                const S = db.settings;
+                const team = (t) => ({
+                    name: cleanText(t && t.name, 40) || '—',
+                    score: (t && typeof t.score === 'number') ? t.score : 0,
+                    color: (t && typeof t.color === 'string') ? t.color.slice(0, 24) : ''
+                });
+                return {
+                    type: 'FAN_PUBLIC_STATE',
+                    spectatorCount: S.showSpectatorCount ? onlineCount() : null,
+                    match: {
+                        tournamentName: cleanText(d.tournament && d.tournament.name, 80),
+                        phase: cleanText(d.phase, 40),
+                        timer: cleanText(d.timer, 12),
+                        statusText: cleanText(d.statusText, 40),
+                        teamLeft: team(d.teamLeft), teamRight: team(d.teamRight),
+                        nextMatch: (S.showNextMatch && d.nextMatch) ? {
+                            teamA: cleanText(d.nextMatch.teamA, 40), teamB: cleanText(d.nextMatch.teamB, 40),
+                            time: cleanText(d.nextMatch.time, 10)
+                        } : null
+                    },
+                    interaction: {
+                        activePoll: !!pollForFans(), activeMvpVote: !!mvpForFans(),
+                        questionsEnabled: !!(S.enabled && S.questions), reactionsEnabled: !!(S.enabled && S.reactions)
+                    }
+                };
+            }
+            function activePoll() { return db.polls.find(p => p.status === 'OPEN' || p.status === 'PAUSED') || null; }
+            function pollForFans() {
+                if (!db.settings.polls) return null;
+                return activePoll() || db.polls.filter(p => p.status === 'CLOSED').sort((a, b) => (b.closedAt || 0) - (a.closedAt || 0))[0] || null;
+            }
+            function pollPublicView(p) {
+                if (!p) return null;
+                const total = p.options.reduce((t, o) => t + o.votes, 0);
+                const reveal = db.settings.showResultsToFans && (p.status === 'CLOSED' || p.showResults);
+                return {
+                    pollId: p.pollId, question: p.question, status: p.status, kind: p.kind || '',
+                    showResults: reveal, total: reveal ? total : null,
+                    options: p.options.map(o => ({ optionId: o.optionId, label: o.label, votes: reveal ? o.votes : null }))
+                };
+            }
+            function pollPacket() { return { type: 'FAN_POLL_UPDATE', poll: pollPublicView(pollForFans()) }; }
+            function activeMvp() { return db.mvpVotes.find(v => v.status === 'OPEN') || null; }
+            function mvpForFans() {
+                if (!db.settings.mvp) return null;
+                return activeMvp() || db.mvpVotes.filter(v => v.status === 'CLOSED').sort((a, b) => (b.closedAt || 0) - (a.closedAt || 0))[0] || null;
+            }
+            function mvpPublicView(v) {
+                if (!v) return null;
+                const total = v.candidates.reduce((t, c) => t + c.votes, 0);
+                const reveal = db.settings.showResultsToFans && v.status === 'CLOSED';
+                return {
+                    voteId: v.voteId, title: v.title, status: v.status,
+                    showResults: reveal, total: reveal ? total : null,
+                    candidates: v.candidates.map(c => ({ candidateId: c.candidateId, name: c.name, team: c.team, votes: reveal ? c.votes : null }))
+                };
+            }
+            function mvpPacket() { return { type: 'FAN_MVP_UPDATE', vote: mvpPublicView(mvpForFans()) }; }
+
+            // =========================================================
+            //  SONDAGGI (console)
+            // =========================================================
+            function createPoll(question, labels, opts) {
+                question = cleanText(question, 120);
+                labels = (labels || []).map(l => cleanText(l, 80)).filter(Boolean).slice(0, 6);
+                if (question.length < 3) { note('⚠️ Scrivi la domanda del sondaggio'); return null; }
+                if (labels.length < 2) { note('⚠️ Servono da 2 a 6 opzioni (una per riga)'); return null; }
+                if (db.polls.length >= MAX_POLLS) { note('⚠️ Limite di ' + MAX_POLLS + ' sondaggi raggiunto: archivia o azzera'); return null; }
+                const p = {
+                    pollId: rid('POLL'), question,
+                    options: labels.map((l, i) => ({ optionId: 'O' + (i + 1), label: l, votes: 0 })),
+                    status: 'DRAFT', showResults: !!opts.showResults, durationSec: opts.durationSec || 0,
+                    createdAt: now(), openedAt: 0, closedAt: 0,
+                    matchReference: opts.matchRef ? matchRefNow() : '', kind: opts.kind || '', votedBy: {}
+                };
+                db.polls.unshift(p);
+                saveFanState();
+                return p;
+            }
+            function pollAction(pollId, action) {
+                const p = db.polls.find(x => x.pollId === pollId);
+                if (!p) return;
+                if (action === 'open') {
+                    const altro = activePoll();
+                    if (altro && altro.pollId !== p.pollId) { note('⚠️ C\'è già un sondaggio attivo: chiudilo prima'); return; }
+                    p.status = 'OPEN'; if (!p.openedAt) p.openedAt = now();
+                } else if (action === 'pause') { if (p.status === 'OPEN') p.status = 'PAUSED'; }
+                else if (action === 'resume') { if (p.status === 'PAUSED') p.status = 'OPEN'; }
+                else if (action === 'close') { if (p.status === 'OPEN' || p.status === 'PAUSED') { p.status = 'CLOSED'; p.closedAt = now(); } }
+                else if (action === 'reset') { p.options.forEach(o => o.votes = 0); p.votedBy = {}; }
+                else if (action === 'archive') { p.status = 'ARCHIVED'; if (pollOverlayId === p.pollId) hidePollOverlay(); }
+                else if (action === 'show') { showPollOverlay(p.pollId); }
+                saveFanState(); dirtyPoll = true; renderPolls();
+            }
+            function uiCreatePoll(apri) {
+                refreshMatchContext();
+                const q = $id('fan-poll-q').value;
+                const labels = $id('fan-poll-opts').value.split('\n');
+                const p = createPoll(q, labels, {
+                    showResults: $id('fan-poll-showres').checked,
+                    matchRef: $id('fan-poll-matchref').checked,
+                    durationSec: Math.max(0, parseInt($id('fan-poll-dur').value, 10) || 0) * 60
+                });
+                if (!p) return;
+                $id('fan-poll-q').value = ''; $id('fan-poll-opts').value = '';
+                if (apri) pollAction(p.pollId, 'open'); else renderPolls();
+                if (apri && p.status !== 'OPEN') return; // rifiutato (altro sondaggio attivo): resta la nota di avviso
+                note(apri ? '✅ Sondaggio aperto' : '✅ Bozza salvata');
+            }
+            function createPrediction() {
+                refreshMatchContext();
+                if (!db.settings.predictions) { note('⚠️ Pronostici disabilitati nelle impostazioni'); return; }
+                if (activePoll()) { note('⚠️ C\'è già un sondaggio attivo: chiudilo prima del pronostico'); return; }
+                const d = (typeof currentData !== 'undefined' ? currentData : null) || {};
+                const a = cleanText(d.teamLeft && d.teamLeft.name, 80), b = cleanText(d.teamRight && d.teamRight.name, 80);
+                if (!a || !b || /^TEAM [AB]$/i.test(a) || /^TEAM [AB]$/i.test(b)) { note('⚠️ Squadre non ancora disponibili dalla Regia'); return; }
+                const p = createPoll('CHI VINCERÀ IL MATCH?', [a, b], { showResults: true, matchRef: true, kind: 'MATCH_PREDICTION' });
+                if (!p) return;
+                pollAction(p.pollId, 'open');
+                note('✅ Pronostico match aperto: ' + a + ' vs ' + b);
+            }
+
+            // =========================================================
+            //  MVP (console)
+            // =========================================================
+            function uiCreateMvp(apri) {
+                refreshMatchContext();
+                const title = cleanText($id('fan-mvp-title').value, 60) || 'MVP DEL MATCH';
+                const cands = $id('fan-mvp-cands').value.split('\n').map(r => {
+                    const parts = r.split('|');
+                    return { name: cleanText(parts[0], 80), team: cleanText(parts[1] || '', 40) };
+                }).filter(c => c.name).slice(0, 12);
+                if (cands.length < 2) { note('⚠️ Servono da 2 a 12 candidati (uno per riga)'); return; }
+                if (db.mvpVotes.length >= MAX_MVP) { note('⚠️ Limite di ' + MAX_MVP + ' votazioni MVP raggiunto'); return; }
+                const v = {
+                    voteId: rid('MVP'), title,
+                    candidates: cands.map((c, i) => ({ candidateId: 'C' + (i + 1), name: c.name, team: c.team, votes: 0 })),
+                    status: 'DRAFT', createdAt: now(), closedAt: 0, matchReference: matchRefNow(), votedBy: {}
+                };
+                db.mvpVotes.unshift(v);
+                saveFanState();
+                $id('fan-mvp-cands').value = '';
+                if (apri) mvpAction(v.voteId, 'open'); else renderMvp();
+                if (apri && v.status !== 'OPEN') return; // rifiutata (altra votazione aperta)
+                note(apri ? '✅ Votazione MVP aperta' : '✅ Bozza MVP salvata');
+            }
+            function mvpAction(voteId, action) {
+                const v = db.mvpVotes.find(x => x.voteId === voteId);
+                if (!v) return;
+                if (action === 'open') {
+                    const altro = activeMvp();
+                    if (altro && altro.voteId !== v.voteId) { note('⚠️ C\'è già una votazione MVP aperta: chiudila prima'); return; }
+                    v.status = 'OPEN';
+                } else if (action === 'close') { if (v.status === 'OPEN') { v.status = 'CLOSED'; v.closedAt = now(); } }
+                else if (action === 'reset') { v.candidates.forEach(c => c.votes = 0); v.votedBy = {}; }
+                else if (action === 'archive') { v.status = 'ARCHIVED'; }
+                else if (action === 'show') { showMvpOverlay(v.voteId); }
+                saveFanState(); dirtyMvp = true; renderMvp();
+            }
+            function prefillMvpTeams() {
+                const d = (typeof currentData !== 'undefined' ? currentData : null) || {};
+                const a = cleanText(d.teamLeft && d.teamLeft.name, 80), b = cleanText(d.teamRight && d.teamRight.name, 80);
+                if (!a || !b) { note('⚠️ Squadre non disponibili'); return; }
+                const ta = $id('fan-mvp-cands');
+                ta.value = (ta.value ? ta.value.trimEnd() + '\n' : '') + a + ' | ' + a + '\n' + b + ' | ' + b;
+            }
+
+            // =========================================================
+            //  MODERAZIONE DOMANDE (console)
+            // =========================================================
+            function moderateQuestion(qid, action) {
+                const q = db.questions.find(x => x.qid === qid);
+                if (!q) return;
+                if (action === 'approve') q.status = 'APPROVED';
+                else if (action === 'reject') q.status = 'REJECTED';
+                else if (action === 'pin') q.status = 'PINNED';
+                else if (action === 'answered') q.status = 'ANSWERED';
+                else if (action === 'archive') q.status = 'ARCHIVED';
+                else if (action === 'show') { showQuestionOverlay(q); if (q.status === 'PENDING') q.status = 'APPROVED'; }
+                else if (action === 'block') {
+                    if (db.blockedSpectators.indexOf(q.spectatorId) === -1) db.blockedSpectators.push(q.spectatorId);
+                    note('🚫 Spettatore bloccato per questo evento (può ancora vedere punteggio e sondaggi)');
+                }
+                saveFanState(); renderQuestions(); renderQBadge();
+            }
+
+            // =========================================================
+            //  OVERLAY IN STREAMING (console)
+            // =========================================================
+            let qOverlayTimer = null;
+            function showQuestionOverlay(q) {
+                $id('fan-q-nick').textContent = (q.nick || 'SPETTATORE') + ':';
+                $id('fan-q-text').textContent = '“' + q.text + '”';
+                $id('fan-question-overlay').classList.add('show');
+                clearTimeout(qOverlayTimer);
+                const sec = Math.min(120, Math.max(3, db.settings.questionOverlaySec || 10));
+                qOverlayTimer = setTimeout(hideQuestionOverlay, sec * 1000);
+            }
+            function hideQuestionOverlay() { clearTimeout(qOverlayTimer); $id('fan-question-overlay').classList.remove('show'); }
+
+            let pollOverlayVisible = false, pollOverlayId = '', pollOverlayKind = 'poll', pollOverlayTimer = null;
+            function showPollOverlay(pollId) {
+                pollOverlayId = pollId; pollOverlayKind = 'poll'; pollOverlayVisible = true;
+                renderPollOverlay();
+                $id('fan-poll-overlay').classList.add('show');
+                clearTimeout(pollOverlayTimer);
+                const sec = Math.max(0, db.settings.pollOverlaySec || 0);
+                if (sec > 0) pollOverlayTimer = setTimeout(hidePollOverlay, sec * 1000);
+            }
+            function showMvpOverlay(voteId) {
+                pollOverlayId = voteId; pollOverlayKind = 'mvp'; pollOverlayVisible = true;
+                renderPollOverlay();
+                $id('fan-poll-overlay').classList.add('show');
+                clearTimeout(pollOverlayTimer);
+                const sec = Math.max(0, db.settings.pollOverlaySec || 0);
+                if (sec > 0) pollOverlayTimer = setTimeout(hidePollOverlay, sec * 1000);
+            }
+            function hidePollOverlay() {
+                clearTimeout(pollOverlayTimer);
+                pollOverlayVisible = false;
+                $id('fan-poll-overlay').classList.remove('show');
+            }
+            function renderPollOverlay() {
+                if (!pollOverlayVisible) return;
+                let title = '', rows = [];
+                if (pollOverlayKind === 'mvp') {
+                    const v = db.mvpVotes.find(x => x.voteId === pollOverlayId);
+                    if (!v) { hidePollOverlay(); return; }
+                    title = '🏆 ' + v.title + ' — MVP DEL PUBBLICO';
+                    rows = v.candidates.map(c => ({ label: c.name, votes: c.votes }));
+                } else {
+                    const p = db.polls.find(x => x.pollId === pollOverlayId);
+                    if (!p) { hidePollOverlay(); return; }
+                    title = p.question;
+                    rows = p.options.map(o => ({ label: o.label, votes: o.votes }));
+                }
+                const total = rows.reduce((t, r) => t + r.votes, 0);
+                const maxV = Math.max.apply(null, rows.map(r => r.votes).concat([0]));
+                $id('fan-poll-ov-title').textContent = title;
+                $id('fan-poll-ov-rows').innerHTML = rows.map(r => {
+                    const pct = total ? Math.round(100 * r.votes / total) : 0;
+                    const lead = total > 0 && r.votes === maxV && maxV > 0;
+                    return '<div class="fp-row' + (lead ? ' lead' : '') + '">' +
+                        '<div class="fp-lbl"><span>' + esc(r.label) + '</span><span class="pct">' + pct + '%</span></div>' +
+                        '<div class="fp-bar"><div style="width:' + pct + '%"></div></div></div>';
+                }).join('');
+                $id('fan-poll-ov-total').textContent = total + (total === 1 ? ' VOTO' : ' VOTI');
+            }
+
+            // Timer dedicato all'effetto reazioni: parte quando arrivano reazioni e
+            // si ferma da solo quando non c'è più nulla da mostrare.
+            let reactTick = null;
+            function ensureReactionTick() {
+                if (reactTick) return;
+                reactTick = setInterval(() => {
+                    flushReactionEffects();
+                    if (!Object.values(reactionBuffer).some(n => n > 0) && floatCount === 0) {
+                        clearInterval(reactTick); reactTick = null;
+                    }
+                }, 600);
+            }
+            // Reazioni in streaming: coda aggregata, pochi elementi DOM, auto-spegnimento su flood
+            function flushReactionEffects() {
+                const entries = Object.entries(reactionBuffer).filter(e => e[1] > 0);
+                if (!entries.length) return;
+                if (!db.settings.reactionsOnStream) { reactionBuffer = {}; return; }
+                const pending = entries.reduce((t, e) => t + e[1], 0);
+                if (pending > 150) {
+                    floodStrikes++;
+                    reactionBuffer = {};
+                    if (floodStrikes >= 2) {
+                        db.settings.reactionsOnStream = false;
+                        const chk = $id('fan-react-onstream'); if (chk) chk.checked = false;
+                        saveFanState();
+                        note('⚠️ Effetto reazioni disattivato automaticamente: carico eccessivo');
+                    }
+                    return;
+                }
+                floodStrikes = 0;
+                const layer = $id('fan-reactions-layer');
+                if (!layer) return;
+                entries.slice(0, 3).forEach(([emoji, count]) => {
+                    reactionBuffer[emoji] = 0;
+                    if (floatCount >= 8) return;
+                    const el = document.createElement('div');
+                    el.className = 'fan-float';
+                    el.textContent = count > 2 ? emoji + ' ×' + count : emoji;
+                    el.style.left = (30 + Math.random() * 40) + '%';
+                    floatCount++;
+                    layer.appendChild(el);
+                    setTimeout(() => { el.remove(); floatCount--; }, 2600);
+                });
+            }
+
+            // =========================================================
+            //  PANNELLO PUBBLICO (console)
+            // =========================================================
+            function togglePanel() {
+                const ov = $id('fan-admin-overlay');
+                panelOpen = !panelOpen;
+                ov.style.display = panelOpen ? 'flex' : 'none';
+                if (panelOpen) { refreshMatchContext(); renderPanel(true); }
+            }
+            function showTab(tab) {
+                activeTab = tab;
+                document.querySelectorAll('.fan-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+                document.querySelectorAll('.fan-tab').forEach(d => d.style.display = (d.id === 'fan-tab-' + tab) ? 'block' : 'none');
+                renderPanel(true);
+            }
+            function requestPanelRender() { if (panelOpen && now() - lastPanelRender >= 500) renderPanel(); }
+            function renderPanel(force) {
+                if (!panelOpen && !force) return;
+                lastPanelRender = now();
+                renderStato();
+                if (activeTab === 'sondaggi' || force) renderPolls();
+                if (activeTab === 'mvp' || force) renderMvp();
+                if (activeTab === 'domande' || force) renderQuestions();
+                if (activeTab === 'reazioni' || force) renderReactions();
+                if (force) renderSettingsForm();
+                renderQBadge();
+            }
+            function buildFanUrl() {
+                if (location.protocol === 'file:') {
+                    return 'https://italianpaintball.github.io/regia/streaming.html?id=' + encodeURIComponent(matchBase) + '&fan=1';
+                }
+                return location.origin + location.pathname + '?id=' + encodeURIComponent(matchBase) + '&fan=1';
+            }
+            function renderFanQrCode() {
+                const url = buildFanUrl();
+                if (url === lastQrUrl) return;
+                lastQrUrl = url;
+                const cont = $id('fan-qr');
+                cont.innerHTML = '';
+                if (window.QRCode) {
+                    try { new QRCode(cont, { text: url, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M }); }
+                    catch (e) { cont.textContent = 'QR non disponibile'; }
+                } else cont.textContent = 'Libreria QR non disponibile';
+                $id('fan-url').value = url;
+            }
+            function renderStato() {
+                const sMap = { 'SPENTA': 'SPENTA', 'AVVIO...': 'AVVIO...', 'ATTIVA': '🟢 ATTIVA (' + (hostRoom || fanRoomId()) + ')' };
+                $id('fan-room-status').textContent = sMap[hostStatus] || hostStatus;
+                $id('fan-room-match').textContent = matchBase || '—';
+                $id('fan-room-online').textContent = onlineCount();
+                $id('fan-room-peak').textContent = sessionStats.peak;
+                $id('fan-room-joins').textContent = sessionStats.joins;
+                $id('fan-room-lastjoin').textContent = sessionStats.lastJoin ? oraFmt(sessionStats.lastJoin) : '—';
+                const ap = activePoll();
+                $id('fan-room-poll').textContent = ap ? (ap.question.slice(0, 40) + (ap.status === 'PAUSED' ? ' (SOSPESO)' : '')) : '—';
+                const voti = db.polls.reduce((t, p) => t + p.options.reduce((x, o) => x + o.votes, 0), 0) +
+                    db.mvpVotes.reduce((t, v) => t + v.candidates.reduce((x, c) => x + c.votes, 0), 0);
+                $id('fan-room-votes').textContent = voti;
+                $id('fan-room-dup').textContent = counters.dup + counters.rejected;
+                $id('fan-room-pending').textContent = db.questions.filter(q => q.status === 'PENDING').length;
+                $id('fan-room-react').textContent = Object.values(db.reactionTotals).reduce((t, n) => t + n, 0);
+                renderFanQrCode();
+                renderSpectatorList();
+                if (hostStatus === 'ATTIVA' && hostRoom && hostRoom !== fanRoomId()) {
+                    note('⚠️ Match ID cambiato: premi RIAVVIA STANZA per la stanza ' + fanRoomId());
+                }
+            }
+            function renderSpectatorList() {
+                const box = $id('fan-spectator-list');
+                if (!fans.size) { box.textContent = 'Nessuno spettatore collegato.'; return; }
+                const t = now();
+                const rows = [];
+                fans.forEach(f => {
+                    if (!f.spectatorId) return;
+                    const online = f.conn && f.conn.open && t - f.lastSeen < 45000;
+                    const blocked = db.blockedSpectators.indexOf(f.spectatorId) !== -1;
+                    rows.push('<tr><td>' + esc(f.spectatorId.slice(0, 12)) + '</td><td>' + esc(f.nick || '—') + '</td>' +
+                        '<td>' + (online ? '🟢 Online' : '⚪ Offline') + (blocked ? ' 🚫' : '') + '</td>' +
+                        '<td>' + Math.max(0, Math.round((t - f.lastSeen) / 1000)) + ' sec</td>' +
+                        '<td><button class="fan-btn small ' + (blocked ? '' : 'danger') + '" onclick="FanModule.toggleBlock(\'' + esc(f.spectatorId) + '\')">' +
+                        (blocked ? 'SBLOCCA' : 'BLOCCA') + '</button></td></tr>');
+                });
+                if (!rows.length) { box.textContent = 'Nessuno spettatore collegato.'; return; }
+                box.innerHTML = '<table class="fan-table"><tr><th>Spettatore</th><th>Nickname</th><th>Stato</th><th>Ultimo contatto</th><th></th></tr>' + rows.join('') + '</table>';
+            }
+            function toggleBlock(sid) {
+                if (!ID_RE.test(sid)) return;
+                const i = db.blockedSpectators.indexOf(sid);
+                if (i === -1) db.blockedSpectators.push(sid); else db.blockedSpectators.splice(i, 1);
+                saveFanState(); renderPanel(true);
+            }
+            function pollBarsHtml(rows, total) {
+                const maxV = Math.max.apply(null, rows.map(r => r.votes).concat([0]));
+                return rows.map(r => {
+                    const pct = total ? Math.round(100 * r.votes / total) : 0;
+                    const lead = total > 0 && r.votes === maxV && maxV > 0;
+                    return '<div class="fan-pollbar"><div style="width:' + pct + '%"></div>' +
+                        '<span><span>' + (lead ? '👑 ' : '') + esc(r.label) + '</span><span>' + r.votes + ' (' + pct + '%)</span></span></div>';
+                }).join('');
+            }
+            function renderPolls() {
+                const box = $id('fan-poll-list');
+                const attivi = db.polls.filter(p => p.status !== 'ARCHIVED');
+                if (!attivi.length) { box.textContent = 'Nessun sondaggio.'; return; }
+                box.innerHTML = attivi.map(p => {
+                    const total = p.options.reduce((t, o) => t + o.votes, 0);
+                    const act = (a, lbl, cls) => '<button class="fan-btn small ' + (cls || '') + '" onclick="FanModule.pollAction(\'' + p.pollId + '\',\'' + a + '\')">' + lbl + '</button>';
+                    let btns = '';
+                    if (p.status === 'DRAFT') btns = act('open', 'APRI', 'ok') + act('archive', 'ARCHIVIA');
+                    else if (p.status === 'OPEN') btns = act('pause', 'SOSPENDI') + act('close', 'CHIUDI', 'danger') + act('show', '📺 MOSTRA IN STREAM') + act('reset', 'AZZERA');
+                    else if (p.status === 'PAUSED') btns = act('resume', 'RIPRENDI', 'ok') + act('close', 'CHIUDI', 'danger');
+                    else if (p.status === 'CLOSED') btns = act('show', '📺 MOSTRA IN STREAM') + act('reset', 'AZZERA') + act('archive', 'ARCHIVIA');
+                    return '<div class="fan-item"><b>' + esc(p.question) + '</b>' +
+                        (p.kind === 'MATCH_PREDICTION' ? '<span class="fan-chip PINNED">PRONOSTICO</span>' : '') +
+                        '<span class="fan-chip ' + p.status + '">' + p.status + '</span>' +
+                        (p.matchReference ? '<div class="fan-muted">' + esc(p.matchReference) + '</div>' : '') +
+                        pollBarsHtml(p.options, total) +
+                        '<div class="fan-muted">' + total + ' voti totali' + (p.durationSec ? ' · durata ' + Math.round(p.durationSec / 60) + ' min' : '') + '</div>' +
+                        '<div class="fan-actions">' + btns + '</div></div>';
+                }).join('');
+            }
+            function renderMvp() {
+                const box = $id('fan-mvp-list');
+                const attive = db.mvpVotes.filter(v => v.status !== 'ARCHIVED');
+                if (!attive.length) { box.textContent = 'Nessuna votazione.'; return; }
+                box.innerHTML = attive.map(v => {
+                    const total = v.candidates.reduce((t, c) => t + c.votes, 0);
+                    const act = (a, lbl, cls) => '<button class="fan-btn small ' + (cls || '') + '" onclick="FanModule.mvpAction(\'' + v.voteId + '\',\'' + a + '\')">' + lbl + '</button>';
+                    let btns = '';
+                    if (v.status === 'DRAFT') btns = act('open', 'APRI', 'ok') + act('archive', 'ARCHIVIA');
+                    else if (v.status === 'OPEN') btns = act('close', 'CHIUDI', 'danger') + act('show', '📺 MOSTRA IN STREAM') + act('reset', 'AZZERA');
+                    else if (v.status === 'CLOSED') btns = act('show', '📺 MOSTRA IN STREAM') + act('reset', 'AZZERA') + act('archive', 'ARCHIVIA');
+                    return '<div class="fan-item"><b>' + esc(v.title) + '</b> <span class="fan-chip PINNED">MVP DEL PUBBLICO</span>' +
+                        '<span class="fan-chip ' + v.status + '">' + v.status + '</span>' +
+                        (v.matchReference ? '<div class="fan-muted">' + esc(v.matchReference) + '</div>' : '') +
+                        pollBarsHtml(v.candidates.map(c => ({ label: c.name + (c.team ? ' (' + c.team + ')' : ''), votes: c.votes })), total) +
+                        '<div class="fan-muted">' + total + ' voti totali</div>' +
+                        '<div class="fan-actions">' + btns + '</div></div>';
+                }).join('');
+            }
+            function renderQBadge() {
+                const n = db ? db.questions.filter(q => q.status === 'PENDING').length : 0;
+                const b = $id('fan-tab-qbadge');
+                if (b) { b.textContent = n; b.style.display = n ? 'inline-block' : 'none'; }
+            }
+            function renderQuestions() {
+                const box = $id('fan-question-list');
+                if (!box) return;
+                const filtro = ($id('fan-q-filter') || {}).value || '';
+                let list = db.questions.slice().sort((a, b) => {
+                    const pa = a.status === 'PINNED' ? 0 : 1, pb = b.status === 'PINNED' ? 0 : 1;
+                    return pa - pb || b.ts - a.ts;
+                });
+                if (filtro) list = list.filter(q => q.status === filtro);
+                if (!list.length) { box.textContent = 'Nessuna domanda.'; return; }
+                const countBy = {};
+                db.questions.forEach(q => { countBy[q.spectatorId] = (countBy[q.spectatorId] || 0) + 1; });
+                box.innerHTML = list.slice(0, 120).map(q => {
+                    const blocked = db.blockedSpectators.indexOf(q.spectatorId) !== -1;
+                    const act = (a, lbl, cls) => '<button class="fan-btn small ' + (cls || '') + '" onclick="FanModule.moderateQuestion(\'' + q.qid + '\',\'' + a + '\')">' + lbl + '</button>';
+                    return '<div class="fan-item">' +
+                        '<span class="fan-muted">' + oraFmt(q.ts) + '</span> <b>' + esc(q.nick || 'SPETTATORE') + '</b>' +
+                        '<span class="fan-chip ' + q.status + '">' + q.status + '</span>' + (blocked ? ' 🚫' : '') +
+                        '<div style="margin:6px 0; font-size:20px;">' + esc(q.text) + '</div>' +
+                        '<div class="fan-muted">' + esc(q.spectatorId.slice(0, 12)) + ' · ' + (countBy[q.spectatorId] || 1) + ' domande' +
+                        (q.matchReference ? ' · ' + esc(q.matchReference) : '') + '</div>' +
+                        '<div class="fan-actions">' +
+                        act('approve', 'APPROVA', 'ok') + act('reject', 'RIFIUTA') + act('pin', 'EVIDENZIA') +
+                        act('show', '📺 MOSTRA IN STREAM') + act('answered', 'RISPOSTA') + act('archive', 'ARCHIVIA') +
+                        (blocked ? '' : act('block', 'BLOCCA SPETTATORE', 'danger')) +
+                        '</div></div>';
+                }).join('');
+            }
+            function renderReactions() {
+                const box = $id('fan-reaction-totals');
+                if (!box) return;
+                box.innerHTML = REACTIONS.map(e => '<span>' + e + ' ' + (db.reactionTotals[e] || 0) + '</span>').join('');
+                const chk = $id('fan-react-onstream');
+                if (chk) chk.checked = !!db.settings.reactionsOnStream;
+            }
+            function toggleReactionsOnStream(on) { db.settings.reactionsOnStream = !!on; floodStrikes = 0; saveFanState(); }
+            function resetReactions() { db.reactionTotals = {}; reactionBuffer = {}; saveFanState(); renderReactions(); }
+
+            const SETTING_FIELDS = [
+                ['fs-enabled', 'enabled'], ['fs-polls', 'polls'], ['fs-predictions', 'predictions'], ['fs-mvp', 'mvp'],
+                ['fs-questions', 'questions'], ['fs-nicknames', 'nicknames'], ['fs-reactions', 'reactions'],
+                ['fs-showres', 'showResultsToFans'], ['fs-showcount', 'showSpectatorCount'], ['fs-shownext', 'showNextMatch']
+            ];
+            const SETTING_NUMS = [
+                ['fs-qdur', 'questionOverlaySec', 3, 120], ['fs-polldur', 'pollOverlaySec', 0, 300],
+                ['fs-qrate', 'questionRateSec', 5, 600], ['fs-qmax', 'maxQuestionsPerSpectator', 1, 50]
+            ];
+            function renderSettingsForm() {
+                SETTING_FIELDS.forEach(([id, key]) => { const el = $id(id); if (el) el.checked = !!db.settings[key]; });
+                SETTING_NUMS.forEach(([id, key]) => { const el = $id(id); if (el) el.value = db.settings[key]; });
+            }
+            function bindSettingsForm() {
+                SETTING_FIELDS.forEach(([id, key]) => {
+                    const el = $id(id);
+                    if (el) el.addEventListener('change', () => { db.settings[key] = el.checked; saveFanState(); dirtyCfg = true; note('✅ Impostazione salvata'); });
+                });
+                SETTING_NUMS.forEach(([id, key, min, max]) => {
+                    const el = $id(id);
+                    if (el) el.addEventListener('change', () => {
+                        const v = Math.min(max, Math.max(min, parseInt(el.value, 10) || min));
+                        el.value = v; db.settings[key] = v; saveFanState(); dirtyCfg = true; note('✅ Impostazione salvata');
+                    });
+                });
+            }
+
+            // ---------- esporta / importa / azzera ----------
+            function exportState() {
+                try {
+                    const blob = new Blob([JSON.stringify(Object.assign({ matchId: matchBase }, db))], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = 'pubblico_' + (matchBase || 'evento') + '_' + new Date().toISOString().slice(0, 10) + '.json';
+                    document.body.appendChild(a); a.click();
+                    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 800);
+                    note('💾 Interazioni esportate');
+                } catch (e) { note('⚠️ Esportazione non riuscita: ' + e.message); }
+            }
+            function importStateFile(file) {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    try {
+                        const p = JSON.parse(reader.result);
+                        if (!p || p.schemaVersion !== SCHEMA_VERSION || !Array.isArray(p.polls) || !Array.isArray(p.questions)) throw new Error('formato non riconosciuto');
+                        if (!confirm('Importare le interazioni dal file?\nSostituiranno quelle attuali del Match ' + (matchBase || '?') + '.')) return;
+                        db = {
+                            schemaVersion: SCHEMA_VERSION,
+                            settings: Object.assign(defaultSettings(), p.settings || {}),
+                            polls: p.polls.slice(0, MAX_POLLS), mvpVotes: (p.mvpVotes || []).slice(0, MAX_MVP),
+                            questions: (p.questions || []).slice(0, MAX_QUESTIONS),
+                            blockedSpectators: (p.blockedSpectators || []).filter(x => ID_RE.test(String(x))),
+                            reactionTotals: p.reactionTotals || {}, stats: p.stats || {}
+                        };
+                        saveFanState(); dirtyCfg = true; dirtyPoll = true; dirtyMvp = true;
+                        renderPanel(true);
+                        note('📁 Interazioni importate');
+                    } catch (e) { note('⚠️ Import non riuscito: ' + e.message); }
+                };
+                reader.readAsText(file);
+            }
+            function resetState() {
+                if (!confirm('Azzerare TUTTE le interazioni del pubblico per il Match ' + (matchBase || '?') + '?\n(sondaggi, voti, domande, reazioni, blocchi)')) return;
+                db = { schemaVersion: SCHEMA_VERSION, settings: db.settings, polls: [], mvpVotes: [], questions: [], blockedSpectators: [], reactionTotals: {}, stats: {} };
+                reactionBuffer = {}; counters = { dup: 0, rejected: 0 };
+                hidePollOverlay(); hideQuestionOverlay();
+                saveFanState(); dirtyPoll = true; dirtyMvp = true;
+                renderPanel(true);
+                note('🗑 Interazioni azzerate');
+            }
+            function copyUrl() {
+                const url = $id('fan-url').value;
+                const done = () => note('📋 URL copiato');
+                if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, () => { });
+                else { $id('fan-url').select(); document.execCommand('copy'); done(); }
+            }
+            function openFanPage() { window.open(buildFanUrl(), '_blank'); }
+
+            function initConsole() {
+                refreshMatchContext();
+                bindSettingsForm();
+                const fi = $id('fan-import-file');
+                if (fi) fi.addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) importStateFile(f); e.target.value = ''; });
+            }
+
+            // =========================================================
+            //  PAGINA PUBBLICA (?fan=1)
+            // =========================================================
+            let fanPeer = null, fanConn = null, fanConnected = false;
+            let fanRetryTimer = null, fanRetryDelay = 4000, fanPingTimer = null, fanWatchdog = null;
+            let spectatorId = '', sessionId = '', myNick = '';
+            let fanCfg = null, curPoll = null, curMvp = null;
+            let votedPolls = {}, votedMvp = {};
+            let qMeta = { count: 0, lastTs: 0 };
+            let lastReactTs = 0, fanToastTimer = null, lastQSent = '';
+
+            const votedKey = () => 'pm_fan_voted::' + matchBase;
+            const qMetaKey = () => 'pm_fan_qmeta::' + matchBase;
+            function fanToast(msg) {
+                const el = $id('fanp-toast'); if (!el) return;
+                el.textContent = msg;
+                el.classList.add('show');
+                clearTimeout(fanToastTimer);
+                fanToastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+            }
+            function setFanConn(msg) { const el = $id('fanp-conn'); if (el) el.textContent = msg; }
+            function setFanOffline() {
+                $id('fanp-offline').style.display = 'block';
+                ['fanp-poll-card', 'fanp-mvp-card', 'fanp-q-card', 'fanp-react-card'].forEach(i => $id(i).style.display = 'none');
+                setFanConn('NON COLLEGATO — nuovo tentativo tra poco...');
+            }
+            function sendFan(msg) { try { if (fanConn && fanConn.open) fanConn.send(msg); } catch (e) { } }
+
+            function connectFanClient() {
+                clearTimeout(fanRetryTimer);
+                if (!matchBase) { setFanOffline(); setFanConn('MATCH ID MANCANTE NEL LINK'); return; }
+                if (!window.Peer) { setFanOffline(); return; }
+                try { if (fanPeer) { if (fanPeer.removeAllListeners) fanPeer.removeAllListeners(); fanPeer.destroy(); } } catch (e) { }
+                fanConnected = false;
+                setFanConn('CONNESSIONE IN CORSO...');
+                clearTimeout(fanWatchdog);
+                fanWatchdog = setTimeout(() => { if (!fanConnected) { setFanOffline(); retryFan(); } }, 15000);
+                try { fanPeer = new Peer(); } catch (e) { setFanOffline(); retryFan(); return; }
+                fanPeer.on('open', () => {
+                    fanConn = fanPeer.connect(fanRoomId(), { reliable: true });
+                    fanConn.on('open', () => {
+                        fanConnected = true; fanRetryDelay = 4000;
+                        clearTimeout(fanWatchdog);
+                        $id('fanp-offline').style.display = 'none';
+                        setFanConn('🟢 COLLEGATO ALLA DIRETTA');
+                        sendFan({ type: 'FAN_HELLO', spectatorId, sessionId, nick: myNick });
+                        clearInterval(fanPingTimer);
+                        fanPingTimer = setInterval(() => sendFan({ type: 'FAN_PING', t: now() }), 20000);
+                    });
+                    fanConn.on('data', handleHostMessage);
+                    fanConn.on('close', () => { fanConnected = false; clearInterval(fanPingTimer); setFanOffline(); retryFan(); });
+                    fanConn.on('error', () => { });
+                });
+                fanPeer.on('error', (err) => {
+                    const t = (err && err.type) || '';
+                    if (!fanConnected && t !== 'peer-unavailable') { /* la stanza può non esistere ancora */ }
+                    if (!fanConnected) { setFanOffline(); retryFan(); }
+                });
+                fanPeer.on('disconnected', () => { try { if (fanPeer && !fanPeer.destroyed) fanPeer.reconnect(); } catch (e) { } });
+            }
+            function retryFan() {
+                clearTimeout(fanRetryTimer);
+                fanRetryTimer = setTimeout(connectFanClient, fanRetryDelay);
+                fanRetryDelay = Math.min(20000, Math.round(fanRetryDelay * 1.5));
+            }
+
+            function handleHostMessage(m) {
+                if (!m || typeof m !== 'object' || typeof m.type !== 'string' || MSG_HOST.indexOf(m.type) === -1) return;
+                switch (m.type) {
+                    case 'FAN_WELCOME': fanCfg = m.config || fanCfg; renderFanSections(); break;
+                    case 'FAN_CONFIG_UPDATE': fanCfg = m.config || fanCfg; renderFanSections(); break;
+                    case 'FAN_PUBLIC_STATE': renderFanHeader(m); break;
+                    case 'FAN_POLL_UPDATE': curPoll = m.poll || null; renderFanPoll(); break;
+                    case 'FAN_MVP_UPDATE': curMvp = m.vote || null; renderFanMvp(); break;
+                    case 'FAN_QUESTION_ACK':
+                        qMeta.count++; qMeta.lastTs = now();
+                        try { localStorage.setItem(qMetaKey(), JSON.stringify(qMeta)); } catch (e) { }
+                        $id('fanp-q-text').value = '';
+                        $id('fanp-q-count').textContent = '0/240';
+                        fanToast('DOMANDA INVIATA ✔');
+                        updateQuestionForm();
+                        break;
+                    case 'FAN_REACTION_ACK': break;
+                    case 'FAN_ERROR': handleFanError(m); break;
+                }
+            }
+            function handleFanError(m) {
+                const code = String(m.code || '');
+                const testo = cleanText(m.message, 80) || 'Operazione non riuscita';
+                if (code === 'ALREADY') {
+                    if (curPoll && !votedPolls[curPoll.pollId]) { votedPolls[curPoll.pollId] = '?'; persistVoted(); renderFanPoll(); }
+                    if (curMvp && !votedMvp[curMvp.voteId]) { votedMvp[curMvp.voteId] = '?'; persistVoted(); renderFanMvp(); }
+                }
+                fanToast(testo);
+            }
+            function persistVoted() {
+                try { localStorage.setItem(votedKey(), JSON.stringify({ polls: votedPolls, mvp: votedMvp })); } catch (e) { }
+            }
+
+            function renderFanHeader(m) {
+                const mt = m.match || {};
+                if (mt.tournamentName) $id('fanp-tourney').textContent = mt.tournamentName;
+                $id('fanp-phase').textContent = mt.phase || '';
+                $id('fanp-name-a').textContent = (mt.teamLeft && mt.teamLeft.name) || '—';
+                $id('fanp-name-b').textContent = (mt.teamRight && mt.teamRight.name) || '—';
+                $id('fanp-score-a').textContent = (mt.teamLeft && mt.teamLeft.score) || 0;
+                $id('fanp-score-b').textContent = (mt.teamRight && mt.teamRight.score) || 0;
+                if (mt.teamLeft && /^#[0-9a-fA-F]{3,8}$/.test(mt.teamLeft.color || '')) $id('fanp-score-a').style.color = mt.teamLeft.color;
+                if (mt.teamRight && /^#[0-9a-fA-F]{3,8}$/.test(mt.teamRight.color || '')) $id('fanp-score-b').style.color = mt.teamRight.color;
+                $id('fanp-timer').textContent = mt.timer || '--:--';
+                $id('fanp-status').textContent = mt.statusText || '';
+                const nx = $id('fanp-next');
+                if (mt.nextMatch) { nx.style.display = 'block'; nx.textContent = '⏭ Prossimo: ' + mt.nextMatch.teamA + ' vs ' + mt.nextMatch.teamB + (mt.nextMatch.time ? ' (ore ' + mt.nextMatch.time + ')' : ''); }
+                else nx.style.display = 'none';
+                const cnt = $id('fanp-count');
+                if (typeof m.spectatorCount === 'number') { cnt.style.display = 'block'; cnt.textContent = '👥 ' + m.spectatorCount + ' spettatori collegati'; }
+                else cnt.style.display = 'none';
+            }
+            function renderFanSections() {
+                const c = fanCfg || {};
+                $id('fanp-poll-card').style.display = c.polls ? 'block' : 'none';
+                $id('fanp-mvp-card').style.display = c.mvp ? 'block' : 'none';
+                $id('fanp-q-card').style.display = c.questions ? 'block' : 'none';
+                $id('fanp-react-card').style.display = c.reactions ? 'block' : 'none';
+                $id('fanp-nick').style.display = c.nicknames ? 'block' : 'none';
+                renderFanPoll(); renderFanMvp(); updateQuestionForm();
+            }
+            // Bottoni-opzione costruiti SOLO con createElement/textContent (input non attendibile)
+            function buildOptButton(label, votes, total, marked, disabled, onClick) {
+                const b = document.createElement('button');
+                b.className = 'fanp-opt' + (marked ? ' voted' : '');
+                b.disabled = !!disabled;
+                if (typeof votes === 'number' && total > 0) {
+                    const bar = document.createElement('span');
+                    bar.className = 'fanp-bar';
+                    bar.style.width = Math.round(100 * votes / total) + '%';
+                    b.appendChild(bar);
+                }
+                const row = document.createElement('span');
+                row.className = 'fanp-lbl';
+                const l = document.createElement('span'); l.textContent = (marked ? '✔ ' : '') + label;
+                row.appendChild(l);
+                if (typeof votes === 'number' && total > 0) {
+                    const v = document.createElement('span'); v.textContent = Math.round(100 * votes / total) + '%';
+                    row.appendChild(v);
+                }
+                b.appendChild(row);
+                if (onClick) b.addEventListener('click', onClick);
+                return b;
+            }
+            function renderFanPoll() {
+                const card = $id('fanp-poll-card');
+                if (!fanCfg || !fanCfg.polls) { card.style.display = 'none'; return; }
+                card.style.display = 'block';
+                const q = $id('fanp-poll-q'), opts = $id('fanp-poll-opts'), noteEl = $id('fanp-poll-note');
+                opts.textContent = '';
+                if (!curPoll) { q.textContent = ''; noteEl.textContent = 'Nessun sondaggio attivo al momento.'; return; }
+                q.textContent = curPoll.question;
+                const mine = votedPolls[curPoll.pollId];
+                const closed = curPoll.status === 'CLOSED';
+                const paused = curPoll.status === 'PAUSED';
+                const total = curPoll.total || 0;
+                curPoll.options.forEach(o => {
+                    const btn = buildOptButton(o.label, curPoll.showResults ? o.votes : null, total,
+                        mine === o.optionId, closed || paused || !!mine,
+                        () => {
+                            if (votedPolls[curPoll.pollId]) return;
+                            votedPolls[curPoll.pollId] = o.optionId; persistVoted();
+                            sendFan({ type: 'FAN_POLL_VOTE', spectatorId, sessionId, pollId: curPoll.pollId, optionId: o.optionId });
+                            fanToast('VOTO INVIATO ✔');
+                            renderFanPoll();
+                        });
+                    opts.appendChild(btn);
+                });
+                noteEl.textContent = closed ? 'SONDAGGIO CHIUSO' + (curPoll.showResults && total ? ' — ' + total + ' voti' : '')
+                    : paused ? 'SONDAGGIO SOSPESO'
+                        : mine ? ('Hai votato ✔' + (curPoll.showResults && total ? ' — ' + total + ' voti' : ''))
+                            : 'Tocca un\'opzione per votare (1 voto a testa)';
+            }
+            function renderFanMvp() {
+                const card = $id('fanp-mvp-card');
+                if (!fanCfg || !fanCfg.mvp) { card.style.display = 'none'; return; }
+                card.style.display = 'block';
+                const t = $id('fanp-mvp-title'), opts = $id('fanp-mvp-opts'), noteEl = $id('fanp-mvp-note');
+                opts.textContent = '';
+                if (!curMvp) { t.textContent = ''; noteEl.textContent = 'Nessuna votazione MVP attiva.'; return; }
+                t.textContent = curMvp.title + ' — MVP DEL PUBBLICO';
+                const mine = votedMvp[curMvp.voteId];
+                const closed = curMvp.status === 'CLOSED';
+                const total = curMvp.total || 0;
+                curMvp.candidates.forEach(c => {
+                    const label = c.name + (c.team ? ' (' + c.team + ')' : '');
+                    const btn = buildOptButton(label, curMvp.showResults ? c.votes : null, total,
+                        mine === c.candidateId, closed || !!mine,
+                        () => {
+                            if (votedMvp[curMvp.voteId]) return;
+                            votedMvp[curMvp.voteId] = c.candidateId; persistVoted();
+                            sendFan({ type: 'FAN_MVP_VOTE', spectatorId, sessionId, voteId: curMvp.voteId, candidateId: c.candidateId });
+                            fanToast('VOTO MVP INVIATO ✔');
+                            renderFanMvp();
+                        });
+                    opts.appendChild(btn);
+                });
+                noteEl.textContent = closed ? 'VOTAZIONE CHIUSA' : mine ? 'Hai votato ✔' : 'Vota il tuo MVP (1 voto a testa)';
+            }
+            function updateQuestionForm() {
+                const btn = $id('fanp-q-send'), noteEl = $id('fanp-q-note');
+                if (!btn) return;
+                const c = fanCfg || {};
+                const rateMs = (c.questionRateSec || 30) * 1000;
+                const maxQ = c.maxQuestions || 5;
+                if (qMeta.count >= maxQ) { btn.disabled = true; noteEl.textContent = 'Hai raggiunto il limite di ' + maxQ + ' domande per questo evento.'; return; }
+                const left = Math.ceil((qMeta.lastTs + rateMs - now()) / 1000);
+                if (left > 0) {
+                    btn.disabled = true;
+                    noteEl.textContent = 'Attendi ' + left + ' secondi prima della prossima domanda...';
+                    setTimeout(updateQuestionForm, 1000);
+                } else { btn.disabled = false; noteEl.textContent = 'Inviate ' + qMeta.count + '/' + maxQ + ' domande.'; }
+            }
+            function submitFanQuestion() {
+                const c = fanCfg || {};
+                const text = cleanText($id('fanp-q-text').value, 240);
+                if (text.length < 3 || !/[0-9A-Za-zÀ-ÿ]/.test(text)) { fanToast('Scrivi una domanda valida (min 3 caratteri)'); return; }
+                if (text.toUpperCase() === lastQSent) { fanToast('Domanda già inviata'); return; }
+                const rateMs = (c.questionRateSec || 30) * 1000;
+                if (now() - qMeta.lastTs < rateMs) { fanToast("ATTENDI PRIMA DI INVIARE UN'ALTRA DOMANDA"); return; }
+                if (qMeta.count >= (c.maxQuestions || 5)) { fanToast('Limite domande raggiunto'); return; }
+                myNick = cleanText($id('fanp-nick').value, 30);
+                try { localStorage.setItem('pm_fan_nick', myNick); } catch (e) { }
+                lastQSent = text.toUpperCase();
+                sendFan({ type: 'FAN_QUESTION_SUBMIT', spectatorId, sessionId, nick: myNick, text });
+            }
+            function sendReaction(emoji) {
+                if (now() - lastReactTs < 3000) { fanToast('Attendi un momento...'); return; }
+                lastReactTs = now();
+                sendFan({ type: 'FAN_REACTION', spectatorId, sessionId, emoji });
+                const row = $id('fanp-reactions');
+                row.querySelectorAll('button').forEach(b => b.disabled = true);
+                setTimeout(() => row.querySelectorAll('button').forEach(b => b.disabled = false), 3000);
+            }
+
+            function initFanPage() {
+                document.body.classList.add('fan-mode');
+                const p = new URLSearchParams(location.search);
+                matchBase = normBase(p.get('id') || p.get('matchId') || '');
+                loadFanState(); // serve solo per fanRoomId coerente; nessun dato console usato lato fan
+                spectatorId = localStorage.getItem('pm_fan_spectator_id') || '';
+                if (!ID_RE.test(spectatorId)) { spectatorId = rid('FAN'); try { localStorage.setItem('pm_fan_spectator_id', spectatorId); } catch (e) { } }
+                sessionId = rid('S');
+                myNick = cleanText(localStorage.getItem('pm_fan_nick') || '', 30);
+                try { const v = JSON.parse(localStorage.getItem(votedKey()) || 'null'); if (v) { votedPolls = v.polls || {}; votedMvp = v.mvp || {}; } } catch (e) { }
+                try { const qm = JSON.parse(localStorage.getItem(qMetaKey()) || 'null'); if (qm) qMeta = { count: qm.count || 0, lastTs: qm.lastTs || 0 }; } catch (e) { }
+                $id('fanp-nick').value = myNick;
+                // Reazioni
+                const row = $id('fanp-reactions');
+                REACTIONS.forEach(e => {
+                    const b = document.createElement('button');
+                    b.className = 'fanp-react-btn'; b.textContent = e;
+                    b.addEventListener('click', () => sendReaction(e));
+                    row.appendChild(b);
+                });
+                // Domanda
+                $id('fanp-q-text').addEventListener('input', () => { $id('fanp-q-count').textContent = $id('fanp-q-text').value.length + '/240'; });
+                $id('fanp-q-send').addEventListener('click', submitFanQuestion);
+                $id('fanp-nick').addEventListener('change', () => { myNick = cleanText($id('fanp-nick').value, 30); try { localStorage.setItem('pm_fan_nick', myNick); } catch (e) { } });
+                document.addEventListener('visibilitychange', () => {
+                    if (!document.hidden) { if (!fanConnected) { fanRetryDelay = 2000; retryFan(); } else sendFan({ type: 'FAN_STATE_REQUEST', spectatorId, sessionId }); }
+                });
+                connectFanClient();
+            }
+
+            // =========================================================
+            //  AVVIO
+            // =========================================================
+            if (IS_FAN) {
+                if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initFanPage);
+                else initFanPage();
+            } else {
+                if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initConsole);
+                else initConsole();
+            }
+
+            // API pubblica (usata dai bottoni del pannello)
+            return {
+                togglePanel, showTab, startHost: startFanHost, restartHost: startFanHost, stopHost: () => stopFanHost(false),
+                exportState, resetState, copyUrl, openFanPage,
+                uiCreatePoll, createPrediction, pollAction,
+                uiCreateMvp, mvpAction, prefillMvpTeams,
+                renderQuestions, moderateQuestion, toggleBlock,
+                toggleReactionsOnStream, resetReactions,
+                hideQuestionOverlay, hidePollOverlay,
+                // Hook per test manuali: passa dallo STESSO percorso di validazione
+                // dei messaggi reali (nessun privilegio extra).
+                __testInject: (msg, onReply) => {
+                    const rec = { conn: { open: true, send: (m) => { try { if (onReply) onReply(m); } catch (e) { } } }, spectatorId: '', sessionId: '', nick: '', lastSeen: now(), joinedAt: now() };
+                    handleFanMessage(rec, msg);
+                    return rec;
+                }
+            };
+        })();
+        window.FanModule = FanModule;
     </script>
 </body>
 
