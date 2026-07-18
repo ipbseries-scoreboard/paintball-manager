@@ -124,7 +124,8 @@
             margin-left: 10px;
             color: white;
             font-family: 'Roboto', sans-serif;
-            font-size: 22px;
+            font-size: 27px;
+            line-height: 1;
         }
 
         #top-bar:hover {
@@ -365,7 +366,7 @@
         }
 
         .spotlight-timer {
-            font-size: 60px;
+            font-size: 70px;
             font-weight: 900;
             color: #fbbf24;
             font-family: 'Roboto', sans-serif;
@@ -459,8 +460,7 @@
         }
 
         .timer-display {
-            font-size: 110px;
-            /* Reduced from 140px */
+            font-size: 126px;
             font-weight: bold;
             font-variant-numeric: tabular-nums;
             background: rgba(0, 0, 0, 0.6);
@@ -764,6 +764,30 @@
             align-items: center;
             justify-content: center;
             gap: 10px;
+            position: relative;
+        }
+
+        .fan-main-badge {
+            position: absolute;
+            top: -13px;
+            right: -10px;
+            min-width: 30px;
+            height: 30px;
+            padding: 0 7px;
+            box-sizing: border-box;
+            border-radius: 999px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: #ef4444;
+            border: 3px solid #020617;
+            color: #fff;
+            font-family: 'Roboto', sans-serif;
+            font-size: 16px;
+            font-weight: 900;
+            line-height: 1;
+            box-shadow: 0 0 18px rgba(239, 68, 68, .9);
+            z-index: 4;
         }
 
         .btn-extra:hover {
@@ -842,6 +866,11 @@
         table.ci-standings td { padding: 6px 8px; border-bottom: 1px dashed rgba(148,163,184,.15); }
         table.ci-standings tr:first-child td { color: #fbbf24; font-weight: 700; }
         .ci-num { text-align: center; }
+        .ci-stat-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px dashed rgba(148,163,184,.25); font-size: 20px; }
+        .ci-stat-row .ci-stat-main { flex: 1; }
+        .ci-stat-action { background: #7f1d1d; color: #fff; border: 1px solid #ef4444; border-radius: 8px; padding: 7px 13px; font-family: 'Oswald', sans-serif; font-size: 16px; letter-spacing: 1px; cursor: pointer; }
+        .ci-stat-action.restore { background: #14532d; border-color: #4ade80; }
+        #ci-stat-note { min-height: 22px; margin-top: 9px; color: #fbbf24; font-size: 18px; }
         /* Scheda "Match in corso" (come caster.html) */
         #ci-live-row { display: flex; align-items: center; justify-content: center; gap: 26px; font-family: 'Oswald', sans-serif; }
         #ci-live-row .ci-live-name { font-size: 36px; font-weight: 700; flex: 1; }
@@ -1508,7 +1537,7 @@
                     <button class="btn-extra" onclick="toggleSchedule()">🗓️ LIST</button>
                     <button class="btn-extra" onclick="toggleLayout()">📐 LAYOUT</button>
                     <button class="btn-extra" onclick="toggleCasterInfo()">⚔️ INFO</button>
-                    <button class="btn-extra" onclick="FanModule.togglePanel()">👥 PUBBLICO</button>
+                    <button class="btn-extra" id="fan-main-button" onclick="FanModule.togglePanel()">👥 PUBBLICO<span class="fan-main-badge" id="fan-main-badge">0</span></button>
                 </div>
             </div>
 
@@ -2003,6 +2032,7 @@
         }
         let clientConn = null; // Global reference for sending commands
         let styleConfig = { fontSize: 80, fontFamily: "'Oswald', sans-serif", bold: false, scaleX: 1.0, scaleY: 2.1, limit: 11 };
+        let lastStatCommandMessage = '';
 
         // Initial Load
         window.addEventListener('scroll', noScroll);
@@ -2254,6 +2284,10 @@
         }
 
         function updateBoardFromPacket(d) {
+            if (d && d.type === 'COMMAND_ACK') {
+                handleStreamingCommandAck(d);
+                return;
+            }
             if (!hasLocalStyle && d.teamStyle) {
                 try {
                     styleConfig = {
@@ -2287,6 +2321,49 @@
 
             oldData = JSON.parse(JSON.stringify(currentData));
             updateBoard(currentData);
+        }
+
+        function setInfoStatNote(message, isError) {
+            lastStatCommandMessage = message || '';
+            const note = document.getElementById('ci-stat-note');
+            if (note) {
+                note.textContent = lastStatCommandMessage;
+                note.style.color = isError ? '#f87171' : '#fbbf24';
+            }
+        }
+
+        function handleStreamingCommandAck(packet) {
+            const commandId = String(packet && packet.commandId || '');
+            if (!commandId.startsWith('pm-stat-')) return;
+            setInfoStatNote(packet.message || (packet.accepted ? 'Statistica aggiornata' : 'Operazione non riuscita'), packet.accepted !== true);
+            if (packet.accepted === true && clientConn && clientConn.open) {
+                clientConn.send({ type: 'requestState', full: true });
+            }
+        }
+
+        function setTournamentRoundHidden(roundId, hidden) {
+            roundId = String(roundId || '');
+            if (!/^M\d+-E\d+-(A|B)-T\d+$/.test(roundId)) {
+                setInfoStatNote('Statistica non valida.', true);
+                return;
+            }
+            if (!/^\d{6}$/.test(String(controlPin || ''))) {
+                setInfoStatNote('Per modificare le statistiche entra in Streaming con il PIN controllo.', true);
+                return;
+            }
+            if (!clientConn || !clientConn.open) {
+                setInfoStatNote('Regia non collegata: riprova quando la connessione è attiva.', true);
+                return;
+            }
+            const commandId = 'pm-stat-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+            setInfoStatNote(hidden ? 'Esclusione statistica in corso...' : 'Ripristino statistica in corso...');
+            clientConn.send({
+                type: 'SET_STAT_ROUND_VISIBILITY',
+                roundId,
+                hidden: hidden === true,
+                commandId,
+                controlToken: controlPin
+            });
         }
 
         // ===== NOTIFICA "RECORD BATTUTO" (statistiche torneo) =====
@@ -3126,6 +3203,9 @@
             if (!box) return;
             const fp = JSON.stringify([d.h2h, d.teamHistory, d.archivioTop, d.nextMatch,
                 d.standingsData && d.standingsData.standings,
+                d.standingsData && d.standingsData.records,
+                d.standingsData && d.standingsData.hiddenRounds,
+                d.standingsData && d.standingsData.averageTimes,
                 d.teamLeft && d.teamLeft.name, d.teamRight && d.teamRight.name]);
             // Punteggio/timer cambiano di continuo: li aggiorna renderCasterLive()
             // sugli elementi esistenti, senza ricostruire tutte le schede.
@@ -3203,6 +3283,30 @@
                 cards.push(`<div class="ci-card"><h3>🏁 Classifica</h3><table class="ci-standings">` +
                     `<tr><th>#</th><th>Squadra</th><th class="ci-num">P</th><th class="ci-num">V</th><th class="ci-num">S</th><th class="ci-num">Diff</th><th class="ci-num">Pen</th></tr>` +
                     rows + `</table></div>`);
+
+                // Gestione manuale dei round anomali. L'esclusione avviene nella
+                // Regia, quindi corregge sia il record del giorno sia i tempi medi.
+                const canEditStats = /^\d{6}$/.test(String(controlPin || ''));
+                const validRound = (round) => round && /^M\d+-E\d+-(A|B)-T\d+$/.test(String(round.id || ''));
+                const visibleRounds = (sd.records || []).filter(validRound);
+                const hiddenRounds = (sd.hiddenRounds || []).filter(validRound);
+                const statRows = (items, hidden) => items.map(round => {
+                    const button = canEditStats
+                        ? `<button class="ci-stat-action${hidden ? ' restore' : ''}" onclick="setTournamentRoundHidden('${round.id}', ${hidden ? 'false' : 'true'})">${hidden ? 'RIPRISTINA' : 'NASCONDI'}</button>`
+                        : '';
+                    return `<div class="ci-stat-row"><div class="ci-stat-main"><b>${ciEsc(round.team)}</b> ` +
+                        `<span class="val">${ciEsc(PMTimeFormat.mmss(round.duration))}</span> ` +
+                        `<span class="ci-muted">${ciEsc(round.match || '')}${hidden ? ' · escluso' : ''}</span></div>${button}</div>`;
+                }).join('');
+                let statManager = statRows(visibleRounds, false);
+                if (hiddenRounds.length) {
+                    statManager += `<div class="ci-callout" style="margin-top:14px;"><b>STATISTICHE ESCLUSE</b></div>` + statRows(hiddenRounds, true);
+                }
+                if (!statManager) statManager = `<div class="ci-fact ci-muted">Nessun round disponibile.</div>`;
+                if (!canEditStats) statManager += `<div class="ci-fact ci-muted">Inserisci il PIN controllo all'accesso di Streaming per modificare le statistiche.</div>`;
+                cards.push(`<div class="ci-card" style="grid-column: span 2;"><h3>🛡️ Gestione statistiche</h3>` +
+                    `<div class="ci-fact ci-muted">NASCONDI esclude un round anomalo dai record e dal tempo medio. Puoi ripristinarlo in qualsiasi momento.</div>` +
+                    statManager + `<div id="ci-stat-note">${ciEsc(lastStatCommandMessage)}</div></div>`);
             }
 
             // ARCHIVIO STORICO
@@ -3807,6 +3911,7 @@
             let dirtyPoll = false, dirtyMvp = false, dirtyCfg = false;
             let lastStateSent = 0, lastStateFp = '', lastPollSent = 0, lastMvpSent = 0;
             let panelOpen = false, activeTab = 'stato', lastPanelRender = 0, lastQrUrl = '';
+            let unreadActivityCount = 0;
             let reactionBuffer = {};       // emoji -> conteggio da mostrare nell'effetto
             let floatCount = 0, floodStrikes = 0;
             let noteTimer = null;
@@ -3870,6 +3975,21 @@
                 el.textContent = msg || '';
                 clearTimeout(noteTimer);
                 if (msg) noteTimer = setTimeout(() => { el.textContent = ''; }, 6000);
+            }
+            function renderMainFanBadge() {
+                const badge = $id('fan-main-badge');
+                if (!badge) return;
+                badge.textContent = unreadActivityCount > 99 ? '99+' : String(unreadActivityCount);
+                badge.style.display = unreadActivityCount > 0 ? 'flex' : 'none';
+                const button = $id('fan-main-button');
+                if (button) button.title = unreadActivityCount > 0
+                    ? unreadActivityCount + ' nuove attività del pubblico'
+                    : 'Apri interazioni pubblico';
+            }
+            function markFanActivity() {
+                if (panelOpen) return;
+                unreadActivityCount = Math.min(999, unreadActivityCount + 1);
+                renderMainFanBadge();
             }
 
             // =========================================================
@@ -4010,6 +4130,7 @@
                         rec.nick = cleanText(m.nick, 30);
                         sessionStats.joins++; sessionStats.lastJoin = now();
                         sessionStats.peak = Math.max(sessionStats.peak, onlineCount());
+                        markFanActivity();
                         safeSend(rec.conn, { type: 'FAN_WELCOME', config: publicConfig() });
                         safeSend(rec.conn, publicStatePacket());
                         safeSend(rec.conn, pollPacket());
@@ -4052,6 +4173,7 @@
                 if (Object.keys(poll.votedBy).length >= MAX_VOTERS) { note('⚠️ Limite voti (' + MAX_VOTERS + ') raggiunto per il sondaggio'); return fanErr(rec, 'FULL', 'Limite voti raggiunto'); }
                 poll.votedBy[sid] = opt.optionId;
                 opt.votes++;
+                markFanActivity();
                 saveFanState(); dirtyPoll = true; requestPanelRender();
             }
 
@@ -4069,6 +4191,7 @@
                 if (Object.keys(vote.votedBy).length >= MAX_VOTERS) return fanErr(rec, 'FULL', 'Limite voti raggiunto');
                 vote.votedBy[sid] = cand.candidateId;
                 cand.votes++;
+                markFanActivity();
                 saveFanState(); dirtyMvp = true; requestPanelRender();
             }
 
@@ -4088,6 +4211,7 @@
                     qid: rid('Q'), ts: now(), nick: S.nicknames ? cleanText(m.nick, 30) : '',
                     text, spectatorId: sid, sessionId: rec.sessionId || '', status: 'PENDING', matchReference: matchRefNow()
                 });
+                markFanActivity();
                 saveFanState(); requestPanelRender(); renderQBadge();
                 safeSend(rec.conn, { type: 'FAN_QUESTION_ACK', ok: true, message: 'DOMANDA INVIATA' });
             }
@@ -4099,6 +4223,7 @@
                 if (limited(sid, 'react', 3000)) return fanErr(rec, 'RATE', 'Attendi un momento');
                 db.reactionTotals[emoji] = (db.reactionTotals[emoji] || 0) + 1;
                 reactionBuffer[emoji] = (reactionBuffer[emoji] || 0) + 1;
+                markFanActivity();
                 broadcast({
                     type: 'FAN_REACTION_EVENT',
                     emoji,
@@ -4428,7 +4553,12 @@
                 const ov = $id('fan-admin-overlay');
                 panelOpen = !panelOpen;
                 ov.style.display = panelOpen ? 'flex' : 'none';
-                if (panelOpen) { refreshMatchContext(); renderPanel(true); }
+                if (panelOpen) {
+                    unreadActivityCount = 0;
+                    renderMainFanBadge();
+                    refreshMatchContext();
+                    renderPanel(true);
+                }
             }
             function showTab(tab) {
                 activeTab = tab;
@@ -4691,6 +4821,7 @@
             function initConsole() {
                 refreshMatchContext();
                 bindSettingsForm();
+                renderMainFanBadge();
                 const fi = $id('fan-import-file');
                 if (fi) fi.addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) importStateFile(f); e.target.value = ''; });
                 let autoStart = false;

@@ -66,6 +66,30 @@ test('fan host, mobile page and OBS reactions share the TURN-enabled cloud confi
     assert.match(streaming, /fan=1&v=' \+ release/);
 });
 
+test('PUBLIC button counts every new accepted fan activity and clears when opened', () => {
+    assert.match(streaming, /id="fan-main-badge"/);
+    assert.match(streaming, /function markFanActivity\(\)/);
+    assert.ok((streaming.match(/markFanActivity\(\);/g) || []).length >= 5);
+    assert.match(streaming, /if \(panelOpen\) \{[\s\S]{0,120}unreadActivityCount = 0;[\s\S]{0,120}renderMainFanBadge\(\)/);
+});
+
+test('INFO can exclude anomalous rounds from records and averages and restore them', () => {
+    assert.match(control, /stat-visibility\.js\?v=1\.0\.0/);
+    assert.match(control, /hiddenStatRounds:\s*\[\]/);
+    assert.match(control, /hiddenStatSet\.has\(round\.id\)[\s\S]{0,520}fastestRounds\.push\(round\)/);
+    assert.match(control, /case 'SET_STAT_ROUND_VISIBILITY'/);
+    assert.match(control, /state\.lastFastestRound = updatedStats\.records\[0\] \|\| null/);
+    assert.match(streaming, /function setTournamentRoundHidden\(roundId, hidden\)/);
+    assert.match(streaming, /NASCONDI esclude un round anomalo dai record e dal tempo medio/);
+    assert.match(streaming, /RIPRISTINA/);
+});
+
+test('main, next-match and daily-record times use the larger box-filling sizes', () => {
+    assert.match(streaming, /\.timer-display\s*\{[\s\S]{0,80}font-size:\s*126px/);
+    assert.match(streaming, /\.spotlight-timer\s*\{[\s\S]{0,80}font-size:\s*70px/);
+    assert.match(streaming, /\.tb-record-val\s*\{[\s\S]{0,140}font-size:\s*27px/);
+});
+
 test('all visible score clocks use the shared MM:SS formatter', () => {
     const timerPages = [
         'index.html', 'board.html', 'streaming.html', 'obs_bar.html',

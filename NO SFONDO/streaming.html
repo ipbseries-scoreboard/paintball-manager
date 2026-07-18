@@ -7,6 +7,7 @@
     <title>IPBA Stream Manager</title>
     <!-- PeerJS CDN -->
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <script src="../time-format.js?v=1.0.0-mmss"></script>
     <!-- Google Fonts -->
     <link
         href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Bebas+Neue&family=Orbitron:wght@600&family=Black+Ops+One&family=Roboto:wght@400;700&display=swap"
@@ -1795,7 +1796,7 @@
             const syncOverlay = document.getElementById('sync-overlay');
             if (syncOverlay) syncOverlay.style.display = 'none';
             // Update Basic Fields
-            document.getElementById('timer').innerText = d.timer || "00:00";
+            document.getElementById('timer').innerText = PMTimeFormat.mmss(d.timer);
             // Status Bar removed as per layout change
 
             // Phase
@@ -1865,7 +1866,7 @@
                 if (d.nextMatch.isStarted) {
                     spotNmScore.style.display = 'block';
                     spotNmScore.innerText = `[ ${d.nextMatch.scoreA} - ${d.nextMatch.scoreB} ]`;
-                    spotNmTimer.innerText = d.nextMatch.timer || "";
+                    spotNmTimer.innerText = PMTimeFormat.mmss(d.nextMatch.timer);
                     spotNmTimer.style.color = "#fbbf24";
                 } else {
                     spotNmScore.style.display = 'none';
@@ -2053,10 +2054,7 @@
         }
         function escapeName(name) { return name.replace(/'/g, "\\'"); }
         function formatTimeSeconds(seconds) {
-            const minutes = Math.floor(seconds / 60);
-            const remainingSeconds = Math.floor(seconds % 60);
-            const milliseconds = Math.floor((seconds % 1) * 100);
-            return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
+            return PMTimeFormat.mmss(seconds);
         }
 
         // --- CLAN / ROSTER LOGIC ---

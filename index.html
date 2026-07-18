@@ -34,6 +34,7 @@
     <script src="lib/peerjs.min.js"></script>
     <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" crossorigin="anonymous"><\/script>');</script>
     <script src="time-format.js?v=1.0.0-mmss"></script>
+    <script src="stat-visibility.js?v=1.0.0"></script>
     <!-- Google Fonts -->
     <link
         href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Bebas+Neue&family=Orbitron:wght@600&family=Black+Ops+One&family=Roboto:wght@400;700&display=swap"
@@ -2123,6 +2124,7 @@
                     location: '',
                     field: '',
                     layoutUrl: '',
+                    hiddenStatRounds: [],
                     delay: 0 // Delay in minutes (positive: delay, negative: lead)
                 },
                 showNextMatchOverlay: false,
@@ -3510,6 +3512,7 @@
             function compactFastestRound(round) {
                 if (!round || typeof round !== 'object') return null;
                 return {
+                    id: clipPeerText(round.id, 80),
                     team: clipPeerText(round.team, 160),
                     duration: Number(round.duration) || 0,
                     match: clipPeerText(round.match, 40)
@@ -3581,6 +3584,7 @@
                 if (!detailed) return result;
 
                 const roundList = (list) => Array.isArray(list) ? list.slice(0, 5).map(row => ({
+                    id: clipPeerText(row && row.id, 80),
                     team: clipPeerText(row && row.team, 160),
                     duration: Number(row && row.duration) || 0,
                     match: clipPeerText(row && row.match, 40)
@@ -3592,6 +3596,12 @@
 
                 result.records = roundList(data.records);
                 result.slowestRounds = roundList(data.slowestRounds);
+                result.hiddenRounds = Array.isArray(data.hiddenRounds) ? data.hiddenRounds.slice(0, 50).map(row => ({
+                    id: clipPeerText(row && row.id, 80),
+                    team: clipPeerText(row && row.team, 160),
+                    duration: Number(row && row.duration) || 0,
+                    match: clipPeerText(row && row.match, 40)
+                })) : [];
                 result.averageTimes = Array.isArray(data.averageTimes) ? data.averageTimes.slice(0, 5).map(row => ({
                     team: clipPeerText(row && row.team, 160),
                     avg: Number(row && row.avg) || 0
@@ -4025,6 +4035,34 @@
                             message = 'Lista loghi non valida';
                         }
                         break;
+                    case 'SET_STAT_ROUND_VISIBILITY': {
+                        const roundId = String(cmd.roundId || '');
+                        if (!state.tournament || !StatVisibility.isRoundId(roundId)) {
+                            accepted = false;
+                            message = 'Identificativo statistica non valido';
+                            break;
+                        }
+                        const before = calculateTournamentStats();
+                        const knownRounds = []
+                            .concat(before.records || [], before.slowestRounds || [], before.hiddenRounds || []);
+                        if (!knownRounds.some(round => round && round.id === roundId)) {
+                            accepted = false;
+                            message = 'Statistica non trovata o non più disponibile';
+                            break;
+                        }
+                        const hidden = StatVisibility.normalizeIds(state.tournament.hiddenStatRounds, 500);
+                        const currentIndex = hidden.indexOf(roundId);
+                        if (cmd.hidden === true && currentIndex === -1) hidden.push(roundId);
+                        if (cmd.hidden !== true && currentIndex !== -1) hidden.splice(currentIndex, 1);
+                        state.tournament.hiddenStatRounds = hidden;
+                        const updatedStats = calculateTournamentStats();
+                        state.lastFastestRound = updatedStats.records[0] || null;
+                        saveTournamentState();
+                        broadcastState(true);
+                        message = cmd.hidden === true ? 'Statistica esclusa dai calcoli' : 'Statistica ripristinata';
+                        log(`[REMOTO] ${message}: ${roundId}`);
+                        break;
+                    }
                     case 'UPDATE_SETTINGS': {
                         const incoming = cmd.settings || {};
                         const allowed = ['pointIntervalDuration', 'slotIntervalDuration', 'singleSlotIntervalDuration'];
@@ -5584,6 +5622,7 @@
             function calculateTournamentStats() {
                 const stats = {};
                 const fastestRounds = [];
+                const hiddenRounds = [];
 
                 function generateBracketData(matches) {
                     if (!matches || matches.length === 0) return null;
@@ -5603,7 +5642,11 @@
                     return bracket.rounds.length > 0 ? bracket : null;
                 }
 
-                if (!state.tournament || !state.tournament.matches) return { standings: [], records: [], averageTimes: [], mercyKillers: [], badBoys: [], matchHistory: [], techUsage: [] };
+                if (!state.tournament || !state.tournament.matches) return { standings: [], records: [], hiddenRounds: [], averageTimes: [], mercyKillers: [], badBoys: [], matchHistory: [], techUsage: [] };
+
+                const hiddenStatIds = StatVisibility.normalizeIds(state.tournament.hiddenStatRounds, 500);
+                state.tournament.hiddenStatRounds = hiddenStatIds;
+                const hiddenStatSet = new Set(hiddenStatIds);
 
                 state.tournament.matches.forEach((m, mIdx) => {
                     // Pre-register all teams so they appear with 0 points even before playing
@@ -5652,14 +5695,24 @@
                         // Fastest Round Analysis
                         if (m.savedState.history && Array.isArray(m.savedState.history)) {
                             let lastEventTime = CONFIG.gameTime;
-                            m.savedState.history.forEach(ev => {
+                            m.savedState.history.forEach((ev, evIdx) => {
                                 if (ev.type === 'POINT' && ev.team === (i === 0 ? 'A' : 'B')) {
                                     const duration = (lastEventTime - ev.time);
                                     if (duration > 0) {
-                                        if (duration < s.fastest) s.fastest = duration;
-                                        s.totalDuration += duration;
-                                        s.totalPoints += 1;
-                                        fastestRounds.push({ team: t.name, duration: duration, match: `M${mIdx + 1}` });
+                                        const round = {
+                                            id: StatVisibility.makeRoundId(mIdx, evIdx, ev),
+                                            team: t.name,
+                                            duration: duration,
+                                            match: `M${mIdx + 1}`
+                                        };
+                                        if (round.id && hiddenStatSet.has(round.id)) {
+                                            hiddenRounds.push(round);
+                                        } else {
+                                            if (duration < s.fastest) s.fastest = duration;
+                                            s.totalDuration += duration;
+                                            s.totalPoints += 1;
+                                            fastestRounds.push(round);
+                                        }
                                     }
                                 }
                                 if (ev.type === 'POINT' || ev.type === 'START') lastEventTime = ev.time;
@@ -5718,6 +5771,7 @@
                     standings: standingsArr,
                     records: [...fastestRounds].sort((a, b) => a.duration - b.duration).slice(0, 5),
                     slowestRounds: [...fastestRounds].sort((a, b) => b.duration - a.duration).slice(0, 5),
+                    hiddenRounds: hiddenRounds.sort((a, b) => a.match.localeCompare(b.match) || a.duration - b.duration),
                     averageTimes: averageTimes.slice(0, 5),
                     mercyKillers: mercyKillers.slice(0, 5),
                     badBoys: badBoys.slice(0, 5),
@@ -6945,6 +6999,7 @@
                     layoutUrl: '',
                     eventUrl: '',
                     description: '',
+                    hiddenStatRounds: [],
                     delay: 0
                 };
                 state.matchLog = [];
