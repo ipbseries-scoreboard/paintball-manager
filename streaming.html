@@ -3868,7 +3868,7 @@
             // ---------- costanti ----------
             const SCHEMA_VERSION = 1;
             const MSG_FAN = ['FAN_HELLO', 'FAN_OVERLAY_HELLO', 'FAN_STATE_REQUEST', 'FAN_POLL_VOTE', 'FAN_MVP_VOTE', 'FAN_QUESTION_SUBMIT', 'FAN_REACTION', 'FAN_PING', 'FAN_PONG'];
-            const MSG_HOST = ['FAN_WELCOME', 'FAN_PUBLIC_STATE', 'FAN_POLL_UPDATE', 'FAN_MVP_UPDATE', 'FAN_QUESTION_ACK', 'FAN_REACTION_ACK', 'FAN_REACTION_EVENT', 'FAN_ERROR', 'FAN_CONFIG_UPDATE'];
+            const MSG_HOST = ['FAN_WELCOME', 'FAN_PUBLIC_STATE', 'FAN_POLL_UPDATE', 'FAN_MVP_UPDATE', 'FAN_QUESTION_ACK', 'FAN_REACTION_ACK', 'FAN_REACTION_EVENT', 'FAN_OVERLAY_QUESTION', 'FAN_OVERLAY_POLL', 'FAN_ERROR', 'FAN_CONFIG_UPDATE'];
             const REACTIONS = ['🔥', '👏', '😮', '💪', '🎯'];
             const MAX_PAYLOAD = 4096;
             const MAX_QUESTIONS = 500, MAX_POLLS = 100, MAX_MVP = 50, MAX_VOTERS = 5000, MAX_FANS = 200;
@@ -4063,6 +4063,7 @@
                 return n;
             }
             function broadcast(pkt) { fans.forEach(f => safeSend(f.conn, pkt)); }
+            function broadcastOverlays(pkt) { fans.forEach(f => { if (f.isOverlay) safeSend(f.conn, pkt); }); }
             function limited(sid, kind, ms) {
                 const k = sid + '|' + kind, t = rate.get(k) || 0;
                 if (now() - t < ms) return true;
@@ -4082,9 +4083,12 @@
                     }
                     if (dirtyPoll && t - lastPollSent >= 500) {
                         dirtyPoll = false; lastPollSent = t; broadcast(pollPacket());
-                        if (pollOverlayVisible) renderPollOverlay();
+                        if (pollOverlayVisible && pollOverlayKind === 'poll') renderPollOverlay('update');
                     }
-                    if (dirtyMvp && t - lastMvpSent >= 500) { dirtyMvp = false; lastMvpSent = t; broadcast(mvpPacket()); }
+                    if (dirtyMvp && t - lastMvpSent >= 500) {
+                        dirtyMvp = false; lastMvpSent = t; broadcast(mvpPacket());
+                        if (pollOverlayVisible && pollOverlayKind === 'mvp') renderPollOverlay('update');
+                    }
                     if (dirtyCfg) { dirtyCfg = false; broadcast({ type: 'FAN_CONFIG_UPDATE', config: publicConfig() }); broadcast(pollPacket()); broadcast(mvpPacket()); }
                     // Auto-chiusura sondaggi a tempo
                     db.polls.forEach(p => {
@@ -4142,6 +4146,8 @@
                         rec.isOverlay = true;
                         rec.sessionId = ID_RE.test(String(m.sessionId || '')) ? m.sessionId : '';
                         safeSend(rec.conn, { type: 'FAN_WELCOME', config: publicConfig() });
+                        sendCurrentOverlays(rec);
+                        requestPanelRender();
                         break;
                     case 'FAN_PING': safeSend(rec.conn, { type: 'FAN_PONG', t: typeof m.t === 'number' ? m.t : 0 }); break;
                     case 'FAN_PONG': break;
@@ -4426,7 +4432,7 @@
                 if (!q) return;
                 if (action === 'approve') q.status = 'APPROVED';
                 else if (action === 'reject') q.status = 'REJECTED';
-                else if (action === 'pin') q.status = 'PINNED';
+                else if (action === 'pin') { q.status = 'PINNED'; showQuestionOverlay(q); }
                 else if (action === 'answered') q.status = 'ANSWERED';
                 else if (action === 'archive') q.status = 'ARCHIVED';
                 else if (action === 'show') { showQuestionOverlay(q); if (q.status === 'PENDING') q.status = 'APPROVED'; }
@@ -4440,40 +4446,51 @@
             // =========================================================
             //  OVERLAY IN STREAMING (console)
             // =========================================================
-            let qOverlayTimer = null;
+            let qOverlayTimer = null, qOverlayCurrent = null, qOverlayExpiresAt = 0;
             function showQuestionOverlay(q) {
                 $id('fan-q-nick').textContent = (q.nick || 'SPETTATORE') + ':';
                 $id('fan-q-text').textContent = '“' + q.text + '”';
                 $id('fan-question-overlay').classList.add('show');
                 clearTimeout(qOverlayTimer);
                 const sec = Math.min(120, Math.max(3, db.settings.questionOverlaySec || 10));
+                qOverlayCurrent = { nick: cleanText(q.nick, 30) || 'SPETTATORE', text: cleanText(q.text, 240) };
+                qOverlayExpiresAt = now() + sec * 1000;
+                broadcastOverlays({ type: 'FAN_OVERLAY_QUESTION', action: 'show', nick: qOverlayCurrent.nick, text: qOverlayCurrent.text, durationSec: sec });
                 qOverlayTimer = setTimeout(hideQuestionOverlay, sec * 1000);
             }
-            function hideQuestionOverlay() { clearTimeout(qOverlayTimer); $id('fan-question-overlay').classList.remove('show'); }
+            function hideQuestionOverlay() {
+                clearTimeout(qOverlayTimer);
+                qOverlayCurrent = null; qOverlayExpiresAt = 0;
+                $id('fan-question-overlay').classList.remove('show');
+                broadcastOverlays({ type: 'FAN_OVERLAY_QUESTION', action: 'hide' });
+            }
 
-            let pollOverlayVisible = false, pollOverlayId = '', pollOverlayKind = 'poll', pollOverlayTimer = null;
+            let pollOverlayVisible = false, pollOverlayId = '', pollOverlayKind = 'poll', pollOverlayTimer = null, pollOverlayExpiresAt = 0;
             function showPollOverlay(pollId) {
                 pollOverlayId = pollId; pollOverlayKind = 'poll'; pollOverlayVisible = true;
-                renderPollOverlay();
-                $id('fan-poll-overlay').classList.add('show');
                 clearTimeout(pollOverlayTimer);
                 const sec = Math.max(0, db.settings.pollOverlaySec || 0);
+                pollOverlayExpiresAt = sec > 0 ? now() + sec * 1000 : 0;
+                renderPollOverlay('show');
+                $id('fan-poll-overlay').classList.add('show');
                 if (sec > 0) pollOverlayTimer = setTimeout(hidePollOverlay, sec * 1000);
             }
             function showMvpOverlay(voteId) {
                 pollOverlayId = voteId; pollOverlayKind = 'mvp'; pollOverlayVisible = true;
-                renderPollOverlay();
-                $id('fan-poll-overlay').classList.add('show');
                 clearTimeout(pollOverlayTimer);
                 const sec = Math.max(0, db.settings.pollOverlaySec || 0);
+                pollOverlayExpiresAt = sec > 0 ? now() + sec * 1000 : 0;
+                renderPollOverlay('show');
+                $id('fan-poll-overlay').classList.add('show');
                 if (sec > 0) pollOverlayTimer = setTimeout(hidePollOverlay, sec * 1000);
             }
             function hidePollOverlay() {
                 clearTimeout(pollOverlayTimer);
-                pollOverlayVisible = false;
+                pollOverlayVisible = false; pollOverlayExpiresAt = 0;
                 $id('fan-poll-overlay').classList.remove('show');
+                broadcastOverlays({ type: 'FAN_OVERLAY_POLL', action: 'hide' });
             }
-            function renderPollOverlay() {
+            function pollOverlayPacket(action) {
                 if (!pollOverlayVisible) return;
                 let title = '', rows = [];
                 if (pollOverlayKind === 'mvp') {
@@ -4489,15 +4506,44 @@
                 }
                 const total = rows.reduce((t, r) => t + r.votes, 0);
                 const maxV = Math.max.apply(null, rows.map(r => r.votes).concat([0]));
+                return {
+                    type: 'FAN_OVERLAY_POLL', action: action || 'update', title,
+                    rows: rows.map(r => ({
+                        label: cleanText(r.label, 90), votes: Math.max(0, Number(r.votes) || 0),
+                        pct: total ? Math.round(100 * r.votes / total) : 0,
+                        lead: total > 0 && r.votes === maxV && maxV > 0
+                    })),
+                    totalLabel: total + (total === 1 ? ' VOTO' : ' VOTI'),
+                    durationSec: Math.max(0, db.settings.pollOverlaySec || 0),
+                    remainingMs: pollOverlayExpiresAt ? Math.max(0, pollOverlayExpiresAt - now()) : 0
+                };
+            }
+            function renderPollOverlay(action) {
+                const packet = pollOverlayPacket(action);
+                if (!packet) return;
+                const title = packet.title, rows = packet.rows;
+                const total = rows.reduce((t, r) => t + r.votes, 0);
                 $id('fan-poll-ov-title').textContent = title;
                 $id('fan-poll-ov-rows').innerHTML = rows.map(r => {
-                    const pct = total ? Math.round(100 * r.votes / total) : 0;
-                    const lead = total > 0 && r.votes === maxV && maxV > 0;
-                    return '<div class="fp-row' + (lead ? ' lead' : '') + '">' +
-                        '<div class="fp-lbl"><span>' + esc(r.label) + '</span><span class="pct">' + pct + '%</span></div>' +
-                        '<div class="fp-bar"><div style="width:' + pct + '%"></div></div></div>';
+                    return '<div class="fp-row' + (r.lead ? ' lead' : '') + '">' +
+                        '<div class="fp-lbl"><span>' + esc(r.label) + '</span><span class="pct">' + r.pct + '%</span></div>' +
+                        '<div class="fp-bar"><div style="width:' + r.pct + '%"></div></div></div>';
                 }).join('');
-                $id('fan-poll-ov-total').textContent = total + (total === 1 ? ' VOTO' : ' VOTI');
+                $id('fan-poll-ov-total').textContent = packet.totalLabel;
+                broadcastOverlays(packet);
+            }
+            function sendCurrentOverlays(rec) {
+                if (qOverlayCurrent && qOverlayExpiresAt > now()) {
+                    safeSend(rec.conn, {
+                        type: 'FAN_OVERLAY_QUESTION', action: 'show',
+                        nick: qOverlayCurrent.nick, text: qOverlayCurrent.text,
+                        remainingMs: qOverlayExpiresAt - now()
+                    });
+                }
+                if (pollOverlayVisible) {
+                    const packet = pollOverlayPacket('show');
+                    if (packet) safeSend(rec.conn, packet);
+                }
             }
 
             // Timer dedicato all'effetto reazioni: parte quando arrivano reazioni e

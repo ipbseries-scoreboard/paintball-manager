@@ -55,6 +55,21 @@ test('OBS bar receives fan reactions and follows Streaming reaction settings', (
     assert.match(obsBar, /fanReactionEnabled\s*=\s*!!\(config\s*&&\s*config\.reactionsOnStream\)/);
 });
 
+test('moderated questions, polls and MVP overlays are mirrored to OBS bar', () => {
+    assert.match(streaming, /function broadcastOverlays\(pkt\)/);
+    assert.match(streaming, /type:\s*'FAN_OVERLAY_QUESTION',\s*action:\s*'show'/);
+    assert.match(streaming, /type:\s*'FAN_OVERLAY_POLL',\s*action:\s*action\s*\|\|\s*'update'/);
+    assert.match(streaming, /action === 'pin'[\s\S]{0,100}showQuestionOverlay\(q\)/);
+    assert.match(streaming, /case 'FAN_OVERLAY_HELLO':[\s\S]{0,500}sendCurrentOverlays\(rec\)/);
+    assert.match(streaming, /pollOverlayKind === 'mvp'[\s\S]{0,120}renderPollOverlay\('update'\)/);
+    assert.match(obsBar, /packet\.type === 'FAN_OVERLAY_QUESTION'/);
+    assert.match(obsBar, /packet\.type === 'FAN_OVERLAY_POLL'/);
+    assert.match(obsBar, /function renderFanQuestionOverlay\(packet\)/);
+    assert.match(obsBar, /function renderFanPollOverlay\(packet\)/);
+    assert.match(obsBar, /id="fan-obs-question"/);
+    assert.match(obsBar, /id="fan-obs-poll"/);
+});
+
 test('fan host, mobile page and OBS reactions share the TURN-enabled cloud config', () => {
     assert.match(pmClient, /function getCloudPeerOptions\(\)/);
     assert.match(pmClient, /getCloudPeerOptions:\s*getCloudPeerOptions/);

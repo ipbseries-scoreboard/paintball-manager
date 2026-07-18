@@ -408,12 +408,96 @@
             15% { transform: translateY(-40px) scale(1.05); opacity: 1; }
             100% { transform: translateY(-340px) scale(1); opacity: 0; }
         }
+
+        /* Contenuti moderati dal pannello PUBBLICO di streaming.html. */
+        .fan-obs-card {
+            position: absolute;
+            z-index: 5450;
+            box-sizing: border-box;
+            opacity: 0;
+            pointer-events: none;
+            color: #fff;
+            transition: opacity .45s ease, transform .45s ease;
+            box-shadow: 0 0 40px rgba(0, 0, 0, .5);
+        }
+
+        #fan-obs-question {
+            left: 50%;
+            bottom: 60px;
+            width: min(1100px, calc(100% - 80px));
+            transform: translateX(-50%) translateY(40px);
+            padding: 18px 40px;
+            text-align: center;
+            border: 2px solid #22d3ee;
+            border-radius: 16px;
+            background: linear-gradient(135deg, rgba(8, 47, 73, .96), rgba(14, 116, 144, .96));
+            box-shadow: 0 0 40px rgba(34, 211, 238, .35);
+        }
+
+        #fan-obs-question.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .fan-obs-kicker {
+            color: #22d3ee;
+            font-size: 26px;
+            letter-spacing: 3px;
+        }
+
+        #fan-obs-question-nick {
+            margin-top: 6px;
+            color: #fbbf24;
+            font-size: 24px;
+        }
+
+        #fan-obs-question-text {
+            margin-top: 4px;
+            font-family: 'Roboto', sans-serif;
+            font-size: 30px;
+            font-style: italic;
+        }
+
+        #fan-obs-poll {
+            left: 40px;
+            bottom: 60px;
+            width: 560px;
+            transform: translateY(40px);
+            padding: 20px 26px;
+            border: 2px solid #fbbf24;
+            border-radius: 16px;
+            background: rgba(15, 23, 42, .94);
+            box-shadow: 0 0 40px rgba(251, 191, 36, .3);
+        }
+
+        #fan-obs-poll.show { opacity: 1; transform: translateY(0); }
+        #fan-obs-poll-title { color: #fbbf24; font-size: 26px; letter-spacing: 2px; }
+        .fan-obs-poll-row { margin-top: 12px; }
+        .fan-obs-poll-label { display: flex; justify-content: space-between; gap: 16px; font-size: 22px; }
+        .fan-obs-poll-pct { color: #22d3ee; }
+        .fan-obs-poll-row.lead .fan-obs-poll-pct { color: #4ade80; }
+        .fan-obs-poll-bar { height: 14px; margin-top: 4px; overflow: hidden; border-radius: 7px; background: #0b1220; }
+        .fan-obs-poll-bar > div { height: 100%; background: #22d3ee; transition: width .6s ease; }
+        .fan-obs-poll-row.lead .fan-obs-poll-bar > div { background: #4ade80; }
+        #fan-obs-poll-total { margin-top: 14px; text-align: center; color: #94a3b8; font-size: 20px; letter-spacing: 2px; }
     </style>
 </head>
 
 <body>
 
     <div id="fan-reactions-layer" aria-hidden="true"></div>
+
+    <div id="fan-obs-question" class="fan-obs-card" aria-live="polite">
+        <div class="fan-obs-kicker">DOMANDA DAL PUBBLICO</div>
+        <div id="fan-obs-question-nick"></div>
+        <div id="fan-obs-question-text"></div>
+    </div>
+
+    <div id="fan-obs-poll" class="fan-obs-card" aria-live="polite">
+        <div id="fan-obs-poll-title"></div>
+        <div id="fan-obs-poll-rows"></div>
+        <div id="fan-obs-poll-total"></div>
+    </div>
 
     <div id="score-bar">
         <!-- TEAM A (LEFT) -->
@@ -588,6 +672,8 @@
         let fanReactionBuffer = {};
         let fanReactionTick = null;
         let fanReactionFloatCount = 0;
+        let fanQuestionTimer = null;
+        let fanPollTimer = null;
 
         function fanMatchBase(value) {
             return String(value || '').trim().toUpperCase()
@@ -651,6 +737,73 @@
                     fanReactionEnabled = true;
                     queueFanReaction(String(packet.emoji || ''), packet.count);
                 }
+            } else if (packet.type === 'FAN_OVERLAY_QUESTION') {
+                renderFanQuestionOverlay(packet);
+            } else if (packet.type === 'FAN_OVERLAY_POLL') {
+                renderFanPollOverlay(packet);
+            }
+        }
+
+        function overlayDurationMs(packet) {
+            const direct = Number(packet && packet.remainingMs);
+            if (Number.isFinite(direct)) return Math.max(0, Math.min(120000, direct));
+            const seconds = Number(packet && packet.durationSec);
+            return Number.isFinite(seconds) ? Math.max(0, Math.min(120, seconds)) * 1000 : 0;
+        }
+
+        function renderFanQuestionOverlay(packet) {
+            const card = document.getElementById('fan-obs-question');
+            if (!card) return;
+            clearTimeout(fanQuestionTimer);
+            if (packet.action === 'hide') {
+                card.classList.remove('show');
+                return;
+            }
+            document.getElementById('fan-obs-question-nick').textContent = String(packet.nick || 'SPETTATORE').slice(0, 30) + ':';
+            document.getElementById('fan-obs-question-text').textContent = '“' + String(packet.text || '').slice(0, 240) + '”';
+            card.classList.add('show');
+            const duration = overlayDurationMs(packet);
+            if (duration > 0) fanQuestionTimer = setTimeout(() => card.classList.remove('show'), duration);
+        }
+
+        function renderFanPollOverlay(packet) {
+            const card = document.getElementById('fan-obs-poll');
+            const rowsBox = document.getElementById('fan-obs-poll-rows');
+            if (!card || !rowsBox) return;
+            if (packet.action === 'hide') {
+                clearTimeout(fanPollTimer);
+                card.classList.remove('show');
+                return;
+            }
+            document.getElementById('fan-obs-poll-title').textContent = String(packet.title || '').slice(0, 140);
+            rowsBox.replaceChildren();
+            const rows = Array.isArray(packet.rows) ? packet.rows.slice(0, 12) : [];
+            rows.forEach((raw) => {
+                const pct = Math.max(0, Math.min(100, Number(raw && raw.pct) || 0));
+                const row = document.createElement('div');
+                row.className = 'fan-obs-poll-row' + (raw && raw.lead ? ' lead' : '');
+                const label = document.createElement('div');
+                label.className = 'fan-obs-poll-label';
+                const name = document.createElement('span');
+                name.textContent = String(raw && raw.label || '').slice(0, 90);
+                const percent = document.createElement('span');
+                percent.className = 'fan-obs-poll-pct';
+                percent.textContent = Math.round(pct) + '%';
+                label.append(name, percent);
+                const bar = document.createElement('div');
+                bar.className = 'fan-obs-poll-bar';
+                const fill = document.createElement('div');
+                fill.style.width = pct + '%';
+                bar.appendChild(fill);
+                row.append(label, bar);
+                rowsBox.appendChild(row);
+            });
+            document.getElementById('fan-obs-poll-total').textContent = String(packet.totalLabel || '').slice(0, 40);
+            card.classList.add('show');
+            if (packet.action !== 'update') {
+                clearTimeout(fanPollTimer);
+                const duration = overlayDurationMs(packet);
+                if (duration > 0) fanPollTimer = setTimeout(() => card.classList.remove('show'), duration);
             }
         }
 
