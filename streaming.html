@@ -9,7 +9,8 @@
     <!-- PeerJS CDN -->
     <script src="lib/peerjs.min.js"></script>
     <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');</script>
-    <script src="pm-client.js?v=2.1.1-controller-cloud"></script>
+    <script src="pm-client.js?v=2.2.0-fan-turn"></script>
+    <script src="time-format.js?v=1.0.0-mmss"></script>
     <!-- QRCode.js: copia locale, CDN come riserva (per il QR del pubblico) -->
     <script src="lib/qrcode.min.js"></script>
     <script>window.QRCode || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" crossorigin="anonymous"><\/script>');</script>
@@ -2373,7 +2374,7 @@
             const syncOverlay = document.getElementById('sync-overlay');
             if (syncOverlay) syncOverlay.style.display = 'none';
             // Update Basic Fields
-            document.getElementById('timer').innerText = d.timer || "00:00";
+            document.getElementById('timer').innerText = PMTimeFormat.mmss(d.timer);
             // Status Bar removed as per layout change
 
             // Phase
@@ -2443,7 +2444,7 @@
                 if (d.nextMatch.isStarted) {
                     spotNmScore.style.display = 'block';
                     spotNmScore.innerText = `[ ${d.nextMatch.scoreA} - ${d.nextMatch.scoreB} ]`;
-                    spotNmTimer.innerText = d.nextMatch.timer || "";
+                    spotNmTimer.innerText = PMTimeFormat.mmss(d.nextMatch.timer);
                     spotNmTimer.style.color = "#fbbf24";
                 } else {
                     spotNmScore.style.display = 'none';
@@ -2655,10 +2656,7 @@
         }
         function escapeName(name) { return name.replace(/'/g, "\\'"); }
         function formatTimeSeconds(seconds) {
-            const minutes = Math.floor(seconds / 60);
-            const remainingSeconds = Math.floor(seconds % 60);
-            const milliseconds = Math.floor((seconds % 1) * 100);
-            return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
+            return PMTimeFormat.mmss(seconds);
         }
 
         // --- CLAN / ROSTER LOGIC ---
@@ -3236,7 +3234,7 @@
             document.getElementById('ci-live-score').innerText =
                 ((d.teamLeft && d.teamLeft.score) || 0) + ' : ' + ((d.teamRight && d.teamRight.score) || 0);
             const parts = [];
-            if (d.timer) parts.push('⏱ <b>' + ciEsc(d.timer) + '</b>');
+            if (d.timer) parts.push('⏱ <b>' + ciEsc(PMTimeFormat.mmss(d.timer)) + '</b>');
             if (d.statusText) parts.push(ciEsc(d.statusText));
             if (d.phase) parts.push('Fase: <b>' + ciEsc(d.phase) + '</b>');
             document.getElementById('ci-live-sub').innerHTML = parts.join(' &nbsp;•&nbsp; ') || '—';
@@ -3765,8 +3763,8 @@
 
             // ---------- costanti ----------
             const SCHEMA_VERSION = 1;
-            const MSG_FAN = ['FAN_HELLO', 'FAN_STATE_REQUEST', 'FAN_POLL_VOTE', 'FAN_MVP_VOTE', 'FAN_QUESTION_SUBMIT', 'FAN_REACTION', 'FAN_PING', 'FAN_PONG'];
-            const MSG_HOST = ['FAN_WELCOME', 'FAN_PUBLIC_STATE', 'FAN_POLL_UPDATE', 'FAN_MVP_UPDATE', 'FAN_QUESTION_ACK', 'FAN_REACTION_ACK', 'FAN_ERROR', 'FAN_CONFIG_UPDATE'];
+            const MSG_FAN = ['FAN_HELLO', 'FAN_OVERLAY_HELLO', 'FAN_STATE_REQUEST', 'FAN_POLL_VOTE', 'FAN_MVP_VOTE', 'FAN_QUESTION_SUBMIT', 'FAN_REACTION', 'FAN_PING', 'FAN_PONG'];
+            const MSG_HOST = ['FAN_WELCOME', 'FAN_PUBLIC_STATE', 'FAN_POLL_UPDATE', 'FAN_MVP_UPDATE', 'FAN_QUESTION_ACK', 'FAN_REACTION_ACK', 'FAN_REACTION_EVENT', 'FAN_ERROR', 'FAN_CONFIG_UPDATE'];
             const REACTIONS = ['🔥', '👏', '😮', '💪', '🎯'];
             const MAX_PAYLOAD = 4096;
             const MAX_QUESTIONS = 500, MAX_POLLS = 100, MAX_MVP = 50, MAX_VOTERS = 5000, MAX_FANS = 200;
@@ -3799,6 +3797,7 @@
             let hostPeer = null;
             let hostRoom = '';
             let hostStatus = 'SPENTA';
+            let hostRetryTimer = null;
             let fans = new Map();          // chiave interna -> {conn, spectatorId, sessionId, nick, lastSeen, joinedAt}
             let counters = { dup: 0, rejected: 0 };
             let sessionStats = { peak: 0, joins: 0, lastJoin: 0 };
@@ -3854,6 +3853,13 @@
                 else if (!db) loadFanState();
             }
             function fanRoomId() { return 'IPBA-FAN-' + matchBase; }
+            function hostPreferenceKey() { return 'pm_fan_host_autostart::' + (matchBase || 'DEFAULT'); }
+            function fanPeerOptions() {
+                if (!window.PMClient || typeof window.PMClient.getCloudPeerOptions !== 'function') {
+                    throw new Error('configurazione rete non disponibile');
+                }
+                return window.PMClient.getCloudPeerOptions();
+            }
             function matchRefNow() {
                 const d = (typeof currentData !== 'undefined' ? currentData : null) || {};
                 const a = d.teamLeft && d.teamLeft.name, b = d.teamRight && d.teamRight.name;
@@ -3873,22 +3879,38 @@
                 refreshMatchContext();
                 if (!matchBase) { hostStatus = 'ERRORE: nessun Match ID'; renderPanel(true); return; }
                 if (!window.Peer) { hostStatus = 'ERRORE: PeerJS non disponibile'; renderPanel(true); return; }
-                stopFanHost(true);
+                clearTimeout(hostRetryTimer);
+                try { localStorage.setItem(hostPreferenceKey(), '1'); } catch (e) { }
+                stopFanHost(true, true);
                 hostRoom = fanRoomId();
                 hostStatus = 'AVVIO...';
                 renderPanel(true);
-                try { hostPeer = new Peer(hostRoom); } catch (e) { hostStatus = 'ERRORE: ' + e.message; renderPanel(true); return; }
+                try { hostPeer = new Peer(hostRoom, fanPeerOptions()); } catch (e) { hostStatus = 'ERRORE: ' + e.message; renderPanel(true); scheduleFanHostRetry(); return; }
                 hostPeer.on('open', () => { hostStatus = 'ATTIVA'; startHostTick(); renderPanel(true); });
                 hostPeer.on('error', (err) => {
                     const t = (err && err.type) || 'rete';
                     if (t === 'unavailable-id') hostStatus = 'ERRORE: stanza già attiva in un\'altra console';
-                    else if (hostStatus !== 'ATTIVA') hostStatus = 'ERRORE: ' + t;
+                    else if (hostStatus !== 'ATTIVA') {
+                        hostStatus = 'ERRORE RETE: ' + t;
+                        scheduleFanHostRetry();
+                    }
                     renderPanel(true);
                 });
                 hostPeer.on('disconnected', () => { try { if (hostPeer && !hostPeer.destroyed) hostPeer.reconnect(); } catch (e) { } });
                 hostPeer.on('connection', onFanConnection);
             }
-            function stopFanHost(silent) {
+            function scheduleFanHostRetry() {
+                clearTimeout(hostRetryTimer);
+                let wanted = false;
+                try { wanted = localStorage.getItem(hostPreferenceKey()) === '1'; } catch (e) { }
+                if (!wanted) return;
+                hostRetryTimer = setTimeout(() => {
+                    if (hostStatus !== 'ATTIVA') startFanHost();
+                }, 5000);
+            }
+            function stopFanHost(silent, keepAutoStart) {
+                clearTimeout(hostRetryTimer);
+                hostRetryTimer = null;
                 if (hostTick) { clearInterval(hostTick); hostTick = null; }
                 fans.forEach(f => { try { f.conn.close(); } catch (e) { } });
                 fans.clear();
@@ -3900,12 +3922,15 @@
                     try { hostPeer.destroy(); } catch (e) { }
                     hostPeer = null;
                 }
+                if (!keepAutoStart) {
+                    try { localStorage.removeItem(hostPreferenceKey()); } catch (e) { }
+                }
                 hostStatus = 'SPENTA';
                 if (!silent) renderPanel(true);
             }
             function onFanConnection(conn) {
                 if (fans.size >= MAX_FANS) { try { conn.close(); } catch (e) { } return; }
-                const rec = { conn, spectatorId: '', sessionId: '', nick: '', lastSeen: now(), joinedAt: now() };
+                const rec = { conn, spectatorId: '', sessionId: '', nick: '', lastSeen: now(), joinedAt: now(), isFan: false, isOverlay: false };
                 const key = rid('C');
                 fans.set(key, rec);
                 conn.on('data', (m) => handleFanMessage(rec, m));
@@ -3914,7 +3939,7 @@
             }
             function onlineCount() {
                 const t = now(); let n = 0;
-                fans.forEach(f => { if (f.conn && f.conn.open && t - f.lastSeen < 45000) n++; });
+                fans.forEach(f => { if (f.isFan && f.conn && f.conn.open && t - f.lastSeen < 45000) n++; });
                 return n;
             }
             function broadcast(pkt) { fans.forEach(f => safeSend(f.conn, pkt)); }
@@ -3974,11 +3999,13 @@
                 if (!ID_RE.test(sid)) { counters.rejected++; return; }
                 if (!rec.spectatorId) rec.spectatorId = sid;
                 const S = db.settings;
-                if (!S.enabled && m.type !== 'FAN_PING' && m.type !== 'FAN_PONG' && m.type !== 'FAN_HELLO') {
+                if (!S.enabled && m.type !== 'FAN_PING' && m.type !== 'FAN_PONG' && m.type !== 'FAN_HELLO' && m.type !== 'FAN_OVERLAY_HELLO') {
                     fanErr(rec, 'DISABLED', 'Interazione disattivata'); return;
                 }
                 switch (m.type) {
                     case 'FAN_HELLO':
+                        rec.isFan = true;
+                        rec.isOverlay = false;
                         rec.sessionId = ID_RE.test(String(m.sessionId || '')) ? m.sessionId : '';
                         rec.nick = cleanText(m.nick, 30);
                         sessionStats.joins++; sessionStats.lastJoin = now();
@@ -3988,6 +4015,12 @@
                         safeSend(rec.conn, pollPacket());
                         safeSend(rec.conn, mvpPacket());
                         requestPanelRender();
+                        break;
+                    case 'FAN_OVERLAY_HELLO':
+                        rec.isFan = false;
+                        rec.isOverlay = true;
+                        rec.sessionId = ID_RE.test(String(m.sessionId || '')) ? m.sessionId : '';
+                        safeSend(rec.conn, { type: 'FAN_WELCOME', config: publicConfig() });
                         break;
                     case 'FAN_PING': safeSend(rec.conn, { type: 'FAN_PONG', t: typeof m.t === 'number' ? m.t : 0 }); break;
                     case 'FAN_PONG': break;
@@ -4066,6 +4099,12 @@
                 if (limited(sid, 'react', 3000)) return fanErr(rec, 'RATE', 'Attendi un momento');
                 db.reactionTotals[emoji] = (db.reactionTotals[emoji] || 0) + 1;
                 reactionBuffer[emoji] = (reactionBuffer[emoji] || 0) + 1;
+                broadcast({
+                    type: 'FAN_REACTION_EVENT',
+                    emoji,
+                    count: 1,
+                    showOnStream: !!(db.settings.enabled && db.settings.reactions && db.settings.reactionsOnStream)
+                });
                 ensureReactionTick();
                 saveFanState(); requestPanelRender();
                 safeSend(rec.conn, { type: 'FAN_REACTION_ACK' });
@@ -4080,6 +4119,7 @@
                     enabled: !!S.enabled, polls: !!(S.enabled && S.polls), mvp: !!(S.enabled && S.mvp),
                     questions: !!(S.enabled && S.questions), nicknames: !!S.nicknames,
                     reactions: !!(S.enabled && S.reactions), showResults: !!S.showResultsToFans,
+                    reactionsOnStream: !!(S.enabled && S.reactions && S.reactionsOnStream),
                     showSpectatorCount: !!S.showSpectatorCount,
                     questionRateSec: S.questionRateSec || 30, maxQuestions: S.maxQuestionsPerSpectator || 5
                 };
@@ -4098,7 +4138,7 @@
                     match: {
                         tournamentName: cleanText(d.tournament && d.tournament.name, 80),
                         phase: cleanText(d.phase, 40),
-                        timer: cleanText(d.timer, 12),
+                        timer: PMTimeFormat.mmss(d.timer),
                         statusText: cleanText(d.statusText, 40),
                         teamLeft: team(d.teamLeft), teamRight: team(d.teamRight),
                         nextMatch: (S.showNextMatch && d.nextMatch) ? {
@@ -4358,6 +4398,7 @@
                     reactionBuffer = {};
                     if (floodStrikes >= 2) {
                         db.settings.reactionsOnStream = false;
+                        dirtyCfg = true;
                         const chk = $id('fan-react-onstream'); if (chk) chk.checked = false;
                         saveFanState();
                         note('⚠️ Effetto reazioni disattivato automaticamente: carico eccessivo');
@@ -4408,10 +4449,11 @@
                 renderQBadge();
             }
             function buildFanUrl() {
+                const release = '2.2.0-fan-turn';
                 if (location.protocol === 'file:') {
-                    return 'https://italianpaintball.github.io/regia/streaming.html?id=' + encodeURIComponent(matchBase) + '&fan=1';
+                    return 'https://ipbseries-scoreboard.github.io/paintball-manager/streaming.html?id=' + encodeURIComponent(matchBase) + '&fan=1&v=' + release;
                 }
-                return location.origin + location.pathname + '?id=' + encodeURIComponent(matchBase) + '&fan=1';
+                return location.origin + location.pathname + '?id=' + encodeURIComponent(matchBase) + '&fan=1&v=' + release;
             }
             function renderFanQrCode() {
                 const url = buildFanUrl();
@@ -4560,7 +4602,12 @@
                 const chk = $id('fan-react-onstream');
                 if (chk) chk.checked = !!db.settings.reactionsOnStream;
             }
-            function toggleReactionsOnStream(on) { db.settings.reactionsOnStream = !!on; floodStrikes = 0; saveFanState(); }
+            function toggleReactionsOnStream(on) {
+                db.settings.reactionsOnStream = !!on;
+                floodStrikes = 0;
+                dirtyCfg = true;
+                saveFanState();
+            }
             function resetReactions() { db.reactionTotals = {}; reactionBuffer = {}; saveFanState(); renderReactions(); }
 
             const SETTING_FIELDS = [
@@ -4646,6 +4693,9 @@
                 bindSettingsForm();
                 const fi = $id('fan-import-file');
                 if (fi) fi.addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) importStateFile(f); e.target.value = ''; });
+                let autoStart = false;
+                try { autoStart = localStorage.getItem(hostPreferenceKey()) === '1'; } catch (e) { }
+                if (autoStart && matchBase) setTimeout(startFanHost, 0);
             }
 
             // =========================================================
@@ -4669,10 +4719,19 @@
                 fanToastTimer = setTimeout(() => el.classList.remove('show'), 3500);
             }
             function setFanConn(msg) { const el = $id('fanp-conn'); if (el) el.textContent = msg; }
-            function setFanOffline() {
+            function setFanOffline(message) {
                 $id('fanp-offline').style.display = 'block';
                 ['fanp-poll-card', 'fanp-mvp-card', 'fanp-q-card', 'fanp-react-card'].forEach(i => $id(i).style.display = 'none');
-                setFanConn('NON COLLEGATO — nuovo tentativo tra poco...');
+                setFanConn(message || 'NON COLLEGATO — nuovo tentativo tra poco...');
+            }
+            function fanConnectionErrorMessage(error) {
+                const type = String(error && error.type || '').toLowerCase();
+                if (type === 'peer-unavailable') return 'DIRETTA PUBBLICO NON ATTIVA — nuovo tentativo...';
+                if (type === 'negotiation-failed' || type === 'webrtc') return 'RETE MOBILE BLOCCATA — RIPROVO CON IL RELAY...';
+                if (type === 'network' || type === 'socket-error' || type === 'socket-closed' || type === 'server-error') {
+                    return 'SERVIZIO DI CONNESSIONE NON RAGGIUNGIBILE — RIPROVO...';
+                }
+                return 'NON COLLEGATO — nuovo tentativo tra poco...';
             }
             function sendFan(msg) { try { if (fanConn && fanConn.open) fanConn.send(msg); } catch (e) { } }
 
@@ -4684,8 +4743,8 @@
                 fanConnected = false;
                 setFanConn('CONNESSIONE IN CORSO...');
                 clearTimeout(fanWatchdog);
-                fanWatchdog = setTimeout(() => { if (!fanConnected) { setFanOffline(); retryFan(); } }, 15000);
-                try { fanPeer = new Peer(); } catch (e) { setFanOffline(); retryFan(); return; }
+                fanWatchdog = setTimeout(() => { if (!fanConnected) { setFanOffline('CONNESSIONE LENTA — NUOVO TENTATIVO...'); retryFan(); } }, 15000);
+                try { fanPeer = new Peer(fanPeerOptions()); } catch (e) { setFanOffline('ERRORE CONFIGURAZIONE RETE — RIPROVO...'); retryFan(); return; }
                 fanPeer.on('open', () => {
                     fanConn = fanPeer.connect(fanRoomId(), { reliable: true });
                     fanConn.on('open', () => {
@@ -4699,12 +4758,10 @@
                     });
                     fanConn.on('data', handleHostMessage);
                     fanConn.on('close', () => { fanConnected = false; clearInterval(fanPingTimer); setFanOffline(); retryFan(); });
-                    fanConn.on('error', () => { });
+                    fanConn.on('error', (err) => { if (!fanConnected) setFanOffline(fanConnectionErrorMessage(err)); });
                 });
                 fanPeer.on('error', (err) => {
-                    const t = (err && err.type) || '';
-                    if (!fanConnected && t !== 'peer-unavailable') { /* la stanza può non esistere ancora */ }
-                    if (!fanConnected) { setFanOffline(); retryFan(); }
+                    if (!fanConnected) { setFanOffline(fanConnectionErrorMessage(err)); retryFan(); }
                 });
                 fanPeer.on('disconnected', () => { try { if (fanPeer && !fanPeer.destroyed) fanPeer.reconnect(); } catch (e) { } });
             }
@@ -4757,7 +4814,7 @@
                 $id('fanp-score-b').textContent = (mt.teamRight && mt.teamRight.score) || 0;
                 if (mt.teamLeft && /^#[0-9a-fA-F]{3,8}$/.test(mt.teamLeft.color || '')) $id('fanp-score-a').style.color = mt.teamLeft.color;
                 if (mt.teamRight && /^#[0-9a-fA-F]{3,8}$/.test(mt.teamRight.color || '')) $id('fanp-score-b').style.color = mt.teamRight.color;
-                $id('fanp-timer').textContent = mt.timer || '--:--';
+                $id('fanp-timer').textContent = PMTimeFormat.mmss(mt.timer, '--:--');
                 $id('fanp-status').textContent = mt.statusText || '';
                 const nx = $id('fanp-next');
                 if (mt.nextMatch) { nx.style.display = 'block'; nx.textContent = '⏭ Prossimo: ' + mt.nextMatch.teamA + ' vs ' + mt.nextMatch.teamB + (mt.nextMatch.time ? ' (ore ' + mt.nextMatch.time + ')' : ''); }
@@ -4932,7 +4989,7 @@
 
             // API pubblica (usata dai bottoni del pannello)
             return {
-                togglePanel, showTab, startHost: startFanHost, restartHost: startFanHost, stopHost: () => stopFanHost(false),
+                togglePanel, showTab, startHost: startFanHost, restartHost: startFanHost, stopHost: () => stopFanHost(false, false),
                 exportState, resetState, copyUrl, openFanPage,
                 uiCreatePoll, createPrediction, pollAction,
                 uiCreateMvp, mvpAction, prefillMvpTeams,

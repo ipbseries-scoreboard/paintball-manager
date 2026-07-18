@@ -8,7 +8,8 @@
     <!-- PeerJS CDN -->
     <script src="lib/peerjs.min.js"></script>
     <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');</script>
-    <script src="pm-client.js?v=2.1.1-controller-cloud"></script>
+    <script src="pm-client.js?v=2.2.0-fan-turn"></script>
+    <script src="time-format.js?v=1.0.0-mmss"></script>
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Roboto:wght@400;700&display=swap"
         rel="stylesheet">
@@ -379,10 +380,40 @@
             border-radius: 5px;
             pointer-events: none;
         }
+
+        /* Reazioni pubblico: ricevute direttamente dalla stanza di streaming. */
+        #fan-reactions-layer {
+            position: absolute;
+            inset: 0;
+            width: 1920px;
+            height: 1080px;
+            pointer-events: none;
+            z-index: 5400;
+            overflow: hidden;
+        }
+
+        .fan-float {
+            position: absolute;
+            bottom: 90px;
+            color: #fff;
+            font-family: var(--font-main);
+            font-size: 52px;
+            white-space: nowrap;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.65);
+            animation: fanFloatUp 2.5s ease-out forwards;
+        }
+
+        @keyframes fanFloatUp {
+            0% { transform: translateY(0) scale(.8); opacity: 0; }
+            15% { transform: translateY(-40px) scale(1.05); opacity: 1; }
+            100% { transform: translateY(-340px) scale(1); opacity: 0; }
+        }
     </style>
 </head>
 
 <body>
+
+    <div id="fan-reactions-layer" aria-hidden="true"></div>
 
     <div id="score-bar">
         <!-- TEAM A (LEFT) -->
@@ -546,6 +577,140 @@
         const urlParams = new URLSearchParams(window.location.search);
         const matchId = urlParams.get('matchId') || urlParams.get('id');
 
+        // --- Reazioni Pubblico da streaming.html ---
+        const FAN_REACTION_TYPES = ['🔥', '👏', '😮', '💪', '🎯'];
+        let fanReactionPeer = null;
+        let fanReactionConn = null;
+        let fanReactionRetry = null;
+        let fanReactionPing = null;
+        let fanReactionDelay = 3000;
+        let fanReactionEnabled = false;
+        let fanReactionBuffer = {};
+        let fanReactionTick = null;
+        let fanReactionFloatCount = 0;
+
+        function fanMatchBase(value) {
+            return String(value || '').trim().toUpperCase()
+                .replace(/^IPBA-/, '')
+                .replace(/[^A-Z0-9_-]/g, '')
+                .slice(0, 40);
+        }
+
+        function applyFanReactionConfig(config) {
+            fanReactionEnabled = !!(config && config.reactionsOnStream);
+            if (!fanReactionEnabled) {
+                fanReactionBuffer = {};
+                const layer = document.getElementById('fan-reactions-layer');
+                if (layer) layer.replaceChildren();
+                fanReactionFloatCount = 0;
+            }
+        }
+
+        function queueFanReaction(emoji, count) {
+            if (!fanReactionEnabled || FAN_REACTION_TYPES.indexOf(emoji) === -1) return;
+            const safeCount = Math.min(20, Math.max(1, parseInt(count, 10) || 1));
+            fanReactionBuffer[emoji] = Math.min(150, (fanReactionBuffer[emoji] || 0) + safeCount);
+            if (fanReactionTick) return;
+            fanReactionTick = setInterval(() => {
+                flushFanReactions();
+                if (!Object.values(fanReactionBuffer).some(n => n > 0) && fanReactionFloatCount === 0) {
+                    clearInterval(fanReactionTick);
+                    fanReactionTick = null;
+                }
+            }, 600);
+        }
+
+        function flushFanReactions() {
+            if (!fanReactionEnabled) { fanReactionBuffer = {}; return; }
+            const layer = document.getElementById('fan-reactions-layer');
+            if (!layer) return;
+            Object.entries(fanReactionBuffer).filter(([, count]) => count > 0).slice(0, 3).forEach(([emoji, count]) => {
+                fanReactionBuffer[emoji] = 0;
+                if (fanReactionFloatCount >= 8) return;
+                const el = document.createElement('div');
+                el.className = 'fan-float';
+                el.textContent = count > 2 ? `${emoji} ×${count}` : emoji;
+                el.style.left = `${30 + Math.random() * 40}%`;
+                fanReactionFloatCount++;
+                layer.appendChild(el);
+                setTimeout(() => {
+                    el.remove();
+                    fanReactionFloatCount = Math.max(0, fanReactionFloatCount - 1);
+                }, 2600);
+            });
+        }
+
+        function handleFanOverlayPacket(packet) {
+            if (!packet || typeof packet !== 'object') return;
+            if (packet.type === 'FAN_WELCOME' || packet.type === 'FAN_CONFIG_UPDATE') {
+                applyFanReactionConfig(packet.config);
+            } else if (packet.type === 'FAN_REACTION_EVENT') {
+                if (packet.showOnStream !== true) {
+                    applyFanReactionConfig({ reactionsOnStream: false });
+                } else {
+                    fanReactionEnabled = true;
+                    queueFanReaction(String(packet.emoji || ''), packet.count);
+                }
+            }
+        }
+
+        function scheduleFanReactionReconnect() {
+            clearTimeout(fanReactionRetry);
+            fanReactionRetry = setTimeout(startFanReactionClient, fanReactionDelay);
+            fanReactionDelay = Math.min(20000, Math.round(fanReactionDelay * 1.5));
+        }
+
+        function startFanReactionClient() {
+            clearTimeout(fanReactionRetry);
+            const base = fanMatchBase(matchId);
+            if (!base || !window.Peer) return;
+
+            clearInterval(fanReactionPing);
+            try {
+                if (fanReactionPeer) {
+                    if (fanReactionPeer.removeAllListeners) fanReactionPeer.removeAllListeners();
+                    fanReactionPeer.destroy();
+                }
+            } catch (e) { }
+
+            try { fanReactionPeer = new Peer(PMClient.getCloudPeerOptions()); }
+            catch (e) { scheduleFanReactionReconnect(); return; }
+
+            fanReactionPeer.on('open', () => {
+                fanReactionConn = fanReactionPeer.connect('IPBA-FAN-' + base, { reliable: true });
+                fanReactionConn.on('open', () => {
+                    fanReactionDelay = 3000;
+                    const session = 'OBS-' + Date.now().toString(36).toUpperCase();
+                    fanReactionConn.send({
+                        type: 'FAN_OVERLAY_HELLO',
+                        spectatorId: session,
+                        sessionId: session
+                    });
+                    fanReactionPing = setInterval(() => {
+                        try {
+                            if (fanReactionConn && fanReactionConn.open) {
+                                fanReactionConn.send({ type: 'FAN_PING', spectatorId: session, t: Date.now() });
+                            }
+                        } catch (e) { }
+                    }, 20000);
+                });
+                fanReactionConn.on('data', handleFanOverlayPacket);
+                fanReactionConn.on('close', scheduleFanReactionReconnect);
+                fanReactionConn.on('error', scheduleFanReactionReconnect);
+            });
+            fanReactionPeer.on('error', (error) => {
+                if (fanReactionConn && fanReactionConn.open && (!error || error.type !== 'peer-unavailable')) return;
+                scheduleFanReactionReconnect();
+            });
+            fanReactionPeer.on('disconnected', () => {
+                if (fanReactionConn && fanReactionConn.open) {
+                    try { if (!fanReactionPeer.destroyed) fanReactionPeer.reconnect(); } catch (e) { }
+                    return;
+                }
+                scheduleFanReactionReconnect();
+            });
+        }
+
         if (!matchId) {
             console.error("No Match ID provided in URL!");
             document.body.innerHTML += `
@@ -571,6 +736,7 @@
                 },
                 onData: handleData
             });
+            startFanReactionClient();
         }
 
         function cleanTeamName(name) {
@@ -685,10 +851,7 @@
         });
 
         function formatTime(seconds) {
-            if (typeof seconds === 'string') return seconds;
-            const minutes = Math.floor(seconds / 60);
-            const remainingSeconds = Math.floor(seconds % 60);
-            return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+            return PMTimeFormat.mmss(seconds);
         }
 
         function updateUI(state) {
@@ -733,12 +896,7 @@
             if (tRight.techUsed) techB.classList.add('active');
             else techB.classList.remove('active');
 
-            // Timer comes as string "MM:SS.ms" from index.html
-            // User requested only MM:SS
-            let timeStr = String(state.timer || "00:00");
-            if (timeStr.includes('.')) {
-                timeStr = timeStr.split('.')[0];
-            }
+            const timeStr = PMTimeFormat.mmss(state.timer);
             const timerEl = document.getElementById('timer');
             if (timerEl) {
                 timerEl.innerText = timeStr;
@@ -787,10 +945,7 @@
                 nmTeams.innerText = `${tAClean} vs ${tBClean}`;
 
                 if (state.nextMatch.isStarted) {
-                    let nmTimerStr = String(state.nextMatch.timer || "00:00");
-                    if (nmTimerStr.includes('.')) {
-                        nmTimerStr = nmTimerStr.split('.')[0];
-                    }
+                    const nmTimerStr = PMTimeFormat.mmss(state.nextMatch.timer);
                     nmTime.innerText = `[ ${state.nextMatch.scoreA} - ${state.nextMatch.scoreB} ] ${nmTimerStr}`;
                 } else {
                     nmTime.innerText = state.nextMatch.time || "";

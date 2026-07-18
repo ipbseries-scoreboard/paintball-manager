@@ -8,7 +8,8 @@
     <!-- PeerJS CDN -->
     <script src="lib/peerjs.min.js"></script>
     <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" crossorigin="anonymous"><\/script>');</script>
-    <script src="pm-client.js?v=2.1.1-controller-cloud"></script>
+    <script src="pm-client.js?v=2.2.0-fan-turn"></script>
+    <script src="time-format.js?v=1.0.0-mmss"></script>
     <!-- Google Fonts: Oswald, Bebas Neue, Orbitron, Black Ops One, Roboto -->
     <link
         href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Bebas+Neue&family=Orbitron:wght@600&family=Black+Ops+One&family=Roboto:wght@400;700&display=swap"
@@ -426,7 +427,7 @@
 
         .timer-display {
             font-size: 140px;
-            /* Reduced from 200px to fit 00:00.00 */
+            /* Compact width for the MM:SS clock */
             font-weight: bold;
             font-variant-numeric: tabular-nums;
             background: rgba(0, 0, 0, 0.6);
@@ -2224,7 +2225,7 @@
 
                 // Timer
                 const tDiv = document.getElementById('timer');
-                tDiv.innerText = d.timer;
+                tDiv.innerText = PMTimeFormat.mmss(d.timer);
                 if (d.isBreak) tDiv.classList.add('timer-break');
                 else tDiv.classList.remove('timer-break');
 
@@ -2367,7 +2368,7 @@
                     if (d.nextMatch.isStarted) {
                         spotNmScore.style.display = 'block';
                         spotNmScore.innerText = `[ ${d.nextMatch.scoreA} - ${d.nextMatch.scoreB} ]`;
-                        spotNmTimer.innerText = d.nextMatch.timer || "";
+                        spotNmTimer.innerText = PMTimeFormat.mmss(d.nextMatch.timer);
                         spotNmTimer.style.color = "#fbbf24";
                     } else {
                         spotNmScore.style.display = 'none';
@@ -2389,7 +2390,7 @@
                     /* nmLayer.style.display = 'flex'; */
                     document.getElementById('nm-team-a').innerText = d.nextMatch.teamA;
                     document.getElementById('nm-team-b').innerText = d.nextMatch.teamB;
-                    document.getElementById('nm-timer').innerText = d.timer;
+                    document.getElementById('nm-timer').innerText = PMTimeFormat.mmss(d.timer);
                 } else {
                     nmLayer.style.display = 'none';
                 }
@@ -2399,10 +2400,7 @@
         }
 
         function formatTimeSeconds(seconds) {
-            const minutes = Math.floor(seconds / 60);
-            const remainingSeconds = Math.floor(seconds % 60);
-            const milliseconds = Math.floor((seconds % 1) * 100);
-            return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
+            return PMTimeFormat.mmss(seconds);
         }
 
         // --- Screen Wake Lock ---

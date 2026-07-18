@@ -8,7 +8,8 @@
     <!-- PeerJS CDN -->
     <script src="lib/peerjs.min.js"></script>
     <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');</script>
-    <script src="pm-client.js?v=2.1.1-controller-cloud"></script>
+    <script src="pm-client.js?v=2.2.0-fan-turn"></script>
+    <script src="time-format.js?v=1.0.0-mmss"></script>
     <!-- Google Fonts -->
     <link
         href="https://fonts.googleapis.com/css2?family=Oswald:wght@700&family=Orbitron:wght@700&family=Bebas+Neue&family=Inter:wght@400;900&display=swap"
@@ -340,8 +341,7 @@
             const overlay = document.getElementById('sync-overlay');
             if (overlay) overlay.style.display = 'none';
 
-            let timerStr = d.timer || "00:00";
-            if (timerStr.includes('.')) timerStr = timerStr.split('.')[0];
+            const timerStr = PMTimeFormat.mmss(d.timer);
             document.getElementById('timer').innerText = timerStr;
 
             const limit = (d.styleConfig && d.styleConfig.limit) || 11;

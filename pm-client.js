@@ -69,6 +69,27 @@
         ]
     };
 
+    // Un'unica configurazione anche per i canali PeerJS secondari (Pubblico e
+    // overlay OBS). Senza TURN quei canali funzionano in LAN, ma possono fallire
+    // sulle reti mobili con NAT simmetrico anche quando il canale Regia è sano.
+    function getCloudPeerOptions() {
+        return {
+            secure: true,
+            host: '0.peerjs.com',
+            port: 443,
+            path: '/',
+            debug: 1,
+            config: {
+                iceServers: ICE_CONFIG.iceServers.map(function (server) {
+                    var copy = { urls: server.urls };
+                    if (server.username) copy.username = server.username;
+                    if (server.credential) copy.credential = server.credential;
+                    return copy;
+                })
+            }
+        };
+    }
+
     var WS_WATCHDOG_MS = 5000;     // il relay locale risponde subito o mai
     var PEER_WATCHDOG_MS = 9000;   // PeerJS/cloud hanno bisogno di più tempo
     var END_OF_CYCLE_PAUSE = 6000; // pausa a fine giro per non martellare i server
@@ -680,6 +701,7 @@
     global.PMClient = {
         connect: connect,
         normalizeId: normalizeId,
-        getUrlId: getUrlId
+        getUrlId: getUrlId,
+        getCloudPeerOptions: getCloudPeerOptions
     };
 })(window);

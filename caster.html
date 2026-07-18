@@ -8,7 +8,8 @@
     <!-- PeerJS CDN -->
     <script src="lib/peerjs.min.js"></script>
     <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');</script>
-    <script src="pm-client.js?v=2.1.1-controller-cloud"></script>
+    <script src="pm-client.js?v=2.2.0-fan-turn"></script>
+    <script src="time-format.js?v=1.0.0-mmss"></script>
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Roboto:wght@400;500;700&display=swap"
         rel="stylesheet">
     <style>
@@ -275,7 +276,7 @@
             document.getElementById('live-b').innerText = d.teamRight.name || '—';
             document.getElementById('live-score').innerText = (d.teamLeft.score || 0) + ' : ' + (d.teamRight.score || 0);
             const parts = [];
-            if (d.timer) parts.push('⏱ <b>' + esc(d.timer) + '</b>');
+            if (d.timer) parts.push('⏱ <b>' + esc(PMTimeFormat.mmss(d.timer)) + '</b>');
             if (d.statusText) parts.push(esc(d.statusText));
             if (d.phase) parts.push('Fase: <b>' + esc(d.phase) + '</b>');
             document.getElementById('live-sub').innerHTML = parts.join(' &nbsp;•&nbsp; ') || '—';

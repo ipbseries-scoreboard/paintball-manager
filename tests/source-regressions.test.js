@@ -12,6 +12,7 @@ const pmClient = fs.readFileSync(path.join(root, 'pm-client.js'), 'utf8');
 const relay = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
 const streaming = fs.readFileSync(path.join(root, 'streaming.html'), 'utf8');
 const board = fs.readFileSync(path.join(root, 'board.html'), 'utf8');
+const obsBar = fs.readFileSync(path.join(root, 'obs_bar.html'), 'utf8');
 
 test('schedule selection uses the safe resume path', () => {
     assert.match(control, /item\.onclick\s*=\s*\(e\)[\s\S]{0,180}selectScheduledMatch\(idx\)/);
@@ -24,12 +25,61 @@ test('skipped and unfinished matches do not affect standings', () => {
     assert.match(control, /item\.m\.savedState\.finished\s*&&\s*!item\.m\.savedState\.skipped/);
 });
 
-test('NO POINT changes match turn but never swaps A and B sides', () => {
+test('normal points alternate the double pit; NO POINT preserves A and B sides', () => {
+    const confirmStart = control.indexOf('function confirmPoint');
+    const confirmPoint = control.slice(confirmStart, control.indexOf('function executeTowel', confirmStart));
+    assert.match(confirmPoint, /schedulePitTransition\('ROTATE'\)/);
+
+    const rotateStart = control.indexOf('function rotateMatch');
+    const rotateMatch = control.slice(rotateStart, control.indexOf('function loadMatch', rotateStart));
+    assert.match(rotateMatch, /DoublePit\.getPeerIndex\(matches,\s*currIdx,\s*true\)/);
+    assert.match(rotateMatch, /saveMatchState\(currIdx,\s*false,\s*swapSide\)/);
+    assert.match(rotateMatch, /loadMatch\(nextSlotIdx,\s*true\)/);
+
     const noPointStart = control.indexOf('function handleNoPoint');
     const noPoint = control.slice(noPointStart, control.indexOf('function skipCurrentSlot', noPointStart));
     assert.match(noPoint, /rotateMatch\(false\)/);
     assert.doesNotMatch(noPoint, /basesSwapped\s*=\s*!state\.basesSwapped/);
     assert.match(control, /basesSwappedNext:\s*shouldSwapNext\s*\?\s*!state\.basesSwapped\s*:\s*state\.basesSwapped/);
+});
+
+test('OBS bar receives fan reactions and follows Streaming reaction settings', () => {
+    assert.match(streaming, /'FAN_OVERLAY_HELLO'/);
+    assert.match(streaming, /type:\s*'FAN_REACTION_EVENT'/);
+    assert.match(streaming, /reactionsOnStream:\s*!!\(S\.enabled\s*&&\s*S\.reactions\s*&&\s*S\.reactionsOnStream\)/);
+    assert.match(streaming, /fans\.forEach\(f\s*=>\s*\{\s*if\s*\(f\.isFan/);
+    assert.match(obsBar, /fanReactionPeer\.connect\('IPBA-FAN-'\s*\+\s*base/);
+    assert.match(obsBar, /type:\s*'FAN_OVERLAY_HELLO'/);
+    assert.match(obsBar, /packet\.type\s*===\s*'FAN_CONFIG_UPDATE'/);
+    assert.match(obsBar, /packet\.type\s*===\s*'FAN_REACTION_EVENT'/);
+    assert.match(obsBar, /fanReactionEnabled\s*=\s*!!\(config\s*&&\s*config\.reactionsOnStream\)/);
+});
+
+test('fan host, mobile page and OBS reactions share the TURN-enabled cloud config', () => {
+    assert.match(pmClient, /function getCloudPeerOptions\(\)/);
+    assert.match(pmClient, /getCloudPeerOptions:\s*getCloudPeerOptions/);
+    assert.match(streaming, /new Peer\(hostRoom,\s*fanPeerOptions\(\)\)/);
+    assert.match(streaming, /fanPeer\s*=\s*new Peer\(fanPeerOptions\(\)\)/);
+    assert.match(obsBar, /fanReactionPeer\s*=\s*new Peer\(PMClient\.getCloudPeerOptions\(\)\)/);
+    assert.match(streaming, /pm-client\.js\?v=2\.2\.0-fan-turn/);
+    assert.match(streaming, /pm_fan_host_autostart/);
+    assert.match(streaming, /fan=1&v=' \+ release/);
+});
+
+test('all visible score clocks use the shared MM:SS formatter', () => {
+    const timerPages = [
+        'index.html', 'board.html', 'streaming.html', 'obs_bar.html',
+        'referee.html', 'pit.html', 'ledwall.html', 'caster.html', 'NO SFONDO/streaming.html'
+    ];
+    timerPages.forEach(file => {
+        const source = fs.readFileSync(path.join(root, file), 'utf8');
+        assert.match(source, /time-format\.js\?v=1\.0\.0-mmss/, file);
+    });
+    assert.match(control, /function updateTimerDisplay\(\)[\s\S]{0,120}formatTimeSeconds\(state\.timer\)/);
+    assert.match(control, /function formatTimeSeconds\(seconds\)\s*\{\s*return PMTimeFormat\.mmss\(seconds\)/);
+    assert.doesNotMatch(board, /tDiv\.innerText\s*=\s*d\.timer/);
+    assert.doesNotMatch(streaming, /innerText\s*=\s*d\.timer/);
+    assert.doesNotMatch(obsBar, /innerText\s*=\s*state\.timer/);
 });
 
 test('runtime recovery persists pause origin and a live checkpoint', () => {
@@ -107,8 +157,8 @@ test('public iPhone viewers go straight to CLOUD and recover without churn', () 
     assert.match(pmClient, /if \(dataChannelAlive && err\.type !== 'browser-incompatible'\)[\s\S]{0,320}return;/);
     assert.match(pmClient, /visibilitychange[\s\S]{0,180}pageshow[\s\S]{0,180}online/);
     assert.match(pmClient, /function requestFreshState\(force\)/);
-    assert.match(board, /pm-client\.js\?v=2\.1\.1-controller-cloud/);
-    assert.match(streaming, /pm-client\.js\?v=2\.1\.1-controller-cloud/);
+    assert.match(board, /pm-client\.js\?v=2\.2\.0-fan-turn/);
+    assert.match(streaming, /pm-client\.js\?v=2\.2\.0-fan-turn/);
     assert.match(control, /function bindPeer\(p, tag, targetId\)[\s\S]{0,700}hasOpenDataChannels/);
     assert.match(control, /signalingOnlyError && !p\.destroyed && hasOpenDataChannels\(\)[\s\S]{0,420}return;/);
     assert.match(control, /p\.disconnected && !hasOpenDataChannels\(\)[\s\S]{0,180}scheduleCloudReconnect/);

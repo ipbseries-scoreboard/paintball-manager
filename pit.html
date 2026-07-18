@@ -8,7 +8,8 @@
     <!-- PeerJS CDN -->
     <script src="lib/peerjs.min.js"></script>
     <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');</script>
-    <script src="pm-client.js?v=2.1.1-controller-cloud"></script>
+    <script src="pm-client.js?v=2.2.0-fan-turn"></script>
+    <script src="time-format.js?v=1.0.0-mmss"></script>
     <!-- Google Fonts -->
     <link
         href="https://fonts.googleapis.com/css2?family=Oswald:wght@700&family=Orbitron:wght@700&family=Inter:wght@400;900&display=swap"
@@ -444,10 +445,7 @@
         function updateUI(data) {
             // Timer
             const timerEl = document.getElementById('timer');
-            let timerStr = data.timer || "00:00";
-            if (timerStr.includes('.')) {
-                timerStr = timerStr.split('.')[0];
-            }
+            const timerStr = PMTimeFormat.mmss(data.timer);
             timerEl.innerText = timerStr;
 
             // Timer Color/Warning
@@ -482,7 +480,7 @@
                 if (data.nextMatch.isStarted) {
                     nmScore.style.display = 'inline';
                     nmScore.innerText = `[ ${data.nextMatch.scoreA} - ${data.nextMatch.scoreB} ]`;
-                    nmTime.innerText = data.nextMatch.timer || "00:00";
+                    nmTime.innerText = PMTimeFormat.mmss(data.nextMatch.timer);
                     nmTime.style.color = 'var(--accent-color)';
                 } else {
                     nmScore.style.display = 'none';

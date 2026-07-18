@@ -8,7 +8,8 @@
     <title>Referee Field Control - IPBA</title>
     <script src="lib/peerjs.min.js"></script>
     <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" crossorigin="anonymous"><\/script>');</script>
-    <script src="pm-client.js?v=2.1.1-controller-cloud"></script>
+    <script src="pm-client.js?v=2.2.0-fan-turn"></script>
+    <script src="time-format.js?v=1.0.0-mmss"></script>
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@700&family=Inter:wght@400;900&display=swap"
         rel="stylesheet">
     <script>
@@ -1154,8 +1155,7 @@
                 document.getElementById('connection-status').classList.add('online');
 
                 // Timer format MM:SS (strip milliseconds)
-                const fullTime = data.timer || "00:00.00";
-                const mmss = fullTime.split('.')[0];
+                const mmss = PMTimeFormat.mmss(data.timer);
                 document.getElementById('timer').innerText = mmss;
 
                 // Haptic Feedback for Timer
@@ -1256,7 +1256,7 @@
                     }
 
                     if (data.nextMatch.isStarted) {
-                        nmTimer.innerText = data.nextMatch.timer || "";
+                        nmTimer.innerText = PMTimeFormat.mmss(data.nextMatch.timer);
                         nmTimer.style.color = "#fbbf24";
                     } else {
                         nmTimer.innerText = data.nextMatch.time || "--:--";

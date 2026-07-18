@@ -109,6 +109,20 @@
             }
         });
 
+        if (bestIndex !== -1) return bestIndex;
+
+        // Se dalla pagina Programma si apre manualmente uno slot più avanti,
+        // al termine bisogna recuperare il primo blocco ancora incompleto.
+        // Senza questo secondo passaggio la regia può dichiarare la fine del
+        // torneo e interrompere l'alternanza mentre una doppia pit è pendente.
+        matches.forEach((match, matchIndex) => {
+            if (!match || matchIndex === index || isFinished(match)) return;
+            if (match.slotOrder < bestSlotOrder || (match.slotOrder === bestSlotOrder && (bestIndex === -1 || matchIndex < bestIndex))) {
+                bestSlotOrder = match.slotOrder;
+                bestIndex = matchIndex;
+            }
+        });
+
         return bestIndex;
     }
 

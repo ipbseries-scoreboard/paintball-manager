@@ -33,6 +33,7 @@
     <!-- PeerJS: copia locale (funziona senza internet), CDN solo come riserva -->
     <script src="lib/peerjs.min.js"></script>
     <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" crossorigin="anonymous"><\/script>');</script>
+    <script src="time-format.js?v=1.0.0-mmss"></script>
     <!-- Google Fonts -->
     <link
         href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Bebas+Neue&family=Orbitron:wght@600&family=Black+Ops+One&family=Roboto:wght@400;700&display=swap"
@@ -4220,7 +4221,7 @@
             }
 
             function updateTimerDisplay() {
-                const timeStr = formatTimeMs(state.timer);
+                const timeStr = formatTimeSeconds(state.timer);
                 const mainDisp = document.getElementById('game-timer');
                 const breakDisp = document.getElementById('break-timer');
 
@@ -4902,9 +4903,9 @@
 
                     playPointSound();
 
-                    const timeStr = formatTimeMs(state.timer);
+                    const timeStr = formatTimeSeconds(state.timer);
                     const msg = `MAJOR PENALTY < 60s: PUNTO AUTOMATICO A ${state.teams[opponentId].name}. Tempo rimanente: ${timeStr}`;
-                    log(msg);
+                    log(`${msg} (preciso: ${formatTimeMs(state.timer).trim()})`);
                     speak("Punto Automatico. Rotazione.", "Automatic Point. Rotation.");
                     alert(msg);
 
@@ -5310,7 +5311,7 @@
                 resetAudioFlags();
                 if (state.mode === 'POINT' || state.mode === 'OVERTIME') state.gameTimeRemaining = state.timer;
                 updateTimerDisplay();
-                log(`TIMER EDIT MANUALE: ${delta > 0 ? '+' : ''}${delta}s. Ora: ${formatTimeSeconds(state.timer)}`);
+                log(`TIMER EDIT MANUALE: ${delta > 0 ? '+' : ''}${delta}s. Ora: ${formatTimeMs(state.timer).trim()}`);
                 if (state.tournament.active) saveMatchState(state.tournament.currentIndex, null, false);
             }
 
@@ -6209,10 +6210,7 @@
                 }, 2000);
             }
             function formatTimeSeconds(seconds) {
-                const minutes = Math.floor(seconds / 60);
-                const remainingSeconds = Math.floor(seconds % 60);
-                const milliseconds = Math.floor((seconds % 1) * 100);
-                return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
+                return PMTimeFormat.mmss(seconds);
             }
 
 
@@ -6765,7 +6763,7 @@
             document.getElementById('btn-action-left').addEventListener('click', () => handleSmartAction('left')); document.getElementById('btn-action-right').addEventListener('click', () => handleSmartAction('right'));
             document.getElementById('btn-point-left').addEventListener('click', () => handleTeamAction('left', 'point')); document.getElementById('btn-point-right').addEventListener('click', () => handleTeamAction('right', 'point'));
             const tm = document.getElementById('timer-edit-modal');
-            document.getElementById('game-timer').addEventListener('dblclick', () => { tm.style.display = 'flex'; document.getElementById('edit-min').value = Math.floor(state.timer / 60); document.getElementById('edit-sec').value = (state.timer % 60).toString().padStart(2, '0'); });
+            document.getElementById('game-timer').addEventListener('dblclick', () => { tm.style.display = 'flex'; document.getElementById('edit-min').value = Math.floor(state.timer / 60); document.getElementById('edit-sec').value = Math.floor(state.timer % 60).toString().padStart(2, '0'); });
             document.getElementById('cancel-edit-btn').addEventListener('click', () => tm.style.display = 'none');
             document.getElementById('confirm-edit-btn').addEventListener('click', () => {
                 const minutes = Math.max(0, parseInt(document.getElementById('edit-min').value, 10) || 0);
