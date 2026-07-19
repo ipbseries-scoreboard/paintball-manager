@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "team": {
+    "id": "5",
+    "name": "TEAM 5",
+    "companyName": "",
+    "companyCode": "",
+    "originalLogoUrl": "",
+    "customLogoUrl": "",
+    "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=5",
+    "title": "ROSTER",
+    "primaryColor": "#22d3ee",
+    "secondaryColor": "#fbbf24",
+    "fontFamily": "Oswald"
+  },
+  "players": [],
+  "updatedAt": 1784407282844,
+  "sourceUpdatedAt": 1784407282844
+}

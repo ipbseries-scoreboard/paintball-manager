@@ -1,0 +1,548 @@
+{
+  "schemaVersion": 1,
+  "team": {
+    "id": "2",
+    "name": "PD SAYNTS",
+    "companyName": "S.S. DILETTANTISTICA FIDASC SPORTS INVESTMENTS",
+    "companyCode": "2671",
+    "originalLogoUrl": "https://www.ipba.it/public/team_2/profilo/thumb/2024100810443973.jpg",
+    "customLogoUrl": "",
+    "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=2",
+    "title": "ROSTER",
+    "primaryColor": "#22d3ee",
+    "secondaryColor": "#fbbf24",
+    "fontFamily": "Oswald"
+  },
+  "players": [
+    {
+      "playerKey": "TEAM-2_PLAYER-1129",
+      "source": {
+        "type": "IPBA",
+        "playerId": "1129",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=1129",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_1129/profilo/thumb/20250314184434714.jpg"
+      },
+      "originalData": {
+        "fullName": "COSTA CHRISTOPHER",
+        "number": "9",
+        "role": "FRONT",
+        "age": "26"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 1,
+        "row": "AUTO",
+        "rowPosition": 1
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "customImageStorageKey": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 72,
+        "cropTop": 0,
+        "cropBottom": 12,
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-2_PLAYER-601",
+      "source": {
+        "type": "IPBA",
+        "playerId": "601",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=601",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_601/profilo/thumb/2025032812435452.jpg"
+      },
+      "originalData": {
+        "fullName": "CUMERLATO PAOLO",
+        "number": "88",
+        "role": "MID",
+        "age": "43"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 2,
+        "row": "AUTO",
+        "rowPosition": 2
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "customImageStorageKey": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 72,
+        "cropTop": 0,
+        "cropBottom": 12,
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-2_PLAYER-958",
+      "source": {
+        "type": "IPBA",
+        "playerId": "958",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=958",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_958/profilo/thumb/20250315122157.jpg"
+      },
+      "originalData": {
+        "fullName": "LEONARDI NICOLA",
+        "number": "4",
+        "role": "MID",
+        "age": "26"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 3,
+        "row": "AUTO",
+        "rowPosition": 3
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "customImageStorageKey": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 72,
+        "cropTop": 0,
+        "cropBottom": 12,
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-2_PLAYER-15",
+      "source": {
+        "type": "IPBA",
+        "playerId": "15",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=15",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_15/profilo/thumb/20250325173751604.jpg"
+      },
+      "originalData": {
+        "fullName": "LEVORATO ENRICO",
+        "number": "77",
+        "role": "MID",
+        "age": "35"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 4,
+        "row": "AUTO",
+        "rowPosition": 4
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "customImageStorageKey": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 72,
+        "cropTop": 0,
+        "cropBottom": 12,
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-2_PLAYER-1106",
+      "source": {
+        "type": "IPBA",
+        "playerId": "1106",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=1106",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_1106/profilo/thumb/20250314183937483.jpg"
+      },
+      "originalData": {
+        "fullName": "LORENZI FEDERICO",
+        "number": "2",
+        "role": "FRONT",
+        "age": "25"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 5,
+        "row": "AUTO",
+        "rowPosition": 5
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "customImageStorageKey": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 72,
+        "cropTop": 0,
+        "cropBottom": 12,
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-2_PLAYER-23",
+      "source": {
+        "type": "IPBA",
+        "playerId": "23",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=23",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_23/profilo/thumb/20250321122858257.png"
+      },
+      "originalData": {
+        "fullName": "MANZONI MARCO",
+        "number": "30",
+        "role": "BACK",
+        "age": "34"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 6,
+        "row": "AUTO",
+        "rowPosition": 6
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "customImageStorageKey": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 72,
+        "cropTop": 0,
+        "cropBottom": 12,
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-2_PLAYER-565",
+      "source": {
+        "type": "IPBA",
+        "playerId": "565",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=565",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_565/profilo/thumb/20250328124329990.jpg"
+      },
+      "originalData": {
+        "fullName": "MENEGON MATTEO",
+        "number": "6",
+        "role": "FRONT",
+        "age": "33"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 7,
+        "row": "AUTO",
+        "rowPosition": 7
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "customImageStorageKey": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 72,
+        "cropTop": 0,
+        "cropBottom": 12,
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-2_PLAYER-1209",
+      "source": {
+        "type": "IPBA",
+        "playerId": "1209",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=1209",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_1209/profilo/thumb/20260403165405707.jpg"
+      },
+      "originalData": {
+        "fullName": "SCABORO GABRIEL",
+        "number": "14",
+        "role": "FRONT",
+        "age": "15"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 8,
+        "row": "AUTO",
+        "rowPosition": 8
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "customImageStorageKey": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 72,
+        "cropTop": 0,
+        "cropBottom": 12,
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-2_PLAYER-1206",
+      "source": {
+        "type": "IPBA",
+        "playerId": "1206",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=1206",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_1206/profilo/thumb/20260419105512292.jpg"
+      },
+      "originalData": {
+        "fullName": "SPERANZA FILIPPO",
+        "number": "12",
+        "role": "",
+        "age": "42"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 9,
+        "row": "AUTO",
+        "rowPosition": 9
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "customImageStorageKey": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 72,
+        "cropTop": 0,
+        "cropBottom": 12,
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-2_PLAYER-1039",
+      "source": {
+        "type": "IPBA",
+        "playerId": "1039",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=1039",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_1039/profilo/thumb/20250321122931904.png"
+      },
+      "originalData": {
+        "fullName": "TOMIELLO ANDREA",
+        "number": "8",
+        "role": "BACK",
+        "age": "27"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 10,
+        "row": "AUTO",
+        "rowPosition": 10
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "customImageStorageKey": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 72,
+        "cropTop": 0,
+        "cropBottom": 12,
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-2_PLAYER-1016",
+      "source": {
+        "type": "IPBA",
+        "playerId": "1016",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=1016",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_1016/profilo/thumb/20250314182201408.jpg"
+      },
+      "originalData": {
+        "fullName": "VILLA FILIPPO",
+        "number": "3",
+        "role": "MID",
+        "age": "26"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 11,
+        "row": "AUTO",
+        "rowPosition": 11
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "customImageStorageKey": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 72,
+        "cropTop": 0,
+        "cropBottom": 12,
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-2_PLAYER-930",
+      "source": {
+        "type": "IPBA",
+        "playerId": "930",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=930",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_930/profilo/thumb/20250325173826892.jpg"
+      },
+      "originalData": {
+        "fullName": "ZAMBON ENRICO",
+        "number": "5",
+        "role": "MID",
+        "age": "27"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 12,
+        "row": "AUTO",
+        "rowPosition": 12
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "customImageStorageKey": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 72,
+        "cropTop": 0,
+        "cropBottom": 12,
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    }
+  ],
+  "updatedAt": 1784407282813,
+  "sourceUpdatedAt": 1784407282811
+}
