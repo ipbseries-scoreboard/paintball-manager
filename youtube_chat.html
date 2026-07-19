@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Live Chat Overlay</title>
+    <script src="lib/peerjs.min.js"></script>
+    <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');</script>
+    <script src="pm-client.js?v=2.2.0-fan-turn"></script>
+    <script src="youtube-chat.js?v=1.0.0"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --cyan:#22d3ee; --amber:#fbbf24; --panel:rgba(15,23,42,.92); }
+        * { box-sizing: border-box; }
+        html, body { width:1920px; height:1080px; margin:0; overflow:hidden; background:transparent; color:#fff; font-family:'Roboto',sans-serif; }
+        #yt-full-chat {
+            position:absolute; right:38px; bottom:58px; width:430px; max-height:510px; padding:14px;
+            border:1px solid rgba(34,211,238,.65); border-radius:16px; background:var(--panel);
+            box-shadow:0 0 32px rgba(34,211,238,.18); opacity:0; transform:translateX(35px);
+            transition:opacity .35s ease,transform .35s ease; pointer-events:none;
+        }
+        body.side-left #yt-full-chat { right:auto; left:38px; transform:translateX(-35px); }
+        #yt-full-chat.show { opacity:1; transform:translateX(0); }
+        .yt-heading { display:flex; align-items:center; gap:9px; margin-bottom:9px; color:var(--cyan); font-family:'Oswald',sans-serif; font-size:19px; letter-spacing:2px; }
+        .yt-live-dot { width:9px; height:9px; border-radius:50%; background:#ef4444; box-shadow:0 0 10px #ef4444; }
+        #yt-chat-list { display:flex; flex-direction:column; gap:7px; }
+        .yt-line { display:grid; grid-template-columns:34px minmax(0,1fr); gap:8px; padding:7px 8px; border-radius:10px; background:rgba(30,41,59,.72); animation:chatIn .3s ease both; }
+        .yt-line.super { border:1px solid rgba(251,191,36,.75); background:rgba(120,53,15,.7); }
+        .yt-avatar { width:32px; height:32px; border-radius:50%; object-fit:cover; background:#0b1220; }
+        .yt-avatar.placeholder { display:flex; align-items:center; justify-content:center; color:#fff; font-family:'Oswald',sans-serif; font-size:15px; background:#334155; }
+        .yt-author { color:var(--amber); font-family:'Oswald',sans-serif; font-size:15px; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .yt-role { margin-left:5px; color:var(--cyan); font-size:10px; }
+        .yt-text { margin-top:2px; color:#f8fafc; font-size:14px; line-height:1.25; overflow-wrap:anywhere; }
+        .yt-amount { color:#fde68a; font-weight:700; margin-right:5px; }
+        #yt-highlight {
+            position:absolute; left:50%; bottom:68px; width:min(760px,calc(100% - 100px)); padding:16px 22px;
+            display:grid; grid-template-columns:58px minmax(0,1fr); gap:14px; align-items:center;
+            border:2px solid var(--cyan); border-radius:16px; background:linear-gradient(135deg,rgba(8,47,73,.96),rgba(15,23,42,.97));
+            box-shadow:0 0 38px rgba(34,211,238,.32); opacity:0; transform:translate(-50%,35px) scale(.97);
+            transition:opacity .4s ease,transform .4s ease,left .35s ease,width .35s ease; pointer-events:none;
+        }
+        body.full-chat-visible #yt-highlight { left:calc(50% - 240px); width:min(700px,calc(100% - 540px)); }
+        body.side-left.full-chat-visible #yt-highlight { left:calc(50% + 240px); }
+        #yt-highlight.show { opacity:1; transform:translate(-50%,0) scale(1); }
+        #yt-highlight-avatar { width:56px; height:56px; border-radius:50%; object-fit:cover; background:#334155; }
+        #yt-highlight-author { color:var(--amber); font-family:'Oswald',sans-serif; font-size:21px; letter-spacing:.5px; }
+        #yt-highlight-text { margin-top:2px; color:#fff; font-size:22px; line-height:1.25; overflow-wrap:anywhere; }
+        #yt-status { position:absolute; top:10px; left:10px; padding:6px 10px; border-radius:8px; background:rgba(0,0,0,.75); color:#94a3b8; font:14px monospace; display:none; }
+        body.debug #yt-status { display:block; }
+        @keyframes chatIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+    </style>
+</head>
+<body>
+    <div id="yt-status">CONNESSIONE...</div>
+    <section id="yt-full-chat" aria-live="polite">
+        <div class="yt-heading"><span class="yt-live-dot"></span> YOUTUBE LIVE CHAT</div>
+        <div id="yt-chat-list"></div>
+    </section>
+    <section id="yt-highlight" aria-live="polite">
+        <img id="yt-highlight-avatar" alt="">
+        <div>
+            <div id="yt-highlight-author"></div>
+            <div id="yt-highlight-text"></div>
+        </div>
+    </section>
+
+    <script>
+        'use strict';
+        const params = new URLSearchParams(location.search);
+        const rawMatchId = params.get('matchId') || params.get('id') || '';
+        const matchBase = String(rawMatchId).trim().toUpperCase().replace(/^IPBA-/, '').replace(/[^A-Z0-9_-]/g, '').slice(0, 40);
+        if (params.get('side') === 'left') document.body.classList.add('side-left');
+        if (params.get('debug') === '1') document.body.classList.add('debug');
+
+        const statusEl = document.getElementById('yt-status');
+        const fullCard = document.getElementById('yt-full-chat');
+        const listEl = document.getElementById('yt-chat-list');
+        const highlightCard = document.getElementById('yt-highlight');
+        let peer = null, conn = null, retryTimer = null, pingTimer = null, retryDelay = 3000, highlightTimer = null;
+        let fullVisible = false, messages = [];
+
+        function setStatus(value) { statusEl.textContent = value; }
+        function roleLabel(m) {
+            if (m.isOwner) return 'CANALE';
+            if (m.isModerator) return 'MOD';
+            if (m.isMember) return 'MEMBRO';
+            if (m.isVerified) return 'VERIFICATO';
+            return '';
+        }
+        function avatarNode(message, className) {
+            if (message.avatarUrl) {
+                const img = document.createElement('img'); img.className = className; img.alt = ''; img.src = message.avatarUrl; return img;
+            }
+            const fallback = document.createElement('div'); fallback.className = className + ' placeholder'; fallback.textContent = message.author.slice(0, 1).toUpperCase(); return fallback;
+        }
+        function renderMessages(raw) {
+            messages = (Array.isArray(raw) ? raw : []).map(PMYouTubeChat.sanitizeOverlayMessage).filter(Boolean).slice(-8);
+            listEl.replaceChildren();
+            messages.forEach(message => {
+                const row = document.createElement('div'); row.className = 'yt-line' + (message.amount ? ' super' : '');
+                const avatar = avatarNode(message, 'yt-avatar');
+                const content = document.createElement('div');
+                const author = document.createElement('div'); author.className = 'yt-author'; author.textContent = message.author;
+                const role = roleLabel(message);
+                if (role) { const badge = document.createElement('span'); badge.className = 'yt-role'; badge.textContent = role; author.appendChild(badge); }
+                const text = document.createElement('div'); text.className = 'yt-text';
+                if (message.amount) { const amount = document.createElement('span'); amount.className = 'yt-amount'; amount.textContent = message.amount; text.appendChild(amount); }
+                text.appendChild(document.createTextNode(message.text));
+                content.append(author, text); row.append(avatar, content); listEl.appendChild(row);
+            });
+            fullCard.classList.toggle('show', fullVisible && messages.length > 0);
+            document.body.classList.toggle('full-chat-visible', fullVisible && messages.length > 0);
+        }
+        function hideHighlight() { clearTimeout(highlightTimer); highlightCard.classList.remove('show'); }
+        function showHighlight(packet) {
+            if (packet.showOverlay !== true) { hideHighlight(); return; }
+            const message = PMYouTubeChat.sanitizeOverlayMessage(packet.message);
+            if (!message) return;
+            const oldAvatar = document.getElementById('yt-highlight-avatar');
+            if (message.avatarUrl) { oldAvatar.src = message.avatarUrl; oldAvatar.style.visibility = 'visible'; }
+            else { oldAvatar.removeAttribute('src'); oldAvatar.style.visibility = 'hidden'; }
+            document.getElementById('yt-highlight-author').textContent = message.author + (roleLabel(message) ? ' · ' + roleLabel(message) : '');
+            document.getElementById('yt-highlight-text').textContent = (message.amount ? message.amount + ' · ' : '') + message.text;
+            clearTimeout(highlightTimer); highlightCard.classList.add('show');
+            const duration = Math.max(0, Math.min(60000, Number(packet.durationMs) || 0));
+            if (!packet.persistent && duration > 0) highlightTimer = setTimeout(hideHighlight, duration);
+        }
+        function handlePacket(packet) {
+            if (!packet || typeof packet !== 'object') return;
+            if (packet.type === 'YT_CHAT_SNAPSHOT') {
+                fullVisible = packet.visible === true; renderMessages(packet.messages);
+            } else if (packet.type === 'YT_CHAT_MODE') {
+                fullVisible = packet.visible === true; renderMessages(packet.messages);
+            } else if (packet.type === 'YT_CHAT_HIGHLIGHT') showHighlight(packet);
+            else if (packet.type === 'YT_CHAT_HIDE') hideHighlight();
+        }
+        function retry() {
+            clearTimeout(retryTimer); setStatus('RICONNESSIONE...');
+            retryTimer = setTimeout(connect, retryDelay); retryDelay = Math.min(5000, Math.round(retryDelay * 1.35));
+        }
+        function connect() {
+            clearTimeout(retryTimer); clearInterval(pingTimer);
+            if (!matchBase || !window.Peer || !window.PMClient) { setStatus('MATCH ID MANCANTE'); return; }
+            try { if (peer) { if (peer.removeAllListeners) peer.removeAllListeners(); peer.destroy(); } } catch (e) { }
+            try { peer = new Peer(PMClient.getCloudPeerOptions()); } catch (e) { retry(); return; }
+            peer.on('open', () => {
+                conn = peer.connect('IPBA-FAN-' + matchBase, { reliable: true });
+                conn.on('open', () => {
+                    retryDelay = 3000; setStatus('🟢 COLLEGATA');
+                    const session = 'YT-' + Date.now().toString(36).toUpperCase();
+                    conn.send({ type: 'FAN_OVERLAY_HELLO', spectatorId: session, sessionId: session, overlayKind: 'youtube-chat' });
+                    pingTimer = setInterval(() => { try { if (conn && conn.open) conn.send({ type: 'FAN_PING', spectatorId: session, t: Date.now() }); } catch (e) { } }, 20000);
+                });
+                conn.on('data', handlePacket); conn.on('close', retry); conn.on('error', retry);
+            });
+            peer.on('error', error => { if (conn && conn.open && (!error || error.type !== 'peer-unavailable')) return; retry(); });
+            peer.on('disconnected', () => { if (conn && conn.open) { try { if (!peer.destroyed) peer.reconnect(); } catch (e) { } } else retry(); });
+        }
+        connect();
+    </script>
+</body>
+</html>

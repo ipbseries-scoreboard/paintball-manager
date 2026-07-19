@@ -11,6 +11,7 @@
     <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');</script>
     <script src="pm-client.js?v=2.2.0-fan-turn"></script>
     <script src="time-format.js?v=1.0.0-mmss"></script>
+    <script src="youtube-chat.js?v=1.0.0"></script>
     <!-- QRCode.js: copia locale, CDN come riserva (per il QR del pubblico) -->
     <script src="lib/qrcode.min.js"></script>
     <script>window.QRCode || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" crossorigin="anonymous"><\/script>');</script>
@@ -767,6 +768,22 @@
             position: relative;
         }
 
+        .roster-live-controls {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 10px;
+            padding: 16px;
+            border: 1px solid rgba(34, 211, 238, .45);
+            border-radius: 14px;
+            background: rgba(2, 6, 23, .8);
+        }
+        .roster-live-controls button { font-size: 15px; padding: 10px 8px; border-radius: 8px; }
+        #roster-live-status { grid-column: 1 / -1; color: #cbd5e1; font-size: 15px; text-align: center; }
+        #roster-overlay.modern-roster { background: transparent; backdrop-filter: none; padding: 0; }
+        #roster-overlay.modern-roster .roster-title-container { display: none; }
+        #roster-overlay.modern-roster .iframe-scale-wrapper { margin: 0; border-radius: 0; background: transparent; box-shadow: none; }
+        #roster-overlay.modern-roster #roster-iframe { width: 1920px; height: 1080px; transform: none !important; }
+
         .fan-main-badge {
             position: absolute;
             top: -13px;
@@ -1368,6 +1385,14 @@
         .fan-pollbar { position: relative; background: #0b1220; border-radius: 6px; height: 26px; margin-top: 6px; overflow: hidden; }
         .fan-pollbar > div { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(34, 211, 238, 0.35); }
         .fan-pollbar span { position: relative; z-index: 1; display: flex; justify-content: space-between; padding: 2px 10px; font-size: 16px; }
+        .yt-admin-list { display: flex; flex-direction: column; gap: 10px; max-height: 590px; overflow-y: auto; padding-right: 6px; }
+        .yt-admin-message { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 10px; align-items: start; padding: 10px; border: 1px solid #334155; border-radius: 10px; background: rgba(15, 23, 42, .72); }
+        .yt-admin-avatar { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; background: #0b1220; }
+        .yt-admin-author { color: #fbbf24; font-family: 'Oswald', sans-serif; font-size: 18px; letter-spacing: .5px; }
+        .yt-admin-text { color: #f8fafc; font-size: 17px; line-height: 1.3; overflow-wrap: anywhere; }
+        .yt-admin-time { color: #64748b; font-size: 13px; margin-left: 8px; }
+        .yt-admin-role { display: inline-block; margin-left: 6px; color: #22d3ee; font-size: 13px; }
+        .yt-admin-empty { padding: 28px; text-align: center; color: #94a3b8; border: 1px dashed #334155; border-radius: 10px; }
         table.fan-table { width: 100%; border-collapse: collapse; font-size: 17px; }
         table.fan-table th { text-align: left; color: #94a3b8; font-weight: 500; padding: 4px 8px; border-bottom: 1px solid rgba(148,163,184,.3); }
         table.fan-table td { padding: 5px 8px; border-bottom: 1px dashed rgba(148,163,184,.15); }
@@ -1683,6 +1708,20 @@
                     style="color:var(--accent-color); font-size:60px; text-align:center; font-family:'Oswald',sans-serif;">
                     TEAMS
                     LIST</h1>
+                <div class="roster-live-controls">
+                    <button onclick="openRosterSetup('A')">⚙ SETUP ROSA A</button>
+                    <button onclick="openRosterSetup('B')">⚙ SETUP ROSA B</button>
+                    <button onclick="openRosterSetup('BOTH')">⚙ SETUP ENTRAMBE</button>
+                    <button onclick="showModernRoster('A')">MOSTRA ROSA A</button>
+                    <button onclick="showModernRoster('B')">MOSTRA ROSA B</button>
+                    <button onclick="showModernRoster('BOTH')">MOSTRA ENTRAMBE LE ROSE</button>
+                    <button onclick="hideModernRoster()">NASCONDI ROSE</button>
+                    <button onclick="sendModernRosterCommand('REPLAY_ANIMATION')">RIPRODUCI ANIMAZIONE</button>
+                    <button onclick="sendModernRosterCommand('REFRESH_ROSTER')">AGGIORNA ROSE</button>
+                    <button onclick="setModernRosterPreview(true)">MODALITÀ ANTEPRIMA</button>
+                    <button onclick="setModernRosterPreview(false)">MODALITÀ TRASPARENTE</button>
+                    <div id="roster-live-status">Seleziona un match per individuare automaticamente gli ID squadra.</div>
+                </div>
                 <div class="clan-grid" id="clan-grid-display">
                     <!-- Dynamic Grid -->
                 </div>
@@ -1778,6 +1817,7 @@
                     <button class="fan-tab-btn" data-tab="domande" onclick="FanModule.showTab('domande')">DOMANDE
                         <span class="fan-badge" id="fan-tab-qbadge" style="display:none;">0</span></button>
                     <button class="fan-tab-btn" data-tab="reazioni" onclick="FanModule.showTab('reazioni')">REAZIONI</button>
+                    <button class="fan-tab-btn" data-tab="youtube" onclick="FanModule.showTab('youtube')">YOUTUBE</button>
                     <button class="fan-tab-btn" data-tab="impostazioni" onclick="FanModule.showTab('impostazioni')">IMPOSTAZIONI</button>
                 </div>
                 <div class="stats-scroll-area">
@@ -1897,6 +1937,52 @@
                                 <button class="fan-btn danger" onclick="FanModule.resetReactions()">AZZERA CONTATORI</button>
                             </div>
                             <div class="fan-muted">Effetto leggero: le reazioni salgono dal basso, aggregate e limitate. Si spegne da solo in caso di flood.</div>
+                        </div>
+                    </div>
+                    <!-- TAB YOUTUBE LIVE CHAT -->
+                    <div class="fan-tab" id="fan-tab-youtube" style="display:none;">
+                        <div class="fan-grid2">
+                            <div class="fan-box">
+                                <h3>YouTube Live Chat</h3>
+                                <label>Link live o Video ID
+                                    <input type="text" id="yt-video-source" placeholder="https://www.youtube.com/watch?v=...">
+                                </label>
+                                <label>Chiave YouTube Data API
+                                    <input type="password" id="yt-api-key" autocomplete="off" placeholder="AIza...">
+                                </label>
+                                <div class="fan-actions">
+                                    <button class="fan-btn ok" onclick="FanModule.youtubeConnect()">▶ COLLEGA CHAT</button>
+                                    <button class="fan-btn danger" onclick="FanModule.youtubeDisconnect()">⏹ SCOLLEGA</button>
+                                    <button class="fan-btn" onclick="FanModule.youtubeTestMessage()">🧪 PROVA OVERLAY</button>
+                                </div>
+                                <div class="fan-line">Stato: <b id="yt-chat-status">NON COLLEGATA</b></div>
+                                <div class="fan-line">Diretta: <span id="yt-chat-title">—</span></div>
+                                <div class="fan-muted">La chiave resta soltanto in questo browser e non viene inviata a board o OBS. Limitala a YouTube Data API e ai tuoi domini.</div>
+
+                                <h3 style="margin-top:18px;">Overlay chat completo</h3>
+                                <div class="fan-actions">
+                                    <button class="fan-btn ok" onclick="FanModule.youtubeFullChat(true)">💬 MOSTRA CHAT</button>
+                                    <button class="fan-btn danger" onclick="FanModule.youtubeFullChat(false)">NASCONDI CHAT</button>
+                                </div>
+                                <input id="yt-overlay-url" readonly value="">
+                                <div class="fan-actions">
+                                    <button class="fan-btn" onclick="FanModule.youtubeCopyOverlayUrl()">📋 COPIA URL OVERLAY</button>
+                                    <button class="fan-btn" onclick="FanModule.youtubeOpenOverlay()">🔗 APRI OVERLAY</button>
+                                </div>
+
+                                <h3 style="margin-top:18px;">Messaggio evidenziato</h3>
+                                <label><input type="checkbox" id="yt-show-board" checked> Mostra anche su board.html</label>
+                                <label><input type="checkbox" id="yt-show-overlay" checked> Mostra su youtube_chat.html</label>
+                                <label>Durata automatica (secondi): <input type="number" id="yt-highlight-sec" min="3" max="60" value="5"></label>
+                                <div class="fan-actions">
+                                    <button class="fan-btn danger" onclick="FanModule.youtubeHideHighlight()">NASCONDI MESSAGGIO</button>
+                                </div>
+                                <div class="fan-muted" id="yt-highlight-help">Usa “MOSTRA 5s” per la durata automatica oppure “FISSO” per lasciarlo visibile finché non premi NASCONDI.</div>
+                            </div>
+                            <div class="fan-box">
+                                <h3>Anteprima messaggi</h3>
+                                <div id="yt-chat-preview" class="yt-admin-list"><div class="yt-admin-empty">Collega una diretta YouTube per vedere i messaggi.</div></div>
+                            </div>
                         </div>
                     </div>
                     <!-- TAB IMPOSTAZIONI -->
@@ -2765,6 +2851,7 @@
             const backBtn = document.getElementById('roster-back-btn');
 
             if (!showRoster && url) {
+                over.classList.remove('modern-roster');
                 rosterOpenedFromClans = fromClanList;
                 if (backBtn) backBtn.style.display = fromClanList ? 'inline-block' : 'none';
                 // Sanitize URL
@@ -2788,6 +2875,7 @@
             } else {
                 over.style.display = 'none';
                 iframe.src = "";
+                over.classList.remove('modern-roster');
                 showRoster = false;
             }
         }
@@ -3011,8 +3099,104 @@
         }
 
         // --- FULL OVERLAY LOGIC ---
+        let modernRosterPreview = false;
+
+        function extractRosterTeamId(url) {
+            const value = String(url || '').trim();
+            if (!value) return '';
+            try {
+                const parsed = new URL(value, location.href);
+                const id = parsed.searchParams.get('id');
+                return id && /^[A-Za-z0-9_-]{1,40}$/.test(id) ? id : '';
+            } catch (error) {
+                const match = value.match(/[?&]id=([A-Za-z0-9_-]{1,40})/i);
+                return match ? match[1] : '';
+            }
+        }
+
+        function rosterClanForTeam(teamName) {
+            const wanted = String(teamName || '').trim().toLowerCase().replace(/\s+/g, ' ');
+            if (!wanted) return null;
+            return clanConfig.find(clan => String(clan.name || '').trim().toLowerCase().replace(/\s+/g, ' ') === wanted) || null;
+        }
+
+        function currentRosterContext() {
+            const nameA = currentData && currentData.teamLeft && currentData.teamLeft.name || '';
+            const nameB = currentData && currentData.teamRight && currentData.teamRight.name || '';
+            const clanA = rosterClanForTeam(nameA), clanB = rosterClanForTeam(nameB);
+            return {
+                nameA, nameB,
+                idA: extractRosterTeamId(clanA && clanA.rosterUrl),
+                idB: extractRosterTeamId(clanB && clanB.rosterUrl),
+                fallbackA: clanA && clanA.rosterUrl || '', fallbackB: clanB && clanB.rosterUrl || ''
+            };
+        }
+
+        function updateModernRosterStatus() {
+            const el = document.getElementById('roster-live-status');
+            if (!el) return;
+            const ctx = currentRosterContext();
+            const a = ctx.nameA ? ctx.nameA + ': ' + (ctx.idA ? 'ID ' + ctx.idA : 'ID ROSA MANCANTE') : 'Squadra A non disponibile';
+            const b = ctx.nameB ? ctx.nameB + ': ' + (ctx.idB ? 'ID ' + ctx.idB : 'ID ROSA MANCANTE') : 'Squadra B non disponibile';
+            el.textContent = a + ' · ' + b;
+        }
+
+        function modernRosterUrl(mode) {
+            const ctx = currentRosterContext(), query = new URLSearchParams();
+            if (mode === 'A') { if (!ctx.idA) return ''; query.set('id', ctx.idA); }
+            else if (mode === 'B') { if (!ctx.idB) return ''; query.set('id', ctx.idB); }
+            else if (ctx.idA && ctx.idB) { query.set('idA', ctx.idA); query.set('idB', ctx.idB); query.set('mode', 'dual'); }
+            else if (ctx.idA || ctx.idB) query.set('id', ctx.idA || ctx.idB);
+            if (![...query.keys()].length) return '';
+            query.set('autoplay', '1');
+            if (modernRosterPreview) query.set('preview', '1');
+            return 'roster-lineup.html?' + query.toString();
+        }
+
+        function showModernRoster(mode) {
+            const ctx = currentRosterContext(), url = modernRosterUrl(mode);
+            if (!url) {
+                const fallback = mode === 'B' ? ctx.fallbackB : ctx.fallbackA;
+                if (fallback) { toggleRoster(fallback, mode === 'B' ? ctx.nameB : ctx.nameA, true); closeClanOverlay(); return; }
+                alert('Nessun ID rosa configurato. Inserisci nel setup squadre un URL IPBA del tipo video-team-giocatori.aspx?id=2.');
+                return;
+            }
+            const overlay = document.getElementById('roster-overlay'), iframe = document.getElementById('roster-iframe');
+            overlay.classList.add('modern-roster'); iframe.src = url; overlay.style.display = 'flex'; showRoster = true;
+            document.getElementById('roster-team-name').textContent = mode === 'BOTH' ? 'ROSE SQUADRE' : (mode === 'B' ? ctx.nameB : ctx.nameA);
+            const back = document.getElementById('roster-back-btn'); if (back) back.style.display = 'none';
+            closeClanOverlay();
+        }
+
+        function hideModernRoster() {
+            const overlay = document.getElementById('roster-overlay'), iframe = document.getElementById('roster-iframe');
+            overlay.style.display = 'none'; overlay.classList.remove('modern-roster'); iframe.src = ''; showRoster = false;
+        }
+
+        function sendModernRosterCommand(type) {
+            const iframe = document.getElementById('roster-iframe');
+            if (!showRoster || !iframe.src.includes('roster-lineup.html')) { showModernRoster('BOTH'); return; }
+            try { iframe.contentWindow.postMessage({ type }, location.origin); } catch (error) { }
+        }
+
+        function setModernRosterPreview(enabled) {
+            modernRosterPreview = !!enabled;
+            if (showRoster && document.getElementById('roster-iframe').src.includes('roster-lineup.html')) showModernRoster('BOTH');
+            else updateModernRosterStatus();
+        }
+
+        function openRosterSetup(side) {
+            const ctx = currentRosterContext(), query = new URLSearchParams();
+            if (side === 'A' && ctx.idA) query.set('id', ctx.idA);
+            else if (side === 'B' && ctx.idB) query.set('id', ctx.idB);
+            else { if (ctx.idA) query.set('idA', ctx.idA); if (ctx.idB) query.set('idB', ctx.idB); }
+            if (![...query.keys()].length) { alert('ID rosa non configurato per la squadra selezionata.'); return; }
+            window.open('setup_rose.html?' + query.toString(), '_blank');
+        }
+
         function openClanOverlay() {
             document.getElementById('clan-full-overlay').style.display = 'flex';
+            updateModernRosterStatus();
             const grid = document.getElementById('clan-grid-display');
             grid.innerHTML = '';
             clanConfig.forEach(clan => {
@@ -3868,7 +4052,7 @@
             // ---------- costanti ----------
             const SCHEMA_VERSION = 1;
             const MSG_FAN = ['FAN_HELLO', 'FAN_OVERLAY_HELLO', 'FAN_STATE_REQUEST', 'FAN_POLL_VOTE', 'FAN_MVP_VOTE', 'FAN_QUESTION_SUBMIT', 'FAN_REACTION', 'FAN_PING', 'FAN_PONG'];
-            const MSG_HOST = ['FAN_WELCOME', 'FAN_PUBLIC_STATE', 'FAN_POLL_UPDATE', 'FAN_MVP_UPDATE', 'FAN_QUESTION_ACK', 'FAN_REACTION_ACK', 'FAN_REACTION_EVENT', 'FAN_OVERLAY_QUESTION', 'FAN_OVERLAY_POLL', 'FAN_ERROR', 'FAN_CONFIG_UPDATE'];
+            const MSG_HOST = ['FAN_WELCOME', 'FAN_PUBLIC_STATE', 'FAN_POLL_UPDATE', 'FAN_MVP_UPDATE', 'FAN_QUESTION_ACK', 'FAN_REACTION_ACK', 'FAN_REACTION_EVENT', 'FAN_OVERLAY_QUESTION', 'FAN_OVERLAY_POLL', 'YT_CHAT_SNAPSHOT', 'YT_CHAT_MODE', 'YT_CHAT_HIGHLIGHT', 'YT_CHAT_HIDE', 'FAN_ERROR', 'FAN_CONFIG_UPDATE'];
             const REACTIONS = ['🔥', '👏', '😮', '💪', '🎯'];
             const MAX_PAYLOAD = 4096;
             const MAX_QUESTIONS = 500, MAX_POLLS = 100, MAX_MVP = 50, MAX_VOTERS = 5000, MAX_FANS = 200;
@@ -3915,6 +4099,9 @@
             let reactionBuffer = {};       // emoji -> conteggio da mostrare nell'effetto
             let floatCount = 0, floodStrikes = 0;
             let noteTimer = null;
+            let ytClient = null, ytStatus = 'NON COLLEGATA', ytTitle = '';
+            let ytMessages = [], ytMessageIds = new Set(), ytPrefs = null;
+            let ytFullChatVisible = false, ytHighlight = null, ytHighlightExpiresAt = 0, ytHighlightTimer = null;
 
             function defaultSettings() {
                 return {
@@ -3954,8 +4141,11 @@
             }
             function refreshMatchContext() {
                 const nuovo = detectMatchBase();
-                if (nuovo && nuovo !== matchBase) { matchBase = nuovo; loadFanState(); }
-                else if (!db) loadFanState();
+                if (nuovo && nuovo !== matchBase) {
+                    if (ytClient) ytClient.stop();
+                    matchBase = nuovo; loadFanState(); loadYouTubePrefs();
+                }
+                else if (!db) { loadFanState(); loadYouTubePrefs(); }
             }
             function fanRoomId() { return 'IPBA-FAN-' + matchBase; }
             function hostPreferenceKey() { return 'pm_fan_host_autostart::' + (matchBase || 'DEFAULT'); }
@@ -4147,6 +4337,7 @@
                         rec.sessionId = ID_RE.test(String(m.sessionId || '')) ? m.sessionId : '';
                         safeSend(rec.conn, { type: 'FAN_WELCOME', config: publicConfig() });
                         sendCurrentOverlays(rec);
+                        sendCurrentYouTubeState(rec);
                         requestPanelRender();
                         break;
                     case 'FAN_PING': safeSend(rec.conn, { type: 'FAN_PONG', t: typeof m.t === 'number' ? m.t : 0 }); break;
@@ -4621,6 +4812,7 @@
                 if (activeTab === 'mvp' || force) renderMvp();
                 if (activeTab === 'domande' || force) renderQuestions();
                 if (activeTab === 'reazioni' || force) renderReactions();
+                if (activeTab === 'youtube' || force) renderYouTubePanel();
                 if (force) renderSettingsForm();
                 renderQBadge();
             }
@@ -4786,6 +4978,236 @@
             }
             function resetReactions() { db.reactionTotals = {}; reactionBuffer = {}; saveFanState(); renderReactions(); }
 
+            // =========================================================
+            //  YOUTUBE LIVE CHAT (acquisizione solo in Streaming)
+            // =========================================================
+            function defaultYouTubePrefs() {
+                return { videoSource: '', showBoard: true, showOverlay: true, highlightSec: 5, fullChatVisible: false };
+            }
+            function youtubePrefsKey() { return 'pm_youtube_chat::' + (matchBase || 'DEFAULT'); }
+            function loadYouTubePrefs() {
+                ytPrefs = defaultYouTubePrefs();
+                try { ytPrefs = Object.assign(ytPrefs, JSON.parse(localStorage.getItem(youtubePrefsKey()) || '{}')); } catch (e) { }
+                ytPrefs.highlightSec = Math.max(3, Math.min(60, parseInt(ytPrefs.highlightSec, 10) || 5));
+                ytFullChatVisible = !!ytPrefs.fullChatVisible;
+                ytMessages = []; ytMessageIds = new Set(); ytTitle = ''; ytStatus = 'NON COLLEGATA';
+                ytHighlight = null; ytHighlightExpiresAt = 0; clearTimeout(ytHighlightTimer);
+            }
+            function saveYouTubePrefs() {
+                if (!ytPrefs) ytPrefs = defaultYouTubePrefs();
+                try { localStorage.setItem(youtubePrefsKey(), JSON.stringify(ytPrefs)); } catch (e) { }
+            }
+            function youtubeOverlayUrl() {
+                const file = 'youtube_chat.html?id=' + encodeURIComponent(matchBase) + '&v=1.0.0';
+                if (location.protocol === 'file:') return 'https://ipbseries-scoreboard.github.io/paintball-manager/' + file;
+                return location.origin + location.pathname.replace(/[^/]*$/, '') + file;
+            }
+            function youtubeApiKey() {
+                const field = $id('yt-api-key');
+                return String((field && field.value) || localStorage.getItem('pm_youtube_api_key') || '').trim();
+            }
+            function setYouTubeStatus(status) {
+                ytStatus = cleanText(status, 180) || 'NON COLLEGATA';
+                const el = $id('yt-chat-status'); if (el) el.textContent = ytStatus;
+            }
+            function youtubeRoleLabel(message) {
+                if (message.isOwner) return 'CANALE';
+                if (message.isModerator) return 'MOD';
+                if (message.isMember) return 'MEMBRO';
+                if (message.isVerified) return 'VERIFICATO';
+                return '';
+            }
+            function renderYouTubePanel() {
+                if (!ytPrefs) loadYouTubePrefs();
+                const source = $id('yt-video-source'), key = $id('yt-api-key');
+                if (source && document.activeElement !== source) source.value = ytPrefs.videoSource || '';
+                if (key && document.activeElement !== key && !key.value) key.value = localStorage.getItem('pm_youtube_api_key') || '';
+                const status = $id('yt-chat-status'), title = $id('yt-chat-title'), url = $id('yt-overlay-url');
+                if (status) status.textContent = ytStatus;
+                if (title) title.textContent = ytTitle || '—';
+                if (url) url.value = youtubeOverlayUrl();
+                const boardToggle = $id('yt-show-board'), overlayToggle = $id('yt-show-overlay'), sec = $id('yt-highlight-sec');
+                if (boardToggle) boardToggle.checked = ytPrefs.showBoard !== false;
+                if (overlayToggle) overlayToggle.checked = ytPrefs.showOverlay !== false;
+                if (sec && document.activeElement !== sec) sec.value = ytPrefs.highlightSec || 5;
+                renderYouTubeMessages();
+            }
+            function renderYouTubeMessages() {
+                const box = $id('yt-chat-preview');
+                if (!box) return;
+                box.replaceChildren();
+                if (!ytMessages.length) {
+                    const empty = document.createElement('div');
+                    empty.className = 'yt-admin-empty';
+                    empty.textContent = ytStatus.indexOf('🟢') === 0 ? 'In attesa di nuovi messaggi...' : 'Collega una diretta YouTube per vedere i messaggi.';
+                    box.appendChild(empty); return;
+                }
+                ytMessages.slice(-60).reverse().forEach(message => {
+                    const row = document.createElement('div'); row.className = 'yt-admin-message';
+                    const avatar = document.createElement('img'); avatar.className = 'yt-admin-avatar'; avatar.alt = '';
+                    if (message.avatarUrl) avatar.src = message.avatarUrl;
+                    const main = document.createElement('div');
+                    const head = document.createElement('div');
+                    const author = document.createElement('span'); author.className = 'yt-admin-author'; author.textContent = message.author;
+                    head.appendChild(author);
+                    const role = youtubeRoleLabel(message);
+                    if (role) { const badge = document.createElement('span'); badge.className = 'yt-admin-role'; badge.textContent = role; head.appendChild(badge); }
+                    if (message.publishedAt) {
+                        const time = document.createElement('span'); time.className = 'yt-admin-time';
+                        const d = new Date(message.publishedAt); time.textContent = Number.isNaN(d.getTime()) ? '' : String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+                        head.appendChild(time);
+                    }
+                    const text = document.createElement('div'); text.className = 'yt-admin-text'; text.textContent = message.text;
+                    if (message.amount) { const amount = document.createElement('span'); amount.className = 'fan-chip OPEN'; amount.textContent = message.amount; text.prepend(amount, ' '); }
+                    const actions = document.createElement('div'); actions.className = 'fan-actions';
+                    const timed = document.createElement('button'); timed.className = 'fan-btn small ok'; timed.textContent = '📺 MOSTRA ' + (ytPrefs.highlightSec || 5) + 's';
+                    timed.addEventListener('click', () => youtubeHighlightMessage(message, false));
+                    const fixed = document.createElement('button'); fixed.className = 'fan-btn small'; fixed.textContent = '📌 FISSO';
+                    fixed.addEventListener('click', () => youtubeHighlightMessage(message, true));
+                    actions.append(timed, fixed); main.append(head, text, actions); row.append(avatar, main); box.appendChild(row);
+                });
+            }
+            function youtubeSnapshotPacket() {
+                return { type: 'YT_CHAT_SNAPSHOT', visible: !!ytFullChatVisible, messages: ytMessages.slice(-8) };
+            }
+            function broadcastYouTubeSnapshot() { broadcastOverlays(youtubeSnapshotPacket()); }
+            function onYouTubeBatch(messages, meta) {
+                let added = 0;
+                messages.forEach(raw => {
+                    const message = PMYouTubeChat.sanitizeOverlayMessage(raw);
+                    if (!message) return;
+                    const key = message.id || [message.publishedAt, message.author, message.text].join('|');
+                    if (ytMessageIds.has(key)) return;
+                    ytMessageIds.add(key); ytMessages.push(message); added++;
+                });
+                if (ytMessages.length > 100) ytMessages = ytMessages.slice(-100);
+                if (ytMessageIds.size > 300) ytMessageIds = new Set(ytMessages.map(m => m.id || [m.publishedAt, m.author, m.text].join('|')));
+                if (added && !(meta && meta.initial)) markFanActivity();
+                if (added) { broadcastYouTubeSnapshot(); renderYouTubeMessages(); requestPanelRender(); }
+            }
+            async function youtubeConnect() {
+                refreshMatchContext();
+                if (!window.PMYouTubeChat) { setYouTubeStatus('⚠️ MODULO YOUTUBE NON DISPONIBILE'); return; }
+                const sourceField = $id('yt-video-source');
+                const source = String(sourceField && sourceField.value || '').trim();
+                const key = youtubeApiKey();
+                ytPrefs.videoSource = source;
+                ytPrefs.showBoard = !!($id('yt-show-board') && $id('yt-show-board').checked);
+                ytPrefs.showOverlay = !!($id('yt-show-overlay') && $id('yt-show-overlay').checked);
+                ytPrefs.highlightSec = Math.max(3, Math.min(60, parseInt(($id('yt-highlight-sec') || {}).value, 10) || 5));
+                saveYouTubePrefs();
+                try { localStorage.setItem('pm_youtube_api_key', key); } catch (e) { }
+                if (hostStatus !== 'ATTIVA') startFanHost();
+                if (ytClient) ytClient.stop();
+                ytMessages = []; ytMessageIds = new Set(); renderYouTubeMessages();
+                ytClient = new PMYouTubeChat.LiveChatClient({
+                    onBatch: onYouTubeBatch,
+                    onStatus: setYouTubeStatus
+                });
+                try {
+                    const info = await ytClient.connect(source, key);
+                    ytTitle = info.title || info.videoId;
+                    setYouTubeStatus('🟢 CHAT COLLEGATA');
+                    renderYouTubePanel();
+                } catch (error) {
+                    setYouTubeStatus('⚠️ ' + cleanText(error && error.message, 160));
+                    renderYouTubePanel();
+                }
+            }
+            function youtubeDisconnect() {
+                if (ytClient) ytClient.stop();
+                ytClient = null; ytMessages = []; ytMessageIds = new Set(); ytTitle = '';
+                youtubeFullChat(false); youtubeHideHighlight();
+                setYouTubeStatus('NON COLLEGATA'); renderYouTubePanel();
+            }
+            function youtubeFullChat(show) {
+                if (!ytPrefs) loadYouTubePrefs();
+                ytFullChatVisible = !!show; ytPrefs.fullChatVisible = ytFullChatVisible; saveYouTubePrefs();
+                if (hostStatus !== 'ATTIVA' && show) startFanHost();
+                broadcastOverlays({ type: 'YT_CHAT_MODE', visible: ytFullChatVisible, messages: ytMessages.slice(-8) });
+                note(ytFullChatVisible ? '💬 Chat YouTube mostrata nell’overlay' : 'Chat YouTube nascosta');
+            }
+            function youtubeHighlightMessage(raw, persistent) {
+                const message = window.PMYouTubeChat && window.PMYouTubeChat.sanitizeOverlayMessage(raw);
+                if (!message) return;
+                const secField = $id('yt-highlight-sec');
+                const seconds = Math.max(3, Math.min(60, parseInt(secField && secField.value, 10) || 5));
+                ytPrefs.highlightSec = seconds;
+                ytPrefs.showBoard = !!($id('yt-show-board') && $id('yt-show-board').checked);
+                ytPrefs.showOverlay = !!($id('yt-show-overlay') && $id('yt-show-overlay').checked);
+                saveYouTubePrefs();
+                ytHighlight = message; ytHighlightExpiresAt = persistent ? 0 : now() + seconds * 1000;
+                clearTimeout(ytHighlightTimer);
+                if (hostStatus !== 'ATTIVA') startFanHost();
+                const packet = {
+                    type: 'YT_CHAT_HIGHLIGHT', message,
+                    showBoard: ytPrefs.showBoard, showOverlay: ytPrefs.showOverlay,
+                    persistent: !!persistent, durationMs: persistent ? 0 : seconds * 1000
+                };
+                broadcastOverlays(packet);
+                if (!persistent) ytHighlightTimer = setTimeout(youtubeHideHighlight, seconds * 1000);
+                note(persistent ? '📌 Messaggio YouTube fisso in overlay' : '📺 Messaggio YouTube mostrato per ' + seconds + ' secondi');
+            }
+            function youtubeHideHighlight() {
+                clearTimeout(ytHighlightTimer); ytHighlight = null; ytHighlightExpiresAt = 0;
+                broadcastOverlays({ type: 'YT_CHAT_HIDE' });
+                note('Messaggio YouTube nascosto');
+            }
+            function sendCurrentYouTubeState(rec) {
+                safeSend(rec.conn, { type: 'YT_CHAT_MODE', visible: !!ytFullChatVisible, messages: ytMessages.slice(-8) });
+                if (!ytHighlight) return;
+                const remaining = ytHighlightExpiresAt ? ytHighlightExpiresAt - now() : 0;
+                if (ytHighlightExpiresAt && remaining <= 0) return;
+                safeSend(rec.conn, {
+                    type: 'YT_CHAT_HIGHLIGHT', message: ytHighlight,
+                    showBoard: ytPrefs ? ytPrefs.showBoard !== false : true,
+                    showOverlay: ytPrefs ? ytPrefs.showOverlay !== false : true,
+                    persistent: !ytHighlightExpiresAt,
+                    durationMs: ytHighlightExpiresAt ? remaining : 0
+                });
+            }
+            function youtubeCopyOverlayUrl() {
+                const url = youtubeOverlayUrl();
+                const done = () => note('📋 URL overlay YouTube copiato');
+                if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, () => { });
+                else { const field = $id('yt-overlay-url'); if (field) { field.select(); document.execCommand('copy'); done(); } }
+            }
+            function youtubeOpenOverlay() { window.open(youtubeOverlayUrl(), '_blank'); }
+            function youtubeTestMessage() {
+                const sample = {
+                    id: 'YT-TEST-' + now(), type: 'textMessageEvent',
+                    author: 'YouTube Test', text: 'Messaggio di prova dalla live chat',
+                    avatarUrl: '', publishedAt: new Date().toISOString(), isModerator: true
+                };
+                onYouTubeBatch([sample], { initial: false });
+                youtubeHighlightMessage(sample, false);
+            }
+            function bindYouTubeControls() {
+                const source = $id('yt-video-source'), key = $id('yt-api-key');
+                const boardToggle = $id('yt-show-board'), overlayToggle = $id('yt-show-overlay'), sec = $id('yt-highlight-sec');
+                if (source) source.addEventListener('input', () => { ytPrefs.videoSource = source.value.trim(); saveYouTubePrefs(); });
+                if (key) key.addEventListener('change', () => { try { localStorage.setItem('pm_youtube_api_key', key.value.trim()); } catch (e) { } });
+                if (boardToggle) boardToggle.addEventListener('change', () => { ytPrefs.showBoard = boardToggle.checked; saveYouTubePrefs(); });
+                if (overlayToggle) overlayToggle.addEventListener('change', () => { ytPrefs.showOverlay = overlayToggle.checked; saveYouTubePrefs(); });
+                if (sec) {
+                    const syncSeconds = () => {
+                        const parsed = parseInt(sec.value, 10);
+                        if (!Number.isFinite(parsed)) return;
+                        ytPrefs.highlightSec = Math.max(3, Math.min(60, parsed));
+                        saveYouTubePrefs();
+                        const help = $id('yt-highlight-help');
+                        if (help) help.textContent = 'Usa “MOSTRA ' + ytPrefs.highlightSec + 's” per la durata automatica oppure “FISSO” per lasciarlo visibile finché non premi NASCONDI.';
+                        renderYouTubeMessages();
+                    };
+                    sec.addEventListener('input', syncSeconds);
+                    sec.addEventListener('change', () => {
+                        syncSeconds();
+                        sec.value = ytPrefs.highlightSec;
+                        renderYouTubeMessages();
+                    });
+                }
+            }
+
             const SETTING_FIELDS = [
                 ['fs-enabled', 'enabled'], ['fs-polls', 'polls'], ['fs-predictions', 'predictions'], ['fs-mvp', 'mvp'],
                 ['fs-questions', 'questions'], ['fs-nicknames', 'nicknames'], ['fs-reactions', 'reactions'],
@@ -4867,6 +5289,7 @@
             function initConsole() {
                 refreshMatchContext();
                 bindSettingsForm();
+                bindYouTubeControls();
                 renderMainFanBadge();
                 const fi = $id('fan-import-file');
                 if (fi) fi.addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) importStateFile(f); e.target.value = ''; });
@@ -5172,6 +5595,8 @@
                 uiCreateMvp, mvpAction, prefillMvpTeams,
                 renderQuestions, moderateQuestion, toggleBlock,
                 toggleReactionsOnStream, resetReactions,
+                youtubeConnect, youtubeDisconnect, youtubeFullChat, youtubeHideHighlight,
+                youtubeCopyOverlayUrl, youtubeOpenOverlay, youtubeTestMessage,
                 hideQuestionOverlay, hidePollOverlay,
                 // Hook per test manuali: passa dallo STESSO percorso di validazione
                 // dei messaggi reali (nessun privilegio extra).

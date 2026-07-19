@@ -13,6 +13,7 @@ const relay = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
 const streaming = fs.readFileSync(path.join(root, 'streaming.html'), 'utf8');
 const board = fs.readFileSync(path.join(root, 'board.html'), 'utf8');
 const obsBar = fs.readFileSync(path.join(root, 'obs_bar.html'), 'utf8');
+const youtubeOverlay = fs.readFileSync(path.join(root, 'youtube_chat.html'), 'utf8');
 
 test('schedule selection uses the safe resume path', () => {
     assert.match(control, /item\.onclick\s*=\s*\(e\)[\s\S]{0,180}selectScheduledMatch\(idx\)/);
@@ -70,6 +71,24 @@ test('moderated questions, polls and MVP overlays are mirrored to OBS bar', () =
     assert.match(obsBar, /id="fan-obs-poll"/);
 });
 
+test('YouTube live chat is moderated in Streaming and mirrored to its overlay and Board', () => {
+    assert.match(streaming, /youtube-chat\.js\?v=1\.0\.0/);
+    assert.match(streaming, /id="fan-tab-youtube"/);
+    assert.match(streaming, /function youtubeConnect\(\)/);
+    assert.match(streaming, /type:\s*'YT_CHAT_HIGHLIGHT'/);
+    assert.match(streaming, /type:\s*'YT_CHAT_MODE'/);
+    assert.match(streaming, /function sendCurrentYouTubeState\(rec\)/);
+    assert.match(streaming, /PMYouTubeChat\.LiveChatClient/);
+    assert.doesNotMatch(board, /pm_youtube_api_key/);
+    assert.doesNotMatch(youtubeOverlay, /pm_youtube_api_key/);
+    assert.match(board, /function showBoardYoutubeHighlight\(packet\)/);
+    assert.match(board, /packet\.type === 'YT_CHAT_HIGHLIGHT'/);
+    assert.match(youtubeOverlay, /IPBA-FAN-' \+ matchBase/);
+    assert.match(youtubeOverlay, /packet\.type === 'YT_CHAT_SNAPSHOT'/);
+    assert.match(youtubeOverlay, /packet\.type === 'YT_CHAT_HIGHLIGHT'/);
+    assert.match(youtubeOverlay, /showOverlay !== true/);
+});
+
 test('fan host, mobile page and OBS reactions share the TURN-enabled cloud config', () => {
     assert.match(pmClient, /function getCloudPeerOptions\(\)/);
     assert.match(pmClient, /getCloudPeerOptions:\s*getCloudPeerOptions/);
@@ -106,9 +125,11 @@ test('main, next-match and daily-record times use the larger box-filling sizes',
 });
 
 test('all visible score clocks use the shared MM:SS formatter', () => {
+    // NB: la vecchia copia "NO SFONDO/streaming.html" è stata eliminata (2026-07-19):
+    // nella cartella loghi restano solo immagini.
     const timerPages = [
         'index.html', 'board.html', 'streaming.html', 'obs_bar.html',
-        'referee.html', 'pit.html', 'ledwall.html', 'caster.html', 'NO SFONDO/streaming.html'
+        'referee.html', 'pit.html', 'ledwall.html', 'caster.html'
     ];
     timerPages.forEach(file => {
         const source = fs.readFileSync(path.join(root, file), 'utf8');

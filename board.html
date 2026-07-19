@@ -10,6 +10,7 @@
     <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" crossorigin="anonymous"><\/script>');</script>
     <script src="pm-client.js?v=2.2.0-fan-turn"></script>
     <script src="time-format.js?v=1.0.0-mmss"></script>
+    <script src="youtube-chat.js?v=1.0.0"></script>
     <!-- Google Fonts: Oswald, Bebas Neue, Orbitron, Black Ops One, Roboto -->
     <link
         href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Bebas+Neue&family=Orbitron:wght@600&family=Black+Ops+One&family=Roboto:wght@400;700&display=swap"
@@ -1379,6 +1380,21 @@
                 transform: rotate(360deg);
             }
         }
+
+        #board-youtube-highlight {
+            position: absolute; left: 50%; bottom: 82px; z-index: 5600;
+            width: 720px; min-height: 86px; padding: 13px 20px;
+            display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 13px; align-items: center;
+            border: 2px solid #22d3ee; border-radius: 16px;
+            background: linear-gradient(135deg, rgba(8,47,73,.96), rgba(15,23,42,.97));
+            box-shadow: 0 0 38px rgba(34,211,238,.32);
+            opacity: 0; transform: translate(-50%, 35px) scale(.97); pointer-events: none;
+            transition: opacity .4s ease, transform .4s ease;
+        }
+        #board-youtube-highlight.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
+        #board-youtube-avatar { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; background: #334155; }
+        #board-youtube-author { color: #fbbf24; font-family: 'Oswald', sans-serif; font-size: 21px; letter-spacing: .5px; }
+        #board-youtube-text { margin-top: 2px; color: #fff; font: 21px/1.25 'Roboto', sans-serif; overflow-wrap: anywhere; }
     </style>
     <style id="dynamic-style-left"></style>
     <style id="dynamic-style-right"></style>
@@ -1638,6 +1654,13 @@
 
         <!-- PERSISTENT FOOTER -->
         <div id="next-match-footer">NEXT: <span id="footer-match-info">-- vs --</span></div>
+        <section id="board-youtube-highlight" aria-live="polite">
+            <img id="board-youtube-avatar" alt="">
+            <div>
+                <div id="board-youtube-author"></div>
+                <div id="board-youtube-text"></div>
+            </div>
+        </section>
     </div>
 
     <script>
@@ -1648,6 +1671,68 @@
         const scaler = document.getElementById('scaler');
 
         let clientConn = null;
+        let boardYtPeer = null, boardYtConn = null, boardYtRetry = null, boardYtPing = null, boardYtBase = '', boardYtDelay = 3000, boardYtHideTimer = null;
+
+        function boardYoutubeRole(message) {
+            if (message.isOwner) return 'CANALE';
+            if (message.isModerator) return 'MOD';
+            if (message.isMember) return 'MEMBRO';
+            if (message.isVerified) return 'VERIFICATO';
+            return '';
+        }
+        function hideBoardYoutubeHighlight() {
+            clearTimeout(boardYtHideTimer);
+            document.getElementById('board-youtube-highlight').classList.remove('show');
+        }
+        function showBoardYoutubeHighlight(packet) {
+            if (packet.showBoard !== true || !window.PMYouTubeChat) { hideBoardYoutubeHighlight(); return; }
+            const message = PMYouTubeChat.sanitizeOverlayMessage(packet.message);
+            if (!message) return;
+            const avatar = document.getElementById('board-youtube-avatar');
+            if (message.avatarUrl) { avatar.src = message.avatarUrl; avatar.style.visibility = 'visible'; }
+            else { avatar.removeAttribute('src'); avatar.style.visibility = 'hidden'; }
+            const role = boardYoutubeRole(message);
+            document.getElementById('board-youtube-author').textContent = message.author + (role ? ' · ' + role : '');
+            document.getElementById('board-youtube-text').textContent = (message.amount ? message.amount + ' · ' : '') + message.text;
+            clearTimeout(boardYtHideTimer);
+            document.getElementById('board-youtube-highlight').classList.add('show');
+            const duration = Math.max(0, Math.min(60000, Number(packet.durationMs) || 0));
+            if (!packet.persistent && duration > 0) boardYtHideTimer = setTimeout(hideBoardYoutubeHighlight, duration);
+        }
+        function handleBoardYoutubePacket(packet) {
+            if (!packet || typeof packet !== 'object') return;
+            if (packet.type === 'YT_CHAT_HIGHLIGHT') showBoardYoutubeHighlight(packet);
+            else if (packet.type === 'YT_CHAT_HIDE') hideBoardYoutubeHighlight();
+        }
+        function scheduleBoardYoutubeReconnect() {
+            clearTimeout(boardYtRetry);
+            boardYtRetry = setTimeout(() => connectBoardYoutubeOverlay(), boardYtDelay);
+            boardYtDelay = Math.min(20000, Math.round(boardYtDelay * 1.5));
+        }
+        function connectBoardYoutubeOverlay() {
+            clearTimeout(boardYtRetry); clearInterval(boardYtPing);
+            if (!boardYtBase || !window.Peer || !window.PMClient) return;
+            try { if (boardYtPeer) { if (boardYtPeer.removeAllListeners) boardYtPeer.removeAllListeners(); boardYtPeer.destroy(); } } catch (e) { }
+            try { boardYtPeer = new Peer(PMClient.getCloudPeerOptions()); } catch (e) { scheduleBoardYoutubeReconnect(); return; }
+            boardYtPeer.on('open', () => {
+                boardYtConn = boardYtPeer.connect('IPBA-FAN-' + boardYtBase, { reliable: true });
+                boardYtConn.on('open', () => {
+                    boardYtDelay = 3000;
+                    const session = 'YTBOARD-' + Date.now().toString(36).toUpperCase();
+                    boardYtConn.send({ type: 'FAN_OVERLAY_HELLO', spectatorId: session, sessionId: session, overlayKind: 'board' });
+                    boardYtPing = setInterval(() => { try { if (boardYtConn && boardYtConn.open) boardYtConn.send({ type: 'FAN_PING', spectatorId: session, t: Date.now() }); } catch (e) { } }, 20000);
+                });
+                boardYtConn.on('data', handleBoardYoutubePacket);
+                boardYtConn.on('close', scheduleBoardYoutubeReconnect);
+                boardYtConn.on('error', scheduleBoardYoutubeReconnect);
+            });
+            boardYtPeer.on('error', error => { if (boardYtConn && boardYtConn.open && (!error || error.type !== 'peer-unavailable')) return; scheduleBoardYoutubeReconnect(); });
+            boardYtPeer.on('disconnected', () => { if (boardYtConn && boardYtConn.open) { try { if (!boardYtPeer.destroyed) boardYtPeer.reconnect(); } catch (e) { } } else scheduleBoardYoutubeReconnect(); });
+        }
+        function startBoardYoutubeOverlay(value) {
+            boardYtBase = String(value || '').trim().toUpperCase().replace(/^IPBA-/, '').replace(/[^A-Z0-9_-]/g, '').slice(0, 40);
+            if (boardYtBase) connectBoardYoutubeOverlay();
+        }
 
         // Load Stored Clans
         let clanConfig = [];
@@ -1793,6 +1878,7 @@
         function startClient(hostId) {
             if (!hostId) return;
             if (btn) btn.innerText = "CONNESSIONE...";
+            startBoardYoutubeOverlay(hostId);
 
             // Il trasporto (retry, PING/PONG, fallback locale->cloud) è gestito da pm-client.js
             if (clientConn) clientConn.destroy();

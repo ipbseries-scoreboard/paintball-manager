@@ -34,9 +34,13 @@ if not errorlevel 1 (
 
 pushd "%~dp0"
 
-:: Prima volta: installa la dipendenza "ws" (serve internet solo una volta)
-if not exist "node_modules\ws\package.json" (
-    echo Prima installazione: scarico la dipendenza "ws"...
+:: Prima volta (o node_modules incompleta): installa le dipendenze "ws" e "cheerio"
+:: (cheerio serve al sistema rose: se manca, il server non parte)
+set NEEDINSTALL=0
+if not exist "node_modules\ws\package.json" set NEEDINSTALL=1
+if not exist "node_modules\cheerio\package.json" set NEEDINSTALL=1
+if "%NEEDINSTALL%"=="1" (
+    echo Prima installazione: scarico le dipendenze ^(ws, cheerio^)...
     call npm install --ignore-scripts --no-audit --no-fund
     if errorlevel 1 (
         color 0c

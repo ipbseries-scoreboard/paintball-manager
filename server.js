@@ -35,6 +35,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const WebSocket = require('ws');
+const { handleRosterApi } = require('./roster-server');
 
 const PORT = parseInt(process.argv[2] || process.env.PORT || '9000', 10);
 const ROOT = __dirname;
@@ -47,6 +48,7 @@ const MIME = {
     '.png': 'image/png',
     '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp',
     '.gif': 'image/gif',
     '.svg': 'image/svg+xml',
     '.ico': 'image/x-icon',
@@ -102,6 +104,14 @@ function proxyIpba(req, res) {
 // ---------- WEB SERVER (pagine statiche) ----------
 const server = http.createServer((req, res) => {
     try {
+        const parsedUrl = new URL(req.url || '/', 'http://localhost');
+        if (parsedUrl.pathname.startsWith('/api/rosters/')) {
+            Promise.resolve(handleRosterApi(req, res, parsedUrl)).catch(error => {
+                if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+                if (!res.writableEnded) res.end(JSON.stringify({ error: error.message || 'Errore API rose' }));
+            });
+            return;
+        }
         let urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
         if (urlPath === '/' || urlPath === '') urlPath = '/index.html';
         if (urlPath === '/ipba') { proxyIpba(req, res); return; }
