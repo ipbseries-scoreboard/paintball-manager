@@ -160,6 +160,82 @@ async function readRegistry() {
     }
 }
 
+// ---------- ARCHIVIO GIOCATORI ----------
+// I campi che appartengono al giocatore (non alla squadra) vivono in
+// players.json con chiave playerId IPBA: foto, regolazioni e dati anagrafici
+// personalizzati seguono il giocatore anche quando viene prestato.
+const ARCHIVE_GLOBAL_FIELDS = ['firstName', 'lastName', 'displayName', 'number', 'role', 'nickname'];
+const DEFAULT_PLAYER_IMAGE = Core.defaultPlayer('', {}, 0).image;
+
+function archivePath() {
+    return path.join(DATA_ROOT, 'players.json');
+}
+
+async function readArchive() {
+    try {
+        const raw = JSON.parse(await fsp.readFile(archivePath(), 'utf8'));
+        return {
+            updatedAt: Math.max(0, Number(raw && raw.updatedAt) || 0),
+            players: raw && raw.players && typeof raw.players === 'object' ? raw.players : {}
+        };
+    } catch (error) {
+        return { updatedAt: 0, players: {} };
+    }
+}
+
+function archiveEntryFromPlayer(player) {
+    const entry = { customData: {}, image: Object.assign({}, player.image) };
+    ARCHIVE_GLOBAL_FIELDS.forEach(field => { entry.customData[field] = player.customData[field]; });
+    return entry;
+}
+
+function overlayArchiveEntry(player, entry) {
+    const data = entry && entry.customData && typeof entry.customData === 'object' ? entry.customData : {};
+    ARCHIVE_GLOBAL_FIELDS.forEach(field => { player.customData[field] = data[field] == null ? '' : data[field]; });
+    player.image = Object.assign({}, player.image, entry && entry.image && typeof entry.image === 'object' ? entry.image : {});
+}
+
+function hasArchivableConfig(player) {
+    return !!(player.image.customImageUrl ||
+        player.image.selectedSource === 'CUSTOM' ||
+        ARCHIVE_GLOBAL_FIELDS.some(field => player.customData[field]) ||
+        Object.keys(DEFAULT_PLAYER_IMAGE).some(field => player.image[field] !== DEFAULT_PLAYER_IMAGE[field]));
+}
+
+// Lettura: overlay dell'archivio sui giocatori con playerId; le configurazioni
+// inline pre-archivio creano la voce mancante (seed di migrazione).
+// Scrittura esplicita (updateArchive): write-through dei campi globali.
+// Gli import NON usano updateArchive, altrimenti una rosa appena importata
+// (tutta default) azzererebbe le configurazioni archiviate.
+async function syncRosterWithArchive(roster, updateArchive) {
+    const archive = await readArchive();
+    let changed = false;
+    roster.players.forEach(player => {
+        const id = player.source.playerId;
+        if (!id) return;
+        const entry = archive.players[id];
+        if (updateArchive) {
+            if (entry || hasArchivableConfig(player)) {
+                const next = archiveEntryFromPlayer(player);
+                if (JSON.stringify(entry) !== JSON.stringify(next)) {
+                    archive.players[id] = next;
+                    changed = true;
+                }
+            }
+        } else if (entry) {
+            overlayArchiveEntry(player, entry);
+        } else if (hasArchivableConfig(player)) {
+            archive.players[id] = archiveEntryFromPlayer(player);
+            changed = true;
+        }
+    });
+    if (changed) {
+        archive.updatedAt = Date.now();
+        await atomicWrite(archivePath(), JSON.stringify(archive, null, 2));
+    }
+    return Core.normalizeRoster(roster, roster.team.id);
+}
+
 function configPath(teamId) {
     return path.join(teamDir(teamId), 'roster.json');
 }
@@ -179,18 +255,20 @@ async function atomicWrite(file, data) {
 }
 
 async function readRoster(teamId) {
+    let raw;
     try {
-        const raw = JSON.parse(await fsp.readFile(configPath(teamId), 'utf8'));
-        return Core.normalizeRoster(raw, teamId);
+        raw = JSON.parse(await fsp.readFile(configPath(teamId), 'utf8'));
     } catch (error) {
         return null;
     }
+    return syncRosterWithArchive(Core.normalizeRoster(raw, teamId), false);
 }
 
-async function saveRoster(roster) {
+async function saveRoster(roster, options) {
     const id = roster && roster.team && roster.team.id;
-    const clean = Core.normalizeRoster(roster, id);
+    let clean = Core.normalizeRoster(roster, id);
     if (!clean.team.id) throw Object.assign(new Error('ID squadra non valido'), { status: 400 });
+    clean = await syncRosterWithArchive(clean, !!(options && options.updateArchive));
     clean.updatedAt = Date.now();
     await atomicWrite(configPath(clean.team.id), JSON.stringify(clean, null, 2));
     return clean;
@@ -487,13 +565,17 @@ async function savePhoto(req, teamId, playerKey) {
         throw Object.assign(new Error('Firma o dimensioni immagine non valide'), { status: 415 });
     }
 
-    const assets = path.join(teamDir(id), 'assets');
+    // Le foto dei giocatori IPBA sono condivise tra tutte le squadre
+    // (archivio per playerId); quelle dei giocatori manuali restano di squadra.
+    const pid = player.source.playerId;
+    const assets = pid ? path.join(DATA_ROOT, 'players', 'assets') : path.join(teamDir(id), 'assets');
+    const baseName = pid || key;
     await fsp.mkdir(assets, { recursive: true });
-    const filename = key + info.ext;
+    const filename = baseName + info.ext;
     await atomicWrite(path.join(assets, filename), buffer);
     try {
         const oldFiles = (await fsp.readdir(assets)).filter(name =>
-            name.startsWith(key + '.') &&
+            name.startsWith(baseName + '.') &&
             name !== filename &&
             name !== filename + '.bak'
         );
@@ -502,14 +584,16 @@ async function savePhoto(req, teamId, playerKey) {
         // La nuova foto è già stata salvata; la pulizia dei vecchi formati è secondaria.
     }
 
-    const url = 'data/rosters/team-' + encodeURIComponent(id) + '/assets/' + encodeURIComponent(filename);
+    const url = (pid
+        ? 'data/rosters/players/assets/'
+        : 'data/rosters/team-' + encodeURIComponent(id) + '/assets/') + encodeURIComponent(filename);
     const hasTransparency = mime !== 'image/jpeg' && req.headers['x-image-transparency'] === '1';
     player.image.customImageUrl = url;
     player.image.selectedSource = 'CUSTOM';
     player.image.hasTransparency = hasTransparency;
     player.image.width = info.width;
     player.image.height = info.height;
-    await saveRoster(roster);
+    await saveRoster(roster, { updateArchive: true });
 
     return {
         url,
@@ -526,11 +610,13 @@ async function deletePhoto(teamId, playerKey) {
     const player = roster && roster.players.find(item => item.playerKey === key);
     if (!player) throw Object.assign(new Error('Giocatore non trovato'), { status: 404 });
 
-    const assets = path.join(teamDir(id), 'assets');
+    const pid = player.source.playerId;
+    const assets = pid ? path.join(DATA_ROOT, 'players', 'assets') : path.join(teamDir(id), 'assets');
+    const baseName = pid || key;
     try {
         const files = await fsp.readdir(assets);
         await Promise.all(files
-            .filter(name => name.startsWith(key + '.'))
+            .filter(name => name.startsWith(baseName + '.'))
             .map(name => fsp.unlink(path.join(assets, name)).catch(() => undefined)));
     } catch (error) {
         // L'assenza della cartella assets equivale a una foto già rimossa.
@@ -540,7 +626,7 @@ async function deletePhoto(teamId, playerKey) {
     player.image.hasTransparency = false;
     player.image.width = 0;
     player.image.height = 0;
-    await saveRoster(roster);
+    await saveRoster(roster, { updateArchive: true });
 }
 
 async function handleAuthRoute(req, res, parts) {
@@ -663,7 +749,7 @@ async function handleRosterApi(req, res, parsedUrl) {
             const payload = await readJson(req, MAX_JSON);
             const roster = Core.normalizeRoster(payload, teamId);
             if (roster.team.id !== teamId) throw Object.assign(new Error('ID squadra incoerente'), { status: 400 });
-            json(res, 200, { roster: await saveRoster(roster), storage: 'SERVER_LOCALE' });
+            json(res, 200, { roster: await saveRoster(roster, { updateArchive: true }), storage: 'SERVER_LOCALE' });
             return true;
         }
 

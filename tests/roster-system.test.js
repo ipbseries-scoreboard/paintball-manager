@@ -114,9 +114,10 @@ test('roster API saves shared configuration and player photos through safe endpo
     png.writeUInt32BE(40, 16); png.writeUInt32BE(40, 20);
     response = await fetch(base + '/api/rosters/' + id + '/players/' + key + '/photo', { method: 'POST', headers: { 'Content-Type': 'image/png', 'X-Image-Transparency': '1', Cookie: cookie }, body: png });
     const photo = await response.json();
-    assert.equal(response.status, 200); assert.match(photo.url, /^data\/rosters\//); assert.equal(fs.existsSync(path.join(dir, 'assets', key + '.png')), true);
+    const sharedPhoto = path.join(Server.DATA_ROOT, 'players', 'assets', '1.png');
+    assert.equal(response.status, 200); assert.match(photo.url, /^data\/rosters\/players\/assets\//); assert.equal(fs.existsSync(sharedPhoto), true);
     response = await fetch(base + '/api/rosters/' + id + '/players/' + key + '/photo', { method: 'DELETE', headers: { Cookie: cookie } });
-    assert.equal(response.status, 200); assert.equal(fs.existsSync(path.join(dir, 'assets', key + '.png')), false);
+    assert.equal(response.status, 200); assert.equal(fs.existsSync(sharedPhoto), false);
 });
 
 test('roster pages and Streaming expose dual controls, half-bust crop and transparent mode', () => {
