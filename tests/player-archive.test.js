@@ -189,3 +189,9 @@ test('import-all rispetta l\'ordine del registry e prosegue dopo un errore', asy
     assert.match(results[0].error, /IPBA HTTP 500/);
     assert.deepEqual({ ok: results[1].ok, players: results[1].players }, { ok: true, players: 1 });
 });
+
+test('streaming sincronizza il registry e offre il setup di tutti i giocatori', () => {
+    const streaming = fs.readFileSync(path.join(__dirname, '..', 'streaming.html'), 'utf8');
+    assert.match(streaming, /api\/rosters\/registry/);
+    assert.match(streaming, /SETUP TUTTI I GIOCATORI/);
+});

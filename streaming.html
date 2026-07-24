@@ -1614,6 +1614,11 @@
                         🔄 SINCRONIZZA SQUADRE DA TORNEO
                     </button>
 
+                    <button onclick="window.open('setup_rose.html', '_blank')"
+                        style="width:100%; margin-top:10px; border:2px solid #91c11e; background:rgba(145, 193, 30, 0.12); color:#b7e04a; padding: 10px;">
+                        🧑‍🎨 SETUP TUTTI I GIOCATORI
+                    </button>
+
                     <!-- ARCHIVIO STORICO SCONTRI (autonomo, non serve la Regia) -->
                     <div style="margin-top:20px; padding:14px; border:1px solid #a855f7; border-radius:8px; background:rgba(168,85,247,0.08);">
                         <div style="color:#c4b5fd; font-weight:bold; margin-bottom:8px;">⚔️ ARCHIVIO STORICO SCONTRI</div>
@@ -2985,6 +2990,23 @@
                     clientConn.send({ type: 'UPDATE_CLANS', clanConfig: clanConfig, controlToken: controlPin });
                     console.log("Clan config synced with host via saveClans");
                 }
+
+                // Registry sul server locale: permette l'aggiornamento automatico
+                // delle rose all'avvio. Fuori dal PC di regia il POST fallisce
+                // in silenzio (il registry vive solo sul PC locale).
+                try {
+                    fetch('/api/rosters/registry', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            teams: clanConfig.map(clan => ({
+                                name: clan.name || '',
+                                rosterUrl: clan.rosterUrl || '',
+                                logoUrl: clan.logoUrl || ''
+                            }))
+                        })
+                    }).catch(() => { });
+                } catch (e) { }
 
                 alert("Salvato!");
                 closeSetupModal();
