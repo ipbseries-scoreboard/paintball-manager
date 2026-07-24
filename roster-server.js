@@ -10,7 +10,9 @@ const cheerio = require('cheerio');
 const Core = require('./roster-core');
 
 const ROOT = __dirname;
-const DATA_ROOT = path.join(ROOT, 'data', 'rosters');
+const DATA_ROOT = process.env.PM_ROSTER_DATA_DIR
+    ? path.resolve(process.env.PM_ROSTER_DATA_DIR)
+    : path.join(ROOT, 'data', 'rosters');
 const MAX_JSON = 2 * 1024 * 1024;
 const MAX_PHOTO = 10 * 1024 * 1024;
 const MAX_DIMENSION = 6000;

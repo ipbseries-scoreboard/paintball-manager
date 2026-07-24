@@ -1,10 +1,13 @@
 'use strict';
 
+const os = require('node:os');
+const fs = require('node:fs');
+const path = require('node:path');
+process.env.PM_ROSTER_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-roster-'));
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
 const fsp = fs.promises;
-const path = require('node:path');
 const http = require('node:http');
 const Core = require('../roster-core');
 const Server = require('../roster-server');
