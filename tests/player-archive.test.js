@@ -195,3 +195,10 @@ test('streaming sincronizza il registry e offre il setup di tutti i giocatori', 
     assert.match(streaming, /api\/rosters\/registry/);
     assert.match(streaming, /SETUP TUTTI I GIOCATORI/);
 });
+
+test('setup rose espone la modalità archivio con tutte le squadre del registry', () => {
+    const setup = fs.readFileSync(path.join(__dirname, '..', 'setup_rose.html'), 'utf8');
+    assert.match(setup, /api\/rosters\/registry/);
+    assert.match(setup, /AGGIORNA TUTTE DA IPBA/);
+    assert.match(setup, /registryMode/);
+});

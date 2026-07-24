@@ -523,6 +523,7 @@
                     <button class="btn" data-action="import-a">IMPORTA SQUADRA A</button>
                     <button class="btn" data-action="import-b">IMPORTA SQUADRA B</button>
                     <button class="btn" data-action="import-both">AGGIORNA ENTRAMBE DA IPBA</button>
+                    <button class="btn" data-action="import-all" hidden>AGGIORNA TUTTE DA IPBA</button>
                     <button class="btn primary" data-action="save">SALVA TUTTO</button>
                     <button class="btn" data-action="preview">ANTEPRIMA DOPPIA ROSA</button>
                     <button class="btn" data-action="open-transparent">APRI ROSTER TRASPARENTE</button>
@@ -623,9 +624,13 @@
                 A: Core.safeTeamId(params.get('idA') || params.get('id') || ''),
                 B: Core.safeTeamId(params.get('idB') || '')
             };
+            // Senza ID nell'URL il setup lavora sull'intero registry:
+            // tutte le squadre del pannello GESTIONE ROSE & LOGHI.
+            const registryMode = !ids.A && !ids.B;
             const state = {
                 A: null,
                 B: null,
+                registry: [],
                 storage: { A: '', B: '' },
                 active: 'A',
                 dirty: false,
@@ -1563,6 +1568,90 @@
                 if (errors.length) toast(errors.join(' · '), true);
             }
 
+            async function loadRegistry() {
+                setStatus('CARICAMENTO SQUADRE…');
+                const registry = await Storage.request('/api/rosters/registry');
+                state.registry = (registry.teams || []).filter(function (team) { return team.teamId; });
+                if (!state.registry.length) {
+                    setStatus('NESSUNA SQUADRA');
+                    toast('Nessuna squadra con URL Rosa: compila il pannello GESTIONE ROSE & LOGHI in streaming e premi SALVA MODIFICHE.', true);
+                    renderRegistrySidebar();
+                    return;
+                }
+                renderRegistrySidebar();
+                await selectRegistryTeam(state.registry[0].teamId);
+            }
+
+            async function selectRegistryTeam(teamId) {
+                if (state.dirty && !confirm('Ci sono modifiche non salvate. Cambiare squadra comunque?')) return;
+                setStatus('CARICAMENTO ROSA…');
+                try {
+                    const result = await Storage.loadTeam(teamId);
+                    state.A = result.roster;
+                    state.B = null;
+                    state.storage.A = result.storage;
+                    state.active = 'A';
+                    ids.A = teamId;
+                    state.dirty = false;
+                    renderAll();
+                    renderRegistrySidebar();
+                    setStatus('PRONTO');
+                } catch (error) {
+                    toast('Squadra ' + teamId + ': ' + error.message, true);
+                    setStatus('ERRORE CARICAMENTO');
+                }
+            }
+
+            function renderRegistrySidebar() {
+                if (!registryMode) return;
+                const sidebar = document.querySelector('.sidebar');
+                sidebar.querySelectorAll('.side-tab').forEach(function (node) {
+                    if (node.dataset.side) node.hidden = true;
+                });
+                let list = document.getElementById('registry-list');
+                if (!list) {
+                    list = document.createElement('div');
+                    list.id = 'registry-list';
+                    sidebar.insertBefore(list, sidebar.querySelector('.side-info'));
+                }
+                list.replaceChildren();
+                state.registry.forEach(function (team) {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'side-tab' + (state.A && state.A.team.id === team.teamId ? ' active' : '');
+                    const letter = document.createElement('span');
+                    letter.className = 'side-letter';
+                    letter.textContent = (team.name || '?').slice(0, 1).toUpperCase();
+                    const label = document.createElement('span');
+                    const strong = document.createElement('strong');
+                    strong.textContent = team.name;
+                    const small = document.createElement('small');
+                    small.textContent = 'ID ' + team.teamId;
+                    label.append(strong, small);
+                    button.append(letter, label);
+                    button.addEventListener('click', function () { selectRegistryTeam(team.teamId); });
+                    list.appendChild(button);
+                });
+            }
+
+            async function importAllTeams() {
+                if (state.dirty && !confirm('Ci sono modifiche non salvate. Aggiornare comunque tutte le squadre da IPBA?')) return;
+                setStatus('AGGIORNAMENTO DI TUTTE LE SQUADRE…');
+                try {
+                    const outcome = await Storage.request('/api/rosters/registry/import-all', { method: 'POST' });
+                    const results = outcome.results || [];
+                    const failed = results.filter(function (result) { return !result.ok; });
+                    toast('Aggiornate ' + (results.length - failed.length) + ' squadre su ' + results.length +
+                        (failed.length ? ' · Errori: ' + failed.map(function (result) { return result.name || result.teamId; }).join(', ') : '.'), !!failed.length);
+                    if (state.A) await selectRegistryTeam(state.A.team.id);
+                    setStatus('AGGIORNAMENTO COMPLETATO');
+                } catch (error) {
+                    toast(error.message, true);
+                    setStatus('ERRORE AGGIORNAMENTO');
+                    if (error.status === 401) showLogin('Sessione scaduta.');
+                }
+            }
+
             async function enterApp() {
                 $('login-shell').hidden = true;
                 $('app').hidden = false;
@@ -1570,8 +1659,19 @@
                     document.activeElement.blur();
                 }
                 scrollTo(0, 0);
+                if (registryMode) {
+                    const importAll = document.querySelector('[data-action="import-all"]');
+                    if (importAll) importAll.hidden = false;
+                    ['import-b', 'import-both', 'preview'].forEach(function (name) {
+                        const node = document.querySelector('.toolbar [data-action="' + name + '"]');
+                        if (node) node.hidden = true;
+                    });
+                    const importA = document.querySelector('[data-action="import-a"]');
+                    if (importA) importA.textContent = 'AGGIORNA QUESTA SQUADRA DA IPBA';
+                }
                 try {
-                    await loadTeams();
+                    if (registryMode) await loadRegistry();
+                    else await loadTeams();
                     requestAnimationFrame(function () { scrollTo(0, 0); });
                 } catch (error) {
                     toast(error.message, true);
@@ -1580,10 +1680,6 @@
             }
 
             async function init() {
-                if (!ids.A && !ids.B) {
-                    $('login-error').textContent = 'ID squadra mancante: usa ?id=2 oppure ?idA=2&idB=5.';
-                    return;
-                }
                 try {
                     const status = await Storage.authStatus();
                     if (status.authenticated) await enterApp();
@@ -1675,7 +1771,8 @@
                     sendPreview('REPLAY_ANIMATION');
                 } else if (action === 'open-transparent') {
                     window.open(rosterUrl(false), '_blank', 'noopener');
-                } else if (action === 'export') await exportAll();
+                } else if (action === 'import-all') await importAllTeams();
+                else if (action === 'export') await exportAll();
                 else if (action === 'import-file') $('import-file').click();
                 else if (action === 'restore') restoreOriginal();
                 else if (action === 'add-player') addManual();
