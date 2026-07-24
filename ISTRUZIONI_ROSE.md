@@ -38,6 +38,30 @@ sul PC di regia. Le pagine delle rose restano leggibili senza password.
 
 Usa una sorgente Browser OBS/vMix da `1920×1080`. Senza `preview=1` lo sfondo è trasparente.
 
+## Link fissi e aggiornamento automatico
+
+I link delle rose si inseriscono una volta sola in **streaming.html → GESTIONE ROSE & LOGHI**,
+nel campo "URL Rosa" di ogni squadra (es. `https://www.ipba.it/video-team-giocatori.aspx?id=2`).
+Premendo **SALVA MODIFICHE** l'elenco viene salvato anche sul server del PC di regia
+(`data/rosters/registry.json`).
+
+A ogni avvio del server tutte le rose dell'elenco vengono riscaricate da IPBA in automatico
+(righe `[ROSE] …` nella finestra nera). Le personalizzazioni non si perdono. Se IPBA è
+irraggiungibile restano i dati dell'ultima volta.
+
+## Archivio giocatori e prestiti
+
+Foto scontornata, regolazioni, nome visualizzato, numero, ruolo e soprannome appartengono al
+**giocatore**, non alla squadra: sono salvati in `data/rosters/players.json` con la chiave del
+giocatore IPBA e le foto in `data/rosters/players/assets/`. Se un giocatore viene prestato a
+un'altra squadra, alla prima importazione della nuova rosa arriva **già configurato**.
+Restano per-squadra soltanto: visibile/nascosto, ordine, fila e posizione.
+
+Per preparare tutti i giocatori prima del torneo: **GESTIONE ROSE & LOGHI → SETUP TUTTI I
+GIOCATORI** (oppure apri `setup_rose.html` senza parametri). La barra laterale elenca tutte le
+squadre del pannello; il pulsante **AGGIORNA TUTTE DA IPBA** riscarica ogni rosa al volo.
+Attenzione: modificare la foto o i dati di un giocatore vale per tutte le squadre in cui gioca.
+
 ## Importazione da IPBA
 
 Il server legge `https://www.ipba.it/video-team-giocatori.aspx?id=<ID>`, associa ogni fotografia al
