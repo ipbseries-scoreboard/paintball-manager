@@ -66,6 +66,16 @@ test('registry: POST valida, estrae gli id IPBA e GET lo restituisce', async t =
     const merged = await response.json();
     assert.equal(merged.teams[0].rosterUrl, 'https://www.ipba.it/video-team-giocatori.aspx?id=77');
     assert.equal(merged.teams[0].teamId, '77');
+
+    // Le squadre note solo al registry (con link valido) sopravvivono a un
+    // salvataggio del pannello che non le contiene.
+    response = await fetch(base + '/api/rosters/registry', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teams: [{ name: 'Altra Squadra', rosterUrl: '', logoUrl: '' }] })
+    });
+    const union = await response.json();
+    assert.deepEqual(union.teams.map(team => team.name).sort(), ['Altra Squadra', 'PD SaYnts']);
+    assert.equal(union.teams.find(team => team.name === 'PD SaYnts').teamId, '77');
 });
 
 function apiPlayer(teamId, pid, name, number) {

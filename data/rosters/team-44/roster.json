@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "team": {
+    "id": "44",
+    "name": "SURVIVOR BERGAMO",
+    "companyName": "A.S. DILETTANTISTICA FIDASC PAINTBALL BERGAMO",
+    "companyCode": "2684",
+    "originalLogoUrl": "https://www.ipba.it/public/team_44/profilo/thumb/20150302204259883.jpg",
+    "customLogoUrl": "",
+    "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=44",
+    "title": "ROSTER",
+    "primaryColor": "#00a7c4",
+    "secondaryColor": "#91c11e",
+    "fontFamily": "Source Sans Pro"
+  },
+  "settings": {
+    "orderMode": "AUTO",
+    "maxVisible": 12
+  },
+  "players": [],
+  "sourceUpdatedAt": 1784913078603,
+  "updatedAt": 1784913078604
+}

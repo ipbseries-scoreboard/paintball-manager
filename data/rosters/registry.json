@@ -1,0 +1,107 @@
+{
+  "updatedAt": 1784913066700,
+  "teams": [
+    {
+      "name": "PD SAYNTS",
+      "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=2",
+      "logoUrl": "",
+      "teamId": "2"
+    },
+    {
+      "name": "SURVIVOR BERGAMO KIDZ",
+      "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=6",
+      "logoUrl": "",
+      "teamId": "6"
+    },
+    {
+      "name": "SURVIVOR BERGAMO",
+      "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=44",
+      "logoUrl": "",
+      "teamId": "44"
+    },
+    {
+      "name": "PD SAYNTS OMEGA",
+      "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=56",
+      "logoUrl": "",
+      "teamId": "56"
+    },
+    {
+      "name": "SLAYERS",
+      "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=57",
+      "logoUrl": "",
+      "teamId": "57"
+    },
+    {
+      "name": "RANGERS",
+      "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=99",
+      "logoUrl": "",
+      "teamId": "99"
+    },
+    {
+      "name": "DONKEY",
+      "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=145",
+      "logoUrl": "",
+      "teamId": "145"
+    },
+    {
+      "name": "PIACENZA",
+      "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=146",
+      "logoUrl": "",
+      "teamId": "146"
+    },
+    {
+      "name": "PAINTBALL SIENA",
+      "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=150",
+      "logoUrl": "",
+      "teamId": "150"
+    },
+    {
+      "name": "HELL BOYS CANDELARA",
+      "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=153",
+      "logoUrl": "",
+      "teamId": "153"
+    },
+    {
+      "name": "TRIGGER",
+      "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=168",
+      "logoUrl": "",
+      "teamId": "168"
+    },
+    {
+      "name": "RANGERS KIDS",
+      "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=180",
+      "logoUrl": "",
+      "teamId": "180"
+    },
+    {
+      "name": "HELL BOYS CANDELARA X",
+      "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=182",
+      "logoUrl": "",
+      "teamId": "182"
+    },
+    {
+      "name": "PIACENZA DELTA",
+      "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=185",
+      "logoUrl": "",
+      "teamId": "185"
+    },
+    {
+      "name": "TRIGGERINI",
+      "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=186",
+      "logoUrl": "",
+      "teamId": "186"
+    },
+    {
+      "name": "PD SAYNTS ALPHA",
+      "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=192",
+      "logoUrl": "",
+      "teamId": "192"
+    },
+    {
+      "name": "40 SEE ME",
+      "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=198",
+      "logoUrl": "",
+      "teamId": "198"
+    }
+  ]
+}

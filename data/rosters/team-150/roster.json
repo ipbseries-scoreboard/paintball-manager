@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "team": {
+    "id": "150",
+    "name": "PAINTBALL SIENA",
+    "companyName": "A.S. DILETTANTISTICA FIDASC PAINTBALL SIENA",
+    "companyCode": "2683",
+    "originalLogoUrl": "https://www.ipba.it/public/team_150/profilo/thumb/20250328164751329.jpg",
+    "customLogoUrl": "",
+    "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=150",
+    "title": "ROSTER",
+    "primaryColor": "#00a7c4",
+    "secondaryColor": "#91c11e",
+    "fontFamily": "Source Sans Pro"
+  },
+  "settings": {
+    "orderMode": "AUTO",
+    "maxVisible": 12
+  },
+  "players": [],
+  "sourceUpdatedAt": 1784913088372,
+  "updatedAt": 1784913088373
+}

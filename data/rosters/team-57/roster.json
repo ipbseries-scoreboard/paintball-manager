@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "team": {
+    "id": "57",
+    "name": "SLAYERS",
+    "companyName": "A.S. DILETTANTISTICA FIDASC EVOLUTION",
+    "companyCode": "3407",
+    "originalLogoUrl": "https://www.ipba.it/public/team_57/profilo/thumb/20250730183610343.jpg",
+    "customLogoUrl": "",
+    "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=57",
+    "title": "ROSTER",
+    "primaryColor": "#00a7c4",
+    "secondaryColor": "#91c11e",
+    "fontFamily": "Source Sans Pro"
+  },
+  "settings": {
+    "orderMode": "AUTO",
+    "maxVisible": 12
+  },
+  "players": [],
+  "sourceUpdatedAt": 1784913081879,
+  "updatedAt": 1784913081880
+}

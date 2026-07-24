@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "team": {
+    "id": "185",
+    "name": "PIACENZA DELTA",
+    "companyName": "A.S. DILETTANTISTICA FIDASC PAINTBALL PIACENZA",
+    "companyCode": "2673",
+    "originalLogoUrl": "https://www.ipba.it/public/team_185/profilo/thumb/20250227155805582.jpg",
+    "customLogoUrl": "",
+    "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=185",
+    "title": "ROSTER",
+    "primaryColor": "#00a7c4",
+    "secondaryColor": "#91c11e",
+    "fontFamily": "Source Sans Pro"
+  },
+  "settings": {
+    "orderMode": "AUTO",
+    "maxVisible": 12
+  },
+  "players": [],
+  "sourceUpdatedAt": 1784913096400,
+  "updatedAt": 1784913096401
+}

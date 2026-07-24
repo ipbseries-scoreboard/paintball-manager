@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "team": {
+    "id": "198",
+    "name": "40 SEE ME",
+    "companyName": "A.S.DILETTANTISTICA FIDASC TOP PAINTBALL",
+    "companyCode": "2681",
+    "originalLogoUrl": "https://www.ipba.it/public/team_198/profilo/thumb/20260722114721218.png",
+    "customLogoUrl": "",
+    "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=198",
+    "title": "ROSTER",
+    "primaryColor": "#00a7c4",
+    "secondaryColor": "#91c11e",
+    "fontFamily": "Source Sans Pro"
+  },
+  "settings": {
+    "orderMode": "AUTO",
+    "maxVisible": 12
+  },
+  "players": [],
+  "sourceUpdatedAt": 1784913101209,
+  "updatedAt": 1784913101210
+}

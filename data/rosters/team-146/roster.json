@@ -1,0 +1,208 @@
+{
+  "schemaVersion": 2,
+  "team": {
+    "id": "146",
+    "name": "PIACENZA",
+    "companyName": "A.S. DILETTANTISTICA FIDASC PAINTBALL PIACENZA",
+    "companyCode": "2673",
+    "originalLogoUrl": "https://www.ipba.it/public/team_146/profilo/thumb/20241209171513741.jpg",
+    "customLogoUrl": "",
+    "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=146",
+    "title": "ROSTER",
+    "primaryColor": "#00a7c4",
+    "secondaryColor": "#91c11e",
+    "fontFamily": "Source Sans Pro"
+  },
+  "settings": {
+    "orderMode": "AUTO",
+    "maxVisible": 12
+  },
+  "players": [
+    {
+      "playerKey": "TEAM-146_PLAYER-935",
+      "source": {
+        "type": "IPBA",
+        "playerId": "935",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=935",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_935/profilo/thumb/20240512095715337.jpg",
+        "markupId": "",
+        "stale": false
+      },
+      "originalData": {
+        "fullName": "CUMBAL RONNY",
+        "number": "95",
+        "role": "BACK",
+        "age": "30"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 1,
+        "row": "AUTO",
+        "rowPosition": 1
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 78,
+        "cropTop": 0,
+        "cropBottom": 0,
+        "anchor": "BOTTOM_CENTER",
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-146_PLAYER-929",
+      "source": {
+        "type": "IPBA",
+        "playerId": "929",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=929",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_929/profilo/thumb/20260419103642164.jpg",
+        "markupId": "",
+        "stale": false
+      },
+      "originalData": {
+        "fullName": "RANCAN ELIA",
+        "number": "99",
+        "role": "BACKCAPITANO",
+        "age": "29"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 2,
+        "row": "AUTO",
+        "rowPosition": 2
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 78,
+        "cropTop": 0,
+        "cropBottom": 0,
+        "anchor": "BOTTOM_CENTER",
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-146_PLAYER-982",
+      "source": {
+        "type": "IPBA",
+        "playerId": "982",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=982",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_982/profilo/thumb/2024051209564623.jpg",
+        "markupId": "",
+        "stale": false
+      },
+      "originalData": {
+        "fullName": "SALVATORI FEDERICA",
+        "number": "14",
+        "role": "",
+        "age": "30"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 3,
+        "row": "AUTO",
+        "rowPosition": 3
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 78,
+        "cropTop": 0,
+        "cropBottom": 0,
+        "anchor": "BOTTOM_CENTER",
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-146_PLAYER-952",
+      "source": {
+        "type": "IPBA",
+        "playerId": "952",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=952",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_952/profilo/thumb/20250826195819.jpg",
+        "markupId": "",
+        "stale": false
+      },
+      "originalData": {
+        "fullName": "SOPRANI VALERIO",
+        "number": "10",
+        "role": "FRONT",
+        "age": "23"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 4,
+        "row": "AUTO",
+        "rowPosition": 4
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 78,
+        "cropTop": 0,
+        "cropBottom": 0,
+        "anchor": "BOTTOM_CENTER",
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    }
+  ],
+  "sourceUpdatedAt": 1784913086764,
+  "updatedAt": 1784913086765
+}

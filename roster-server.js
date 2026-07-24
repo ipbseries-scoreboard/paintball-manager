@@ -748,8 +748,10 @@ async function handleRosterApi(req, res, parsedUrl) {
             }
             if (parts.length === 3 && req.method === 'POST') {
                 const registry = normalizeRegistry(await readJson(req, 512 * 1024));
-                // Il pannello streaming può avere campi URL vuoti: un URL già
-                // registrato per la stessa squadra non deve andare perso.
+                // Il pannello streaming può avere campi URL vuoti e nomi
+                // diversi da quelli ufficiali IPBA: un URL già registrato per
+                // la stessa squadra non deve andare perso, e le squadre note
+                // solo al registry (con link valido) vengono conservate.
                 const existing = await readRegistry();
                 const byName = new Map(existing.teams.map(team => [team.name.toLowerCase(), team]));
                 registry.teams = registry.teams.map(team => {
@@ -759,6 +761,11 @@ async function handleRosterApi(req, res, parsedUrl) {
                         ? Object.assign({}, team, { rosterUrl: old.rosterUrl, teamId: old.teamId })
                         : team;
                 });
+                const incomingNames = new Set(registry.teams.map(team => team.name.toLowerCase()));
+                existing.teams.forEach(team => {
+                    if (team.teamId && !incomingNames.has(team.name.toLowerCase())) registry.teams.push(team);
+                });
+                registry.teams = registry.teams.slice(0, 100);
                 registry.updatedAt = Date.now();
                 await atomicWrite(registryPath(), JSON.stringify(registry, null, 2));
                 json(res, 200, registry);
