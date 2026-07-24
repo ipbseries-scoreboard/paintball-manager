@@ -125,6 +125,41 @@ function teamDir(teamId) {
     return path.join(DATA_ROOT, 'team-' + Core.safeTeamId(teamId));
 }
 
+function registryPath() {
+    return path.join(DATA_ROOT, 'registry.json');
+}
+
+function extractRegistryTeamId(value) {
+    try {
+        const url = new URL(String(value || ''));
+        if (!/(^|\.)ipba\.it$/i.test(url.hostname)) return '';
+        return Core.safeTeamId(url.searchParams.get('id') || '');
+    } catch (error) {
+        return '';
+    }
+}
+
+function normalizeRegistry(input) {
+    const teams = Array.isArray(input && input.teams) ? input.teams.slice(0, 100) : [];
+    return {
+        updatedAt: Math.max(0, Number(input && input.updatedAt) || 0),
+        teams: teams.map(team => ({
+            name: Core.cleanText(team && team.name, 100),
+            rosterUrl: Core.safeHttpUrl(team && team.rosterUrl),
+            logoUrl: Core.safeHttpUrl(team && team.logoUrl),
+            teamId: extractRegistryTeamId(team && team.rosterUrl)
+        })).filter(team => team.name)
+    };
+}
+
+async function readRegistry() {
+    try {
+        return normalizeRegistry(JSON.parse(await fsp.readFile(registryPath(), 'utf8')));
+    } catch (error) {
+        return { updatedAt: 0, teams: [] };
+    }
+}
+
 function configPath(teamId) {
     return path.join(teamDir(teamId), 'roster.json');
 }
@@ -576,6 +611,25 @@ async function handleRosterApi(req, res, parsedUrl) {
 
     try {
         if (parts[2] === 'auth') return await handleAuthRoute(req, res, parts);
+        if (parts[2] === 'registry') {
+            if (!isLocalRequest(req)) {
+                json(res, 403, { error: 'Il registry rose è disponibile soltanto sul PC di regia.' });
+                return true;
+            }
+            if (parts.length === 3 && req.method === 'GET') {
+                json(res, 200, await readRegistry());
+                return true;
+            }
+            if (parts.length === 3 && req.method === 'POST') {
+                const registry = normalizeRegistry(await readJson(req, 512 * 1024));
+                registry.updatedAt = Date.now();
+                await atomicWrite(registryPath(), JSON.stringify(registry, null, 2));
+                json(res, 200, registry);
+                return true;
+            }
+            json(res, 405, { error: 'Metodo o endpoint non supportato' });
+            return true;
+        }
         if (req.method === 'OPTIONS') {
             json(res, 204, {});
             return true;
@@ -649,5 +703,7 @@ module.exports = {
     imageInfo,
     isLocalRequest,
     getSetupAuthInfo,
+    readRegistry,
+    extractRegistryTeamId,
     DATA_ROOT
 };
