@@ -480,6 +480,30 @@ async function importRoster(teamId) {
     return saveRoster(merged);
 }
 
+// Aggiorna in sequenza tutte le squadre del registry (pausa tra le richieste
+// per non sovraccaricare ipba.it). Un errore su una squadra non ferma le altre.
+async function importAllFromRegistry(options) {
+    options = options || {};
+    const importer = options.importer || importRoster;
+    const delayMs = options.delayMs == null ? 1500 : options.delayMs;
+    const log = options.log || (() => { });
+    const registry = await readRegistry();
+    const results = [];
+    for (const team of registry.teams) {
+        if (!team.teamId) continue;
+        if (results.length && delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
+        try {
+            const roster = await importer(team.teamId);
+            results.push({ teamId: team.teamId, name: roster.team.name, ok: true, players: roster.players.length });
+            log('[ROSE] ' + roster.team.name + ' (id ' + team.teamId + '): rosa aggiornata, ' + roster.players.length + ' giocatori.');
+        } catch (error) {
+            results.push({ teamId: team.teamId, name: team.name, ok: false, error: error.message });
+            log('[ROSE] ' + (team.name || 'Squadra ' + team.teamId) + ': ERRORE ' + error.message);
+        }
+    }
+    return results;
+}
+
 function imageInfo(buffer, mime) {
     if (mime === 'image/png') {
         if (buffer.length < 24 || buffer.toString('hex', 0, 8) !== '89504e470d0a1a0a') return null;
@@ -713,6 +737,14 @@ async function handleRosterApi(req, res, parsedUrl) {
                 json(res, 200, registry);
                 return true;
             }
+            if (parts.length === 4 && parts[3] === 'import-all' && req.method === 'POST') {
+                if (!authenticatedSession(req)) {
+                    json(res, 401, { error: 'Sessione setup scaduta. Inserisci nuovamente la password.' });
+                    return true;
+                }
+                json(res, 200, { results: await importAllFromRegistry({ delayMs: 400 }) });
+                return true;
+            }
             json(res, 405, { error: 'Metodo o endpoint non supportato' });
             return true;
         }
@@ -791,5 +823,6 @@ module.exports = {
     getSetupAuthInfo,
     readRegistry,
     extractRegistryTeamId,
+    importAllFromRegistry,
     DATA_ROOT
 };

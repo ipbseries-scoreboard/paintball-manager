@@ -164,3 +164,28 @@ test('la foto di un giocatore IPBA è condivisa tra le squadre e la cancellazion
     response = await fetch(base + '/api/rosters/LOANX?noImport=1');
     assert.equal((await response.json()).roster.players[0].image.customImageUrl, '');
 });
+
+test('import-all rispetta l\'ordine del registry e prosegue dopo un errore', async () => {
+    await fsp.writeFile(path.join(Server.DATA_ROOT, 'registry.json'), JSON.stringify({ teams: [
+        { name: 'UNO', rosterUrl: 'https://www.ipba.it/video-team-giocatori.aspx?id=11' },
+        { name: 'DUE', rosterUrl: 'https://www.ipba.it/video-team-giocatori.aspx?id=22' },
+        { name: 'SENZA ID', rosterUrl: '' }
+    ] }));
+    const called = [];
+    const results = await Server.importAllFromRegistry({
+        delayMs: 0,
+        importer: async teamId => {
+            called.push(teamId);
+            if (teamId === '11') throw new Error('IPBA HTTP 500');
+            const roster = Core.defaultTeam(teamId);
+            roster.team.name = 'DUE OK';
+            roster.players = [apiPlayer(teamId, 1, 'X Y', 1)];
+            return roster;
+        }
+    });
+    assert.deepEqual(called, ['11', '22']);
+    assert.equal(results.length, 2);
+    assert.equal(results[0].ok, false);
+    assert.match(results[0].error, /IPBA HTTP 500/);
+    assert.deepEqual({ ok: results[1].ok, players: results[1].players }, { ok: true, players: 1 });
+});

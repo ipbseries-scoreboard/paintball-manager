@@ -35,7 +35,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const WebSocket = require('ws');
-const { handleRosterApi, getSetupAuthInfo } = require('./roster-server');
+const { handleRosterApi, getSetupAuthInfo, importAllFromRegistry } = require('./roster-server');
 
 const PORT = parseInt(process.argv[2] || process.env.PORT || '9000', 10);
 const ROOT = __dirname;
@@ -532,6 +532,18 @@ server.listen(PORT, () => {
     }
     console.log('  LASCIA APERTA QUESTA FINESTRA DURANTE IL TORNEO.');
     console.log('');
+
+    // Aggiornamento automatico delle rose dai link fissi del pannello
+    // GESTIONE ROSE & LOGHI (registry). Parte in background: il server
+    // è già utilizzabile mentre le rose si aggiornano una alla volta.
+    setTimeout(() => {
+        importAllFromRegistry({ log: console.log }).then(results => {
+            if (results.length) {
+                console.log('[ROSE] Aggiornamento automatico completato (' +
+                    results.filter(r => r.ok).length + '/' + results.length + ' squadre).');
+            }
+        }).catch(error => console.log('[ROSE] Aggiornamento automatico non riuscito: ' + error.message));
+    }, 3000);
 });
 
 server.on('error', (err) => {
