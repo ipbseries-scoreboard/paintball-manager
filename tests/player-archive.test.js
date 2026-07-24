@@ -57,6 +57,15 @@ test('registry: POST valida, estrae gli id IPBA e GET lo restituisce', async t =
     assert.equal(loaded.teams[0].name, 'PD SaYnts');
     assert.equal(loaded.teams[0].teamId, '77');
     assert.ok(fs.existsSync(path.join(Server.DATA_ROOT, 'registry.json')));
+
+    // Un salvataggio dal pannello senza URL non deve cancellare un URL già noto.
+    response = await fetch(base + '/api/rosters/registry', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teams: [{ name: 'PD SaYnts', rosterUrl: '', logoUrl: '' }] })
+    });
+    const merged = await response.json();
+    assert.equal(merged.teams[0].rosterUrl, 'https://www.ipba.it/video-team-giocatori.aspx?id=77');
+    assert.equal(merged.teams[0].teamId, '77');
 });
 
 function apiPlayer(teamId, pid, name, number) {
@@ -194,6 +203,12 @@ test('streaming sincronizza il registry e offre il setup di tutti i giocatori', 
     const streaming = fs.readFileSync(path.join(__dirname, '..', 'streaming.html'), 'utf8');
     assert.match(streaming, /api\/rosters\/registry/);
     assert.match(streaming, /SETUP TUTTI I GIOCATORI/);
+});
+
+test('streaming usa il registry come fallback quando il pannello non ha URL Rosa', () => {
+    const streaming = fs.readFileSync(path.join(__dirname, '..', 'streaming.html'), 'utf8');
+    assert.match(streaming, /registryUrlForTeam/);
+    assert.match(streaming, /rosterRegistryTeams/);
 });
 
 test('fresh=1 riscarica da IPBA una rosa vecchia ma non una appena aggiornata', async t => {

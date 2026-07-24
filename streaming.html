@@ -3005,7 +3005,7 @@
                                 logoUrl: clan.logoUrl || ''
                             }))
                         })
-                    }).catch(() => { });
+                    }).then(() => loadRosterRegistry()).catch(() => { });
                 } catch (e) { }
 
                 alert("Salvato!");
@@ -3128,21 +3128,47 @@
             }
         }
 
+        function normalizedTeamName(value) {
+            return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        }
+
         function rosterClanForTeam(teamName) {
-            const wanted = String(teamName || '').trim().toLowerCase().replace(/\s+/g, ' ');
+            const wanted = normalizedTeamName(teamName);
             if (!wanted) return null;
-            return clanConfig.find(clan => String(clan.name || '').trim().toLowerCase().replace(/\s+/g, ' ') === wanted) || null;
+            return clanConfig.find(clan => normalizedTeamName(clan.name) === wanted) || null;
+        }
+
+        // Registry del server locale: fallback automatico quando il pannello
+        // non ha l'URL Rosa di una squadra (confronto per nome ufficiale IPBA).
+        let rosterRegistryTeams = [];
+        function loadRosterRegistry() {
+            try {
+                fetch('/api/rosters/registry', { cache: 'no-store' })
+                    .then(response => response.ok ? response.json() : null)
+                    .then(data => { if (data && Array.isArray(data.teams)) rosterRegistryTeams = data.teams; })
+                    .catch(() => { });
+            } catch (e) { }
+        }
+        loadRosterRegistry();
+
+        function registryUrlForTeam(teamName) {
+            const wanted = normalizedTeamName(teamName);
+            if (!wanted) return '';
+            const team = rosterRegistryTeams.find(entry => normalizedTeamName(entry.name) === wanted);
+            return team && team.rosterUrl || '';
         }
 
         function currentRosterContext() {
             const nameA = currentData && currentData.teamLeft && currentData.teamLeft.name || '';
             const nameB = currentData && currentData.teamRight && currentData.teamRight.name || '';
             const clanA = rosterClanForTeam(nameA), clanB = rosterClanForTeam(nameB);
+            const urlA = clanA && clanA.rosterUrl || registryUrlForTeam(nameA);
+            const urlB = clanB && clanB.rosterUrl || registryUrlForTeam(nameB);
             return {
                 nameA, nameB,
-                idA: extractRosterTeamId(clanA && clanA.rosterUrl),
-                idB: extractRosterTeamId(clanB && clanB.rosterUrl),
-                fallbackA: clanA && clanA.rosterUrl || '', fallbackB: clanB && clanB.rosterUrl || ''
+                idA: extractRosterTeamId(urlA),
+                idB: extractRosterTeamId(urlB),
+                fallbackA: urlA, fallbackB: urlB
             };
         }
 

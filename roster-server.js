@@ -748,6 +748,17 @@ async function handleRosterApi(req, res, parsedUrl) {
             }
             if (parts.length === 3 && req.method === 'POST') {
                 const registry = normalizeRegistry(await readJson(req, 512 * 1024));
+                // Il pannello streaming può avere campi URL vuoti: un URL già
+                // registrato per la stessa squadra non deve andare perso.
+                const existing = await readRegistry();
+                const byName = new Map(existing.teams.map(team => [team.name.toLowerCase(), team]));
+                registry.teams = registry.teams.map(team => {
+                    if (team.rosterUrl) return team;
+                    const old = byName.get(team.name.toLowerCase());
+                    return old && old.rosterUrl
+                        ? Object.assign({}, team, { rosterUrl: old.rosterUrl, teamId: old.teamId })
+                        : team;
+                });
                 registry.updatedAt = Date.now();
                 await atomicWrite(registryPath(), JSON.stringify(registry, null, 2));
                 json(res, 200, registry);
