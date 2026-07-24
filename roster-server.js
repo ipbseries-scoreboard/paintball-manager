@@ -480,6 +480,22 @@ async function importRoster(teamId) {
     return saveRoster(merged);
 }
 
+// Una rosa mostrata in diretta con ?fresh=1 viene riscaricata da IPBA se
+// l'ultima lettura è più vecchia del throttle: così i prestiti del match in
+// corso arrivano senza riavviare il server. Se IPBA non risponde si continua
+// con la copia locale. (importRoster passa da module.exports per i test.)
+const FRESH_REFRESH_MS = 60 * 1000;
+
+async function maybeRefreshRoster(roster, teamId, wantsFresh, req) {
+    if (!roster || !wantsFresh || !isLocalRequest(req)) return roster;
+    if (Date.now() - roster.sourceUpdatedAt <= FRESH_REFRESH_MS) return roster;
+    try {
+        return await module.exports.importRoster(teamId);
+    } catch (error) {
+        return roster;
+    }
+}
+
 // Aggiorna in sequenza tutte le squadre del registry (pausa tra le richieste
 // per non sovraccaricare ipba.it). Un errore su una squadra non ferma le altre.
 async function importAllFromRegistry(options) {
@@ -764,6 +780,7 @@ async function handleRosterApi(req, res, parsedUrl) {
             if (!roster && parsedUrl.searchParams.get('noImport') !== '1' && isLocalRequest(req)) {
                 roster = await importRoster(teamId);
             }
+            roster = await maybeRefreshRoster(roster, teamId, parsedUrl.searchParams.get('fresh') === '1', req);
             if (!roster) {
                 json(res, 404, { error: 'Rosa non trovata' });
                 return true;

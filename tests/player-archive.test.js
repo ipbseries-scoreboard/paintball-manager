@@ -196,6 +196,67 @@ test('streaming sincronizza il registry e offre il setup di tutti i giocatori', 
     assert.match(streaming, /SETUP TUTTI I GIOCATORI/);
 });
 
+test('fresh=1 riscarica da IPBA una rosa vecchia ma non una appena aggiornata', async t => {
+    const base = await startServer(t);
+    const id = 'FRESHT';
+    const roster = Core.defaultTeam(id);
+    roster.players = [apiPlayer(id, 777, 'FRESCHI RINO', 8)];
+    roster.sourceUpdatedAt = 0; // mai letta da IPBA: da riscaricare
+    await Server.saveRoster(roster);
+
+    const originalImport = Server.importRoster;
+    const calls = [];
+    Server.importRoster = async teamId => {
+        calls.push(teamId);
+        const updated = Core.defaultTeam(teamId);
+        updated.team.name = 'AGGIORNATA DA IPBA';
+        updated.players = [apiPlayer(teamId, 777, 'FRESCHI RINO', 8)];
+        updated.sourceUpdatedAt = Date.now();
+        return Server.saveRoster(updated);
+    };
+    t.after(() => { Server.importRoster = originalImport; });
+
+    // Senza fresh: serve la copia locale, nessun contatto con IPBA.
+    let response = await fetch(base + '/api/rosters/' + id + '?noImport=1');
+    assert.equal((await response.json()).roster.team.name, 'TEAM ' + id);
+    assert.equal(calls.length, 0);
+
+    // Con fresh e dati vecchi: re-import.
+    response = await fetch(base + '/api/rosters/' + id + '?fresh=1');
+    assert.equal((await response.json()).roster.team.name, 'AGGIORNATA DA IPBA');
+    assert.deepEqual(calls, [id]);
+
+    // Con fresh ma dati appena letti: nessun nuovo re-import (throttle).
+    response = await fetch(base + '/api/rosters/' + id + '?fresh=1');
+    assert.equal(response.status, 200);
+    assert.equal(calls.length, 1);
+});
+
+test('un errore IPBA durante il fresh non interrompe la diretta', async t => {
+    const base = await startServer(t);
+    const id = 'FRESHE';
+    const roster = Core.defaultTeam(id);
+    roster.team.name = 'COPIA LOCALE';
+    roster.players = [apiPlayer(id, 778, 'LOCALE PINO', 9)];
+    roster.sourceUpdatedAt = 0;
+    await Server.saveRoster(roster);
+
+    const originalImport = Server.importRoster;
+    Server.importRoster = async () => { throw new Error('IPBA HTTP 500'); };
+    t.after(() => { Server.importRoster = originalImport; });
+
+    const response = await fetch(base + '/api/rosters/' + id + '?fresh=1');
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).roster.team.name, 'COPIA LOCALE');
+});
+
+test('la pagina rose chiede dati freschi all\'apertura e su AGGIORNA ROSE', () => {
+    const lineup = fs.readFileSync(path.join(__dirname, '..', 'roster-lineup.html'), 'utf8');
+    const storage = fs.readFileSync(path.join(__dirname, '..', 'roster-storage.js'), 'utf8');
+    assert.match(storage, /fresh=1/);
+    assert.match(lineup, /fresh:\s*true/);
+});
+
 test('setup rose espone la modalità archivio con tutte le squadre del registry', () => {
     const setup = fs.readFileSync(path.join(__dirname, '..', 'setup_rose.html'), 'utf8');
     assert.match(setup, /api\/rosters\/registry/);

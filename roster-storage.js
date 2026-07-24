@@ -63,8 +63,8 @@
     }
 
     async function loadTeam(teamId, options) {
-        const url = teamEndpoint(teamId) + (options && options.noImport ? '?noImport=1' : '');
-        const payload = await request(url);
+        const query = options && options.noImport ? '?noImport=1' : options && options.fresh ? '?fresh=1' : '';
+        const payload = await request(teamEndpoint(teamId) + query);
         return {
             roster: Core.normalizeRoster(payload.roster, teamId),
             storage: payload.storage || 'SERVER_LOCALE'

@@ -862,7 +862,10 @@
                     const tasks = ['A', 'B'].map(async function (side) {
                         if (!ids[side]) return;
                         try {
-                            const result = await Storage.loadTeam(ids[side]);
+                            const result = await Storage.loadTeam(
+                                ids[side],
+                                options && options.fresh ? { fresh: true } : undefined
+                            );
                             state[side] = result.roster;
                         } catch (error) {
                             errors.push('Squadra ' + side + ': ' + error.message);
@@ -914,7 +917,7 @@
                 } else if (type === 'REPLAY_ANIMATION') {
                     replay();
                 } else if (type === 'REFRESH_ROSTER') {
-                    refresh({ silent: true, replay: false });
+                    refresh({ silent: true, replay: false, fresh: true });
                 } else if (type === 'SHOW_TEAM_A') {
                     setMode('A');
                 } else if (type === 'SHOW_TEAM_B') {
@@ -955,7 +958,7 @@
                 setMessage('ID SQUADRA MANCANTE', 'Usa ?id=2 oppure ?idA=2&idB=5.');
                 return;
             }
-            refresh({ silent: false, replay: params.get('autoplay') === '1' });
+            refresh({ silent: false, replay: params.get('autoplay') === '1', fresh: true });
         })();
     </script>
 </body>

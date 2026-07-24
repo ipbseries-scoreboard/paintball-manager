@@ -46,8 +46,10 @@ Premendo **SALVA MODIFICHE** l'elenco viene salvato anche sul server del PC di r
 (`data/rosters/registry.json`).
 
 A ogni avvio del server tutte le rose dell'elenco vengono riscaricate da IPBA in automatico
-(righe `[ROSE] …` nella finestra nera). Le personalizzazioni non si perdono. Se IPBA è
-irraggiungibile restano i dati dell'ultima volta.
+(righe `[ROSE] …` nella finestra nera). Inoltre, ogni volta che una rosa viene aperta in
+diretta (o premi **AGGIORNA ROSE**) il server ricontrolla IPBA se l'ultima lettura ha più di
+un minuto: i prestiti del match in corso arrivano senza riavviare nulla. Le personalizzazioni
+non si perdono. Se IPBA è irraggiungibile restano i dati dell'ultima volta.
 
 ## Archivio giocatori e prestiti
 
