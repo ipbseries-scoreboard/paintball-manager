@@ -65,7 +65,9 @@ test('quality report detects limits, duplicate numbers, missing photos and missi
     assert.deepEqual(report.duplicatedNumbers, ['7']);
     assert.equal(report.missing, 1);
     assert.equal(report.missingRoles, 1);
-    assert.ok(report.warnings.some(value => value.includes('12 giocatori')));
+    assert.equal(report.selected, 12);
+    assert.equal(report.overflow, 1);
+    assert.ok(report.warnings.some(value => value.includes('primi 12')));
 });
 
 test('image validation accepts PNG headers and rejects mismatched MIME', () => {
@@ -89,16 +91,28 @@ test('roster API saves shared configuration and player photos through safe endpo
     const dir = path.join(Server.DATA_ROOT, 'team-' + id);
     t.after(async () => { await new Promise(resolve => server.close(resolve)); const resolved = path.resolve(dir); assert.ok(resolved.startsWith(path.resolve(Server.DATA_ROOT) + path.sep)); await fsp.rm(resolved, { recursive: true, force: true }); });
     let response = await fetch(base + '/api/rosters/' + id, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(roster) });
+    assert.equal(response.status, 401);
+    const authInfo = Server.getSetupAuthInfo();
+    const password = authInfo.generatedPassword || process.env.PM_ROSTER_PASSWORD;
+    response = await fetch(base + '/api/rosters/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+    });
+    assert.equal(response.status, 200);
+    const cookie = String(response.headers.get('set-cookie') || '').split(';')[0];
+    assert.match(cookie, /^pm_roster_session=/);
+    response = await fetch(base + '/api/rosters/' + id, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify(roster) });
     assert.equal(response.status, 200);
     response = await fetch(base + '/api/rosters/' + id + '?noImport=1');
     const loaded = await response.json();
     assert.equal(loaded.roster.team.name, 'API TEAM');
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
     png.writeUInt32BE(40, 16); png.writeUInt32BE(40, 20);
-    response = await fetch(base + '/api/rosters/' + id + '/players/' + key + '/photo', { method: 'POST', headers: { 'Content-Type': 'image/png', 'X-Image-Transparency': '1' }, body: png });
+    response = await fetch(base + '/api/rosters/' + id + '/players/' + key + '/photo', { method: 'POST', headers: { 'Content-Type': 'image/png', 'X-Image-Transparency': '1', Cookie: cookie }, body: png });
     const photo = await response.json();
     assert.equal(response.status, 200); assert.match(photo.url, /^data\/rosters\//); assert.equal(fs.existsSync(path.join(dir, 'assets', key + '.png')), true);
-    response = await fetch(base + '/api/rosters/' + id + '/players/' + key + '/photo', { method: 'DELETE' });
+    response = await fetch(base + '/api/rosters/' + id + '/players/' + key + '/photo', { method: 'DELETE', headers: { Cookie: cookie } });
     assert.equal(response.status, 200); assert.equal(fs.existsSync(path.join(dir, 'assets', key + '.png')), false);
 });
 
@@ -106,7 +120,8 @@ test('roster pages and Streaming expose dual controls, half-bust crop and transp
     const lineup = fs.readFileSync(path.join(__dirname, '..', 'roster-lineup.html'), 'utf8');
     const setup = fs.readFileSync(path.join(__dirname, '..', 'setup_rose.html'), 'utf8');
     const streaming = fs.readFileSync(path.join(__dirname, '..', 'streaming.html'), 'utf8');
-    assert.match(lineup, /idA/); assert.match(lineup, /idB/); assert.match(lineup, /SHOW_BOTH_TEAMS/); assert.match(lineup, /background:transparent!important/);
-    assert.match(lineup, /FOTO|portrait/); assert.match(setup, /MEZZO BUSTO/); assert.match(setup, /CARICA FOTO SCONTORNATA/); assert.match(setup, /TRASPARENZA RILEVATA: SÌ/);
+    assert.match(lineup, /idA/); assert.match(lineup, /idB/); assert.match(lineup, /SHOW_BOTH_TEAMS/); assert.match(lineup, /background:\s*transparent\s*!important/);
+    assert.match(lineup, /single-mode/); assert.match(lineup, /MAX_VISIBLE_PLAYERS|pagePlayers/); assert.match(lineup, /FOTO|portrait/);
+    assert.match(setup, /setup-password/); assert.match(setup, /MEZZO BUSTO/); assert.match(setup, /CARICA FOTO SCONTORNATA/); assert.match(setup, /TRASPARENZA RILEVATA: SÌ/);
     assert.match(streaming, /SETUP ROSA A/); assert.match(streaming, /MOSTRA ENTRAMBE LE ROSE/); assert.match(streaming, /setup_rose\.html/); assert.match(streaming, /roster-lineup\.html/);
 });

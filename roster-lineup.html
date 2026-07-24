@@ -1,180 +1,962 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="it">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-    <title>IPBA Roster Lineup</title>
-    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="roster-core.js?v=1"></script>
-    <script src="roster-storage.js?v=1"></script>
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self'; img-src 'self' data: blob: https://www.ipba.it; connect-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+    <title>IPBA — Rose squadre</title>
     <style>
-        :root { --cyan:#22d3ee; --amber:#fbbf24; }
-        * { box-sizing:border-box; }
-        html,body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:transparent!important; }
-        body { font-family:'Oswald','Arial Narrow',sans-serif; color:#fff; }
-        #viewport { position:fixed; inset:0; overflow:hidden; background:transparent; }
-        #stage { position:absolute; width:1920px; height:1080px; transform-origin:top left; opacity:1; transition:opacity .45s ease,transform .55s cubic-bezier(.2,.75,.2,1); }
-        #stage.preview-dark { background:radial-gradient(circle at 50% 45%,#1e293b 0,#020617 70%); }
-        #stage.preview-light { background:linear-gradient(135deg,#cbd5e1,#f8fafc); }
-        #stage.preview-field { background:linear-gradient(rgba(2,6,23,.28),rgba(2,6,23,.68)),repeating-linear-gradient(90deg,#14532d 0,#14532d 120px,#166534 120px,#166534 240px); }
-        #stage.preview-grid { background-color:#e5e7eb; background-image:linear-gradient(45deg,#cbd5e1 25%,transparent 25%),linear-gradient(-45deg,#cbd5e1 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#cbd5e1 75%),linear-gradient(-45deg,transparent 75%,#cbd5e1 75%); background-size:32px 32px; background-position:0 0,0 16px,16px -16px,-16px 0; }
-        #stage.hidden { opacity:0; transform:scale(.985); pointer-events:none; }
-        #roster { position:absolute; inset:32px 30px 28px; display:grid; grid-template-columns:1fr; gap:28px; }
-        #roster.dual { grid-template-columns:minmax(0,1fr) 3px minmax(0,1fr); gap:20px; }
-        .divider { display:none; align-self:stretch; background:linear-gradient(transparent,rgba(34,211,238,.9) 14%,rgba(251,191,36,.9) 50%,rgba(34,211,238,.9) 86%,transparent); box-shadow:0 0 18px rgba(34,211,238,.42); position:relative; opacity:0; transition:opacity .45s ease 1.1s; }
-        .dual .divider { display:block; }
-        .divider::after { content:'VS'; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); padding:10px 7px; border:2px solid var(--cyan); border-radius:9px; background:rgba(2,6,23,.94); color:var(--amber); font-size:25px; font-weight:700; box-shadow:0 0 20px rgba(34,211,238,.35); }
-        #stage.playing .divider { opacity:1; }
-        .team-panel { min-width:0; height:100%; display:grid; grid-template-rows:130px minmax(0,1fr) 34px; border-radius:26px; position:relative; padding:0 12px 8px; --team-primary:#22d3ee; --team-secondary:#fbbf24; opacity:1; transition:opacity .35s ease,transform .45s ease; }
-        .team-panel::before { content:''; position:absolute; inset:0; border-radius:26px; pointer-events:none; background:linear-gradient(180deg,color-mix(in srgb,var(--team-primary) 19%,transparent),transparent 23%,transparent 82%,color-mix(in srgb,var(--team-secondary) 10%,transparent)); border-top:3px solid var(--team-primary); border-bottom:1px solid color-mix(in srgb,var(--team-primary) 45%,transparent); }
-        .team-panel.side-a::after,.team-panel.side-b::after { content:''; position:absolute; top:44px; width:190px; height:80%; pointer-events:none; opacity:.16; filter:blur(40px); background:var(--team-primary); }
-        .team-panel.side-a::after { left:-80px; }.team-panel.side-b::after { right:-80px; }
-        .team-panel.team-hidden { opacity:0; transform:translateX(var(--hide-x)); pointer-events:none; }
-        .side-a { --hide-x:-100px; }.side-b { --hide-x:100px; }
-        .team-header { display:grid; grid-template-columns:108px minmax(0,1fr); gap:18px; align-items:center; margin:13px 12px 5px; padding:10px 18px; border-radius:20px; background:linear-gradient(90deg,rgba(2,6,23,.94),rgba(15,23,42,.74),rgba(2,6,23,.3)); border-left:6px solid var(--team-primary); box-shadow:0 10px 28px rgba(0,0,0,.28); transform:translateY(-24px); opacity:0; }
-        .side-b .team-header { grid-template-columns:minmax(0,1fr) 108px; text-align:right; border-left:0; border-right:6px solid var(--team-primary); background:linear-gradient(270deg,rgba(2,6,23,.94),rgba(15,23,42,.74),rgba(2,6,23,.3)); }
-        #stage.playing .team-header { animation:headerIn .62s cubic-bezier(.2,.78,.2,1) forwards; }
-        .side-b .team-header { animation-delay:.12s!important; }
-        .team-logo { width:100px; height:100px; object-fit:contain; filter:drop-shadow(0 8px 12px rgba(0,0,0,.45)); }
-        .logo-placeholder { width:96px; height:96px; border-radius:22px; display:grid; place-items:center; font-size:35px; color:var(--team-secondary); background:rgba(15,23,42,.78); border:2px solid var(--team-primary); }
-        .team-kicker { color:var(--team-secondary); font-size:17px; letter-spacing:5px; line-height:1; }
-        .team-name { margin-top:5px; font-size:42px; line-height:1; font-weight:700; text-transform:uppercase; text-shadow:0 4px 11px #000; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-        .team-company { margin-top:7px; color:#cbd5e1; font:500 15px/1.1 Arial,sans-serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .players-grid { min-height:0; height:100%; align-self:stretch; justify-self:stretch; display:grid; grid-template-columns:repeat(var(--cols),minmax(0,1fr)); grid-template-rows:repeat(var(--rows),minmax(0,1fr)); gap:var(--gap,12px); align-content:center; justify-content:center; padding:7px 3px; }
-        .player { position:relative; min-width:0; min-height:0; overflow:hidden; border-radius:18px; background:linear-gradient(180deg,rgba(15,23,42,.12),rgba(15,23,42,.84) 66%,rgba(2,6,23,.97)); border:1px solid color-mix(in srgb,var(--team-primary) 45%,rgba(255,255,255,.18)); box-shadow:0 12px 25px rgba(0,0,0,.32); opacity:0; transform:translateY(48px) scale(.9); }
-        #stage.playing .player { animation:playerIn .58s cubic-bezier(.18,.8,.2,1) forwards; animation-delay:var(--delay); }
-        .portrait { position:absolute; z-index:1; top:0; left:5%; width:90%; height:var(--portrait,72%); overflow:hidden; border-radius:15px 15px 4px 4px; }
-        .portrait::after { content:''; position:absolute; inset:auto 0 0; height:32%; background:linear-gradient(transparent,rgba(2,6,23,.9)); pointer-events:none; }
-        .portrait img { position:absolute; left:0; top:calc(var(--crop-top,0) * -1%); width:100%; height:calc(112% + var(--crop-bottom,12) * 1%); object-fit:cover; object-position:center 8%; transform:translate(calc(var(--offset-x,0) * 1%),calc(var(--offset-y,0) * 1%)) scale(var(--photo-scale,1)); transform-origin:center top; }
-        .portrait img.contain { object-fit:contain; }
-        .portrait img.flip { transform:translate(calc(var(--offset-x,0) * 1%),calc(var(--offset-y,0) * 1%)) scale(calc(var(--photo-scale,1) * -1),var(--photo-scale,1)); }
-        .portrait img.shadow { filter:drop-shadow(0 8px 9px rgba(0,0,0,.65)); }
-        .portrait img.glow { filter:drop-shadow(0 0 12px color-mix(in srgb,var(--team-primary) 55%,transparent)) drop-shadow(0 8px 9px rgba(0,0,0,.55)); }
-        .portrait-placeholder { position:absolute; inset:8% 15% 0; border-radius:50% 50% 22% 22%; background:linear-gradient(180deg,#475569,#0f172a); display:grid; place-items:center; color:#94a3b8; font-size:64px; border:2px solid rgba(255,255,255,.15); }
-        .player-meta { position:absolute; z-index:3; left:0; right:0; bottom:0; min-height:34%; padding:9px 9px 8px; display:grid; grid-template-columns:52px minmax(0,1fr); gap:7px; align-items:end; background:linear-gradient(90deg,color-mix(in srgb,var(--team-primary) 18%,rgba(2,6,23,.97)),rgba(2,6,23,.98)); border-top:2px solid var(--team-primary); }
-        .player-number { color:var(--team-secondary); font-size:var(--num-size,34px); line-height:1; font-weight:700; text-align:center; text-shadow:0 2px 7px #000; }
-        .player-name { font-size:var(--name-size,20px); line-height:1.02; text-transform:uppercase; font-weight:700; overflow-wrap:anywhere; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-        .player-role { color:var(--team-primary); font-size:var(--role-size,14px); line-height:1; letter-spacing:2px; margin-top:5px; text-transform:uppercase; }
-        .size-hero .players-grid { max-width:770px; margin:auto; --gap:32px; }.size-hero .player { min-height:730px; }.size-hero .player-meta{grid-template-columns:100px 1fr;padding:18px;}.size-hero{--num-size:65px;--name-size:39px;--role-size:24px;--portrait:79%;}
-        .size-large .players-grid { max-width:820px; margin:auto; --gap:22px; }.size-large{--num-size:48px;--name-size:29px;--role-size:19px;--portrait:76%;}
-        .size-medium{--num-size:42px;--name-size:25px;--role-size:17px;--portrait:75%;}
-        .size-compact{--num-size:36px;--name-size:21px;--role-size:15px;--portrait:72%;}
-        .size-dense{--num-size:31px;--name-size:18px;--role-size:13px;--portrait:70%;}.size-dense .player-meta{grid-template-columns:44px 1fr;padding:7px;}
-        .page-status { align-self:center; text-align:center; font-size:15px; letter-spacing:3px; color:#94a3b8; opacity:0; }
-        .page-status.visible { opacity:1; }
-        #error { position:absolute; inset:0; display:none; place-items:center; padding:100px; text-align:center; background:rgba(2,6,23,.9); color:#fecaca; font-size:36px; z-index:20; }
-        #loading { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); color:var(--cyan); letter-spacing:5px; font-size:26px; z-index:15; }
-        .compact-mode .team-header { height:104px; margin-top:5px; }.compact-mode .team-panel{grid-template-rows:112px minmax(0,1fr) 24px}.compact-mode .team-logo{height:82px}.compact-mode .logo-placeholder{height:80px}.compact-mode .team-name{font-size:34px}
-        @keyframes headerIn { to { opacity:1; transform:translateY(0); } }
-        @keyframes playerIn { to { opacity:1; transform:translateY(0) scale(1); } }
-        @media (prefers-reduced-motion:reduce) { *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important} }
+        :root {
+            color-scheme: dark;
+            --ipba-cyan: #00a7c4;
+            --ipba-green: #91c11e;
+            --ink: #1f2d3d;
+            --slate: #34434d;
+            --white: #ffffff;
+        }
+
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: transparent !important;
+        }
+        body {
+            font-family: "Source Sans Pro", "Segoe UI", Arial, sans-serif;
+            user-select: none;
+        }
+
+        #viewport {
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            width: 1920px;
+            height: 1080px;
+            transform-origin: center;
+            will-change: transform;
+        }
+        #stage {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+            background: transparent;
+            isolation: isolate;
+        }
+        #stage.preview-dark {
+            background:
+                radial-gradient(circle at 50% 42%, rgba(0, 167, 196, .18), transparent 42%),
+                linear-gradient(135deg, #0b1117, #1f2d3d 52%, #111820);
+        }
+        #stage.preview-light {
+            background:
+                radial-gradient(circle at 50% 42%, rgba(0, 167, 196, .17), transparent 45%),
+                linear-gradient(145deg, #eef3f5, #ffffff);
+        }
+        #stage.preview-field {
+            background:
+                linear-gradient(90deg, transparent 49.85%, rgba(255,255,255,.38) 49.85% 50.15%, transparent 50.15%),
+                radial-gradient(circle at 50% 50%, transparent 0 150px, rgba(255,255,255,.34) 152px 156px, transparent 158px),
+                repeating-linear-gradient(90deg, rgba(255,255,255,.035) 0 120px, rgba(0,0,0,.035) 120px 240px),
+                #4b7333;
+        }
+        #stage.preview-checker {
+            background-color: #d9dfe2;
+            background-image:
+                linear-gradient(45deg, #b9c1c5 25%, transparent 25%),
+                linear-gradient(-45deg, #b9c1c5 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #b9c1c5 75%),
+                linear-gradient(-45deg, transparent 75%, #b9c1c5 75%);
+            background-size: 40px 40px;
+            background-position: 0 0, 0 20px, 20px -20px, -20px 0;
+        }
+
+        .composition {
+            position: absolute;
+            inset: 0;
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            transition: opacity 320ms ease, transform 420ms cubic-bezier(.2,.8,.2,1);
+        }
+        #stage.is-hidden .composition {
+            opacity: 0;
+            transform: translateY(42px) scale(.985);
+            pointer-events: none;
+        }
+
+        #teams {
+            position: absolute;
+            inset: 30px 42px 30px;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 52px;
+            z-index: 2;
+        }
+        #stage.single-mode #teams {
+            grid-template-columns: minmax(0, 1fr);
+            inset-inline: 90px;
+        }
+
+        .team-panel {
+            --primary: var(--ipba-cyan);
+            --secondary: var(--ipba-green);
+            position: relative;
+            min-width: 0;
+            display: grid;
+            grid-template-rows: 116px minmax(0, 1fr);
+            gap: 12px;
+        }
+        .team-panel::before {
+            content: "";
+            position: absolute;
+            inset: 80px -18px -10px;
+            z-index: -1;
+            border-radius: 40px;
+            background:
+                radial-gradient(ellipse at 50% 86%, color-mix(in srgb, var(--primary) 24%, transparent), transparent 62%);
+            opacity: .8;
+            pointer-events: none;
+        }
+
+        .team-header {
+            position: relative;
+            height: 108px;
+            display: grid;
+            grid-template-columns: 106px minmax(0, 1fr) 48px;
+            align-items: center;
+            gap: 18px;
+            padding: 9px 18px 9px 9px;
+            border: 1px solid color-mix(in srgb, var(--primary) 60%, transparent);
+            border-left: 7px solid var(--primary);
+            border-radius: 4px 18px 18px 4px;
+            background:
+                linear-gradient(105deg, rgba(255,255,255,.96), rgba(245,248,249,.92) 68%, rgba(255,255,255,.78));
+            box-shadow:
+                0 16px 38px rgba(0,0,0,.25),
+                inset 0 -3px 0 color-mix(in srgb, var(--secondary) 70%, transparent);
+            color: var(--ink);
+            overflow: hidden;
+        }
+        .team-panel[data-side="B"] .team-header {
+            grid-template-columns: 48px minmax(0, 1fr) 106px;
+            padding: 9px 9px 9px 18px;
+            border-left: 1px solid color-mix(in srgb, var(--primary) 60%, transparent);
+            border-right: 7px solid var(--primary);
+            border-radius: 18px 4px 4px 18px;
+            text-align: right;
+        }
+        .team-header::after {
+            content: "";
+            position: absolute;
+            right: -28px;
+            top: -48px;
+            width: 150px;
+            height: 190px;
+            transform: rotate(18deg);
+            background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--primary) 18%, transparent));
+        }
+        .team-panel[data-side="B"] .team-header::after {
+            right: auto;
+            left: -28px;
+            transform: rotate(-18deg);
+        }
+
+        .team-logo-wrap {
+            position: relative;
+            width: 96px;
+            height: 88px;
+            display: grid;
+            place-items: center;
+            background: rgba(255,255,255,.82);
+            border: 1px solid rgba(31,45,61,.1);
+            border-radius: 4px;
+            overflow: hidden;
+            z-index: 1;
+        }
+        .team-logo {
+            width: 88px;
+            height: 80px;
+            object-fit: contain;
+        }
+        .team-logo-fallback {
+            color: var(--primary);
+            font-size: 42px;
+            font-weight: 900;
+        }
+        .team-copy { min-width: 0; z-index: 1; }
+        .team-kicker {
+            color: var(--primary);
+            font-size: 15px;
+            line-height: 1;
+            letter-spacing: .18em;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+        .team-name {
+            margin-top: 5px;
+            color: var(--ink);
+            font-size: clamp(26px, 2vw, 42px);
+            line-height: .98;
+            letter-spacing: .01em;
+            font-weight: 900;
+            text-transform: uppercase;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .team-company {
+            margin-top: 5px;
+            color: #66737d;
+            font-size: 14px;
+            line-height: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .team-letter {
+            width: 42px;
+            height: 42px;
+            display: grid;
+            place-items: center;
+            border-radius: 50%;
+            color: #fff;
+            background: var(--primary);
+            border: 3px solid #fff;
+            box-shadow: 0 3px 12px rgba(0,0,0,.2);
+            font-size: 20px;
+            font-weight: 900;
+            z-index: 1;
+        }
+        .team-panel[data-side="B"] .team-letter { grid-column: 1; grid-row: 1; }
+        .team-panel[data-side="B"] .team-copy { grid-column: 2; grid-row: 1; }
+        .team-panel[data-side="B"] .team-logo-wrap { grid-column: 3; grid-row: 1; }
+
+        .player-grid {
+            --columns: 4;
+            --rows: 3;
+            --card-width: 210px;
+            --card-height: 264px;
+            display: grid;
+            grid-template-columns: repeat(var(--columns), minmax(0, var(--card-width)));
+            grid-template-rows: repeat(var(--rows), minmax(0, var(--card-height)));
+            justify-content: center;
+            align-content: center;
+            gap: 18px;
+            min-width: 0;
+            min-height: 0;
+            padding: 0 2px;
+        }
+
+        .player-card {
+            --primary: var(--ipba-cyan);
+            --secondary: var(--ipba-green);
+            position: relative;
+            width: 100%;
+            height: 100%;
+            min-width: 0;
+            display: grid;
+            grid-template-rows: minmax(0, 1fr) auto;
+            filter: drop-shadow(0 13px 18px rgba(0,0,0,.26));
+            transform-origin: 50% 100%;
+        }
+        .portrait {
+            position: relative;
+            min-height: 0;
+            overflow: hidden;
+            border-radius: 18px 18px 0 0;
+        }
+        .portrait::before {
+            content: "";
+            position: absolute;
+            left: 10%;
+            right: 10%;
+            bottom: -18px;
+            height: 54%;
+            border-radius: 50% 50% 10px 10px;
+            background:
+                radial-gradient(circle at 50% 65%, color-mix(in srgb, var(--primary) 38%, transparent), transparent 68%);
+            filter: blur(8px);
+        }
+        .portrait img {
+            position: absolute;
+            z-index: 1;
+            max-width: none;
+            object-fit: contain;
+            transform-origin: 50% 80%;
+            will-change: transform, opacity;
+        }
+        .portrait img.with-shadow {
+            filter: drop-shadow(0 10px 9px rgba(0,0,0,.42));
+        }
+        .portrait img.with-glow {
+            filter:
+                drop-shadow(0 10px 9px rgba(0,0,0,.42))
+                drop-shadow(0 0 10px color-mix(in srgb, var(--primary) 44%, transparent));
+        }
+        .portrait-placeholder {
+            position: absolute;
+            inset: 15% 15% 0;
+            display: grid;
+            place-items: center;
+            border-radius: 55% 55% 12px 12px;
+            background: linear-gradient(160deg, rgba(255,255,255,.2), rgba(52,67,77,.64));
+            border: 1px solid rgba(255,255,255,.25);
+            color: rgba(255,255,255,.86);
+            font-size: 14px;
+            font-weight: 900;
+            letter-spacing: .16em;
+        }
+
+        .player-info {
+            position: relative;
+            min-height: 77px;
+            display: grid;
+            grid-template-columns: 58px minmax(0, 1fr);
+            align-items: center;
+            gap: 7px;
+            padding: 8px 10px 8px 7px;
+            border-top: 4px solid var(--primary);
+            border-radius: 3px 3px 14px 14px;
+            background:
+                linear-gradient(105deg, rgba(31,45,61,.96), rgba(16,25,33,.94));
+            box-shadow:
+                inset 0 -3px 0 color-mix(in srgb, var(--secondary) 78%, transparent),
+                0 8px 22px rgba(0,0,0,.22);
+            overflow: hidden;
+        }
+        .player-info::after {
+            content: "";
+            position: absolute;
+            right: -22px;
+            top: -35px;
+            width: 75px;
+            height: 130px;
+            background: color-mix(in srgb, var(--primary) 14%, transparent);
+            transform: rotate(22deg);
+        }
+        .player-number {
+            position: relative;
+            z-index: 1;
+            min-width: 52px;
+            height: 52px;
+            display: grid;
+            place-items: center;
+            border: 2px solid rgba(255,255,255,.9);
+            border-radius: 50%;
+            color: #fff;
+            background: var(--primary);
+            box-shadow: 0 4px 14px rgba(0,0,0,.3);
+            font-size: 29px;
+            line-height: 1;
+            font-weight: 900;
+            font-variant-numeric: tabular-nums;
+        }
+        .player-copy {
+            position: relative;
+            z-index: 1;
+            min-width: 0;
+            text-transform: uppercase;
+        }
+        .player-name {
+            display: -webkit-box;
+            overflow: hidden;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+            color: #fff;
+            font-size: 20px;
+            line-height: 1.02;
+            font-weight: 900;
+            letter-spacing: .015em;
+            overflow-wrap: anywhere;
+        }
+        .player-name.long { font-size: 17px; }
+        .player-name.very-long { font-size: 15px; }
+        .player-role {
+            margin-top: 5px;
+            color: var(--secondary);
+            font-size: 14px;
+            line-height: 1;
+            font-weight: 900;
+            letter-spacing: .14em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .player-page {
+            position: absolute;
+            right: 8px;
+            top: 8px;
+            z-index: 5;
+            padding: 3px 7px;
+            border-radius: 20px;
+            color: #fff;
+            background: rgba(31,45,61,.78);
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        #versus {
+            position: absolute;
+            left: 50%;
+            top: 48px;
+            bottom: 42px;
+            width: 38px;
+            z-index: 6;
+            transform: translateX(-50%);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+        #stage.dual-mode #versus { display: flex; }
+        #versus::before {
+            content: "";
+            position: absolute;
+            top: 86px;
+            bottom: 24px;
+            width: 2px;
+            background: linear-gradient(transparent, rgba(255,255,255,.55) 14%, var(--ipba-cyan) 50%, rgba(255,255,255,.55) 86%, transparent);
+            box-shadow: 0 0 16px rgba(0,167,196,.7);
+        }
+        .versus-badge {
+            position: relative;
+            z-index: 1;
+            width: 58px;
+            height: 58px;
+            display: grid;
+            place-items: center;
+            border-radius: 50%;
+            color: #fff;
+            background: #34434d;
+            border: 3px solid #fff;
+            outline: 3px solid var(--ipba-cyan);
+            box-shadow: 0 0 24px rgba(0,167,196,.65), 0 8px 20px rgba(0,0,0,.36);
+            font-size: 19px;
+            font-weight: 900;
+            letter-spacing: .04em;
+        }
+
+        #message {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            z-index: 20;
+            transform: translate(-50%, -50%);
+            min-width: 380px;
+            max-width: 720px;
+            padding: 28px 34px;
+            border: 1px solid rgba(0,167,196,.7);
+            border-left: 7px solid var(--ipba-cyan);
+            border-radius: 4px 16px 16px 4px;
+            background: rgba(31,45,61,.96);
+            color: #fff;
+            box-shadow: 0 20px 55px rgba(0,0,0,.4);
+            text-align: center;
+            font-size: 22px;
+            font-weight: 700;
+        }
+        #message[hidden] { display: none; }
+        #message small {
+            display: block;
+            margin-top: 8px;
+            color: #b8c4ca;
+            font-size: 15px;
+            font-weight: 400;
+        }
+        .warning-ribbon {
+            position: absolute;
+            left: 50%;
+            bottom: 16px;
+            z-index: 15;
+            transform: translateX(-50%);
+            padding: 7px 15px;
+            border-radius: 4px;
+            color: #1f2d3d;
+            background: #ffd866;
+            box-shadow: 0 6px 18px rgba(0,0,0,.25);
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        #stage.replaying .team-header {
+            animation: header-in 560ms cubic-bezier(.18,.86,.25,1) both;
+            animation-delay: var(--header-delay, 80ms);
+        }
+        #stage.replaying .player-card {
+            animation: player-in 560ms cubic-bezier(.16,.86,.24,1.06) both;
+            animation-delay: var(--delay, 500ms);
+        }
+        #stage.replaying #versus {
+            animation: versus-in 440ms ease-out both;
+            animation-delay: 2650ms;
+        }
+        @keyframes header-in {
+            from { opacity: 0; transform: translateX(var(--header-from, -70px)) scale(.97); }
+            to { opacity: 1; transform: translateX(0) scale(1); }
+        }
+        @keyframes player-in {
+            from { opacity: 0; transform: translateY(48px) scale(.88); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes versus-in {
+            from { opacity: 0; transform: translateX(-50%) scale(.6); }
+            to { opacity: 1; transform: translateX(-50%) scale(1); }
+        }
+
+        #stage.compact-mode .team-header { height: 96px; }
+        #stage.compact-mode .team-panel { grid-template-rows: 104px minmax(0,1fr); }
+        #stage.compact-mode .player-info { min-height: 70px; }
+
+        @media (prefers-reduced-motion: reduce) {
+            #stage.replaying .team-header,
+            #stage.replaying .player-card,
+            #stage.replaying #versus {
+                animation-duration: 1ms !important;
+                animation-delay: 0ms !important;
+            }
+        }
     </style>
 </head>
 <body>
-    <div id="viewport"><main id="stage"><div id="loading">CARICAMENTO ROSE...</div><div id="roster"></div><div id="error"></div></main></div>
+    <div id="viewport">
+        <main id="stage" aria-live="polite">
+            <div class="composition">
+                <section id="teams" aria-label="Rose delle squadre"></section>
+                <div id="versus" aria-hidden="true"><div class="versus-badge">VS</div></div>
+                <div id="warning" class="warning-ribbon" hidden></div>
+            </div>
+            <div id="message">CARICAMENTO ROSE<small>Connessione al server locale IPBA…</small></div>
+        </main>
+    </div>
+
+    <script src="roster-core.js"></script>
+    <script src="roster-storage.js"></script>
     <script>
-        'use strict';
-        const Core = IPBARosterCore, Storage = IPBARosterStorage;
-        const params = new URLSearchParams(location.search);
-        const idSingle = Core.safeTeamId(params.get('id'));
-        const idA = Core.safeTeamId(params.get('idA')) || idSingle;
-        const idB = Core.safeTeamId(params.get('idB'));
-        const dual = params.get('mode') === 'dual' || !!(idA && idB);
-        const preview = params.get('preview') === '1';
-        const autoplay = params.get('autoplay') !== '0';
-        const compact = params.get('compact') === '1';
-        const stay = Math.max(0, Math.min(300000, parseInt(params.get('stay'),10) || 0));
-        const stage = document.getElementById('stage'), rosterEl = document.getElementById('roster');
-        let rosters = { A:null, B:null }, page = { A:0, B:0 }, mode = dual ? 'BOTH' : 'A', hideTimer = null, pollTimer = null;
+        (function () {
+            'use strict';
 
-        function scaleStage() {
-            const scale = Math.min(innerWidth/1920,innerHeight/1080);
-            stage.style.transform = 'translate(' + ((innerWidth-1920*scale)/2) + 'px,' + ((innerHeight-1080*scale)/2) + 'px) scale(' + scale + ')';
-        }
-        addEventListener('resize',scaleStage); scaleStage();
-        if (preview) stage.classList.add('preview-dark');
-        if (compact) stage.classList.add('compact-mode');
+            const Core = window.IPBARosterCore;
+            const Storage = window.IPBARosterStorage;
+            const params = new URLSearchParams(location.search);
+            const stage = document.getElementById('stage');
+            const teamsRoot = document.getElementById('teams');
+            const message = document.getElementById('message');
+            const warning = document.getElementById('warning');
+            const viewport = document.getElementById('viewport');
+            const ids = {
+                A: Core.safeTeamId(params.get('idA') || params.get('id') || ''),
+                B: Core.safeTeamId(params.get('idB') || '')
+            };
+            const state = {
+                A: null,
+                B: null,
+                pages: { A: 0, B: 0 },
+                mode: ids.B ? 'BOTH' : 'A',
+                loading: false,
+                refreshTimer: 0,
+                stayTimer: 0,
+                previewBackground: params.get('preview') === '1' ? 'dark' : 'transparent'
+            };
 
-        function logoNode(team) {
-            const url = team.customLogoUrl || team.originalLogoUrl;
-            if (url) { const img=document.createElement('img'); img.className='team-logo'; img.src=url; img.alt=''; return img; }
-            const ph=document.createElement('div'); ph.className='logo-placeholder'; ph.textContent=(team.name||'T').slice(0,1).toUpperCase(); return ph;
-        }
+            function fitViewport() {
+                const scale = Math.min(innerWidth / 1920, innerHeight / 1080);
+                viewport.style.transform = 'translate(-50%, -50%) scale(' + scale + ')';
+            }
 
-        async function playerCard(player,index,side) {
-            const data=Core.displayData(player), card=document.createElement('article'); card.className='player';
-            const row=Core.inferredRow(player), rowDelay={POSTERIORE:0,CENTRALE:140,ANTERIORE:280}[row]||0;
-            card.style.setProperty('--delay',(520+rowDelay+(index%4)*75+(side==='B'?80:0))+'ms');
-            const portrait=document.createElement('div'); portrait.className='portrait';
-            const imageUrl=await Storage.resolvePlayerImage(player);
-            if (imageUrl) {
-                const img=document.createElement('img'); img.src=imageUrl; img.alt=''; img.decoding='async';
-                if (player.image.hasTransparency) img.classList.add('contain');
-                if (player.image.flipX) img.classList.add('flip');
-                if (player.image.glow) img.classList.add('glow'); else if (player.image.shadow) img.classList.add('shadow');
-                img.style.setProperty('--photo-scale',player.image.scale); img.style.setProperty('--offset-x',player.image.offsetX);
-                img.style.setProperty('--offset-y',player.image.offsetY); img.style.setProperty('--crop-top',player.image.cropTop);
-                img.style.setProperty('--crop-bottom',player.image.cropBottom); portrait.style.setProperty('--portrait',player.image.bustHeight+'%'); portrait.appendChild(img);
-            } else { const ph=document.createElement('div'); ph.className='portrait-placeholder'; ph.textContent=(data.name||'?').slice(0,1); portrait.appendChild(ph); }
-            const meta=document.createElement('div'); meta.className='player-meta';
-            const num=document.createElement('div'); num.className='player-number'; num.textContent=data.number||'—';
-            const words=document.createElement('div'), name=document.createElement('div'); name.className='player-name'; name.textContent=data.name;
-            const role=document.createElement('div'); role.className='player-role'; role.textContent=data.role||'GIOCATORE';
-            words.append(name,role); meta.append(num,words); card.append(portrait,meta); return card;
-        }
+            function setMessage(title, detail) {
+                message.replaceChildren();
+                message.appendChild(document.createTextNode(title));
+                if (detail) {
+                    const small = document.createElement('small');
+                    small.textContent = detail;
+                    message.appendChild(small);
+                }
+                message.hidden = false;
+            }
 
-        async function teamPanel(roster,side) {
-            const ordered=Core.orderedPlayers(roster), pages=[]; for(let i=0;i<ordered.length;i+=12) pages.push(ordered.slice(i,i+12));
-            if(!pages.length) pages.push([]); page[side]=Math.min(page[side],pages.length-1);
-            const players=pages[page[side]], spec=Core.layoutSpec(players.length);
-            const panel=document.createElement('section'); panel.className='team-panel side-'+side.toLowerCase()+' size-'+spec.size;
-            panel.dataset.side=side; panel.style.setProperty('--team-primary',roster.team.primaryColor); panel.style.setProperty('--team-secondary',roster.team.secondaryColor);
-            const header=document.createElement('header'); header.className='team-header';
-            const text=document.createElement('div'), kicker=document.createElement('div'); kicker.className='team-kicker'; kicker.textContent=roster.team.title||'ROSTER';
-            const name=document.createElement('div'); name.className='team-name'; name.textContent=roster.team.name;
-            const company=document.createElement('div'); company.className='team-company'; company.textContent=roster.team.companyName||('SQUADRA '+roster.team.id);
-            text.append(kicker,name,company); const logo=logoNode(roster.team); if(side==='B') header.append(text,logo); else header.append(logo,text);
-            const grid=document.createElement('div'); grid.className='players-grid'; grid.style.setProperty('--cols',spec.columns); grid.style.setProperty('--rows',spec.rows);
-            const cards=await Promise.all(players.map((player,index)=>playerCard(player,index,side))); cards.forEach(card=>grid.appendChild(card));
-            const status=document.createElement('div'); status.className='page-status'+(pages.length>1?' visible':''); status.textContent=pages.length>1?('PAGINA '+(page[side]+1)+' / '+pages.length):'';
-            panel.append(header,grid,status); return panel;
-        }
+            function hideMessage() {
+                message.hidden = true;
+            }
 
-        async function render(playAnimation) {
-            document.getElementById('loading').style.display='block'; rosterEl.replaceChildren(); rosterEl.className=dual?'dual':'';
-            const panels=[];
-            if(rosters.A) panels.push(await teamPanel(rosters.A,'A'));
-            if(dual){ const divider=document.createElement('div'); divider.className='divider'; if(panels.length) rosterEl.append(panels[0],divider); else rosterEl.append(divider); if(rosters.B) rosterEl.append(await teamPanel(rosters.B,'B')); }
-            else if(panels.length) rosterEl.append(panels[0]);
-            applyMode(); document.getElementById('loading').style.display='none';
-            if(playAnimation!==false) replay(); else stage.classList.add('playing');
-        }
+            function logoUrl(roster) {
+                return Core.safeAssetUrl(roster.team.customLogoUrl) || Core.safeHttpUrl(roster.team.originalLogoUrl);
+            }
 
-        function applyMode(){ rosterEl.querySelectorAll('.team-panel').forEach(panel=>panel.classList.toggle('team-hidden',mode!=='BOTH'&&panel.dataset.side!==mode)); }
-        function replay(){ clearTimeout(hideTimer); stage.classList.remove('hidden','playing'); void stage.offsetWidth; stage.classList.add('playing'); if(stay) hideTimer=setTimeout(hideRoster,stay); }
-        function showRoster(){ stage.classList.remove('hidden'); replay(); }
-        function hideRoster(){ stage.classList.add('hidden'); }
-        function setMode(value){ mode=value; applyMode(); showRoster(); }
-        function changePage(delta){ ['A','B'].forEach(side=>{ if(!rosters[side])return; const total=Math.max(1,Math.ceil(Core.orderedPlayers(rosters[side]).length/12)); page[side]=(page[side]+delta+total)%total; }); render(true); }
-        async function refresh(){
-            try{
-                const jobs=[]; if(idA) jobs.push(Storage.loadTeam(idA).then(result=>rosters.A=result.roster)); if(idB) jobs.push(Storage.loadTeam(idB).then(result=>rosters.B=result.roster));
-                if(!jobs.length) throw new Error('Aggiungi ?id=2 oppure ?idA=2&idB=5 all’URL.'); await Promise.all(jobs); await render(autoplay);
-            }catch(error){ const box=document.getElementById('error'); box.textContent=error.message; box.style.display='grid'; document.getElementById('loading').style.display='none'; }
-        }
-        function previewBackground(value){ stage.classList.remove('preview-dark','preview-light','preview-field','preview-grid'); if(value&&value!=='transparent') stage.classList.add('preview-'+value); }
-        function command(packet){
-            const type=typeof packet==='string'?packet:packet&&packet.type;
-            if(type==='SHOW_ROSTER')showRoster(); else if(type==='HIDE_ROSTER')hideRoster(); else if(type==='REPLAY_ANIMATION')replay(); else if(type==='REFRESH_ROSTER')refresh();
-            else if(type==='SHOW_TEAM_A')setMode('A'); else if(type==='SHOW_TEAM_B')setMode('B'); else if(type==='SHOW_BOTH_TEAMS')setMode('BOTH');
-            else if(type==='NEXT_ROSTER_PAGE')changePage(1); else if(type==='PREVIOUS_ROSTER_PAGE')changePage(-1); else if(type==='ROSTER_PREVIEW_BACKGROUND')previewBackground(packet.value);
-        }
-        addEventListener('message',event=>{ if(event.origin===location.origin||event.origin==='null')command(event.data); });
-        const channel=typeof BroadcastChannel!=='undefined'?new BroadcastChannel('ipba_roster_setup'):null;
-        if(channel)channel.onmessage=event=>{ const packet=event.data||{}; if(['ROSTER_CONFIG_UPDATED','PLAYER_IMAGE_UPDATED','PLAYER_DATA_UPDATED','ROSTER_ORDER_UPDATED','DUAL_ROSTER_UPDATED','REFRESH_ROSTER'].includes(packet.type)&&(!packet.teamId||packet.teamId===idA||packet.teamId===idB))refresh(); else command(packet); };
-        pollTimer=setInterval(async()=>{ try{ const oldA=rosters.A&&rosters.A.updatedAt,oldB=rosters.B&&rosters.B.updatedAt; const jobs=[]; if(idA)jobs.push(Storage.loadTeam(idA,{noImport:true}).then(r=>rosters.A=r.roster)); if(idB)jobs.push(Storage.loadTeam(idB,{noImport:true}).then(r=>rosters.B=r.roster)); await Promise.all(jobs); if((rosters.A&&rosters.A.updatedAt)!==oldA||(rosters.B&&rosters.B.updatedAt)!==oldB)render(false); }catch(error){} },15000);
-        addEventListener('beforeunload',()=>{clearInterval(pollTimer);if(channel)channel.close();});
-        refresh();
+            function createLogo(roster) {
+                const wrap = document.createElement('div');
+                wrap.className = 'team-logo-wrap';
+                const fallback = document.createElement('span');
+                fallback.className = 'team-logo-fallback';
+                fallback.textContent = (roster.team.name || '?').slice(0, 1).toUpperCase();
+                wrap.appendChild(fallback);
+                const source = logoUrl(roster);
+                if (source) {
+                    const image = document.createElement('img');
+                    image.className = 'team-logo';
+                    image.alt = 'Logo ' + roster.team.name;
+                    image.addEventListener('load', function () {
+                        fallback.hidden = true;
+                    });
+                    image.addEventListener('error', function () {
+                        image.remove();
+                        fallback.hidden = false;
+                    });
+                    image.src = source;
+                    wrap.appendChild(image);
+                }
+                return wrap;
+            }
+
+            function createHeader(roster, side) {
+                const header = document.createElement('header');
+                header.className = 'team-header';
+                header.style.setProperty('--header-delay', side === 'A' ? '90ms' : '180ms');
+                header.style.setProperty('--header-from', side === 'A' ? '-80px' : '80px');
+
+                const copy = document.createElement('div');
+                copy.className = 'team-copy';
+                const kicker = document.createElement('div');
+                kicker.className = 'team-kicker';
+                kicker.textContent = roster.team.title || 'ROSTER';
+                const name = document.createElement('div');
+                name.className = 'team-name';
+                name.textContent = roster.team.name || ('TEAM ' + roster.team.id);
+                const company = document.createElement('div');
+                company.className = 'team-company';
+                company.textContent = roster.team.companyName ||
+                    (roster.team.companyCode ? 'CODICE FIDASC ' + roster.team.companyCode : 'PAINTBALL TEAM');
+                copy.append(kicker, name, company);
+
+                const letter = document.createElement('div');
+                letter.className = 'team-letter';
+                letter.textContent = side;
+                if (side === 'A') header.append(createLogo(roster), copy, letter);
+                else header.append(letter, copy, createLogo(roster));
+                return header;
+            }
+
+            function playerImageStyle(image) {
+                const height = Math.max(70, Math.min(170, Number(image.bustHeight || 78) * 1.42));
+                const scaleX = (image.flipX ? -1 : 1) * Number(image.scale || 1);
+                const scaleY = Number(image.scale || 1);
+                const x = Number(image.offsetX || 0);
+                const y = Number(image.offsetY || 0);
+                const anchor = image.anchor || 'BOTTOM_CENTER';
+                const style = {
+                    height: height + '%',
+                    left: '50%',
+                    transform: 'translateX(-50%) translate(' + x + 'px,' + y + 'px) scale(' + scaleX + ',' + scaleY + ')',
+                    clipPath: 'inset(' + Number(image.cropTop || 0) + '% 0 ' + Number(image.cropBottom || 0) + '% 0)'
+                };
+                if (anchor === 'TOP_CENTER') style.top = '0';
+                else if (anchor === 'CENTER') {
+                    style.top = '50%';
+                    style.transform = 'translate(-50%,-50%) translate(' + x + 'px,' + y + 'px) scale(' + scaleX + ',' + scaleY + ')';
+                } else style.bottom = '0';
+                return style;
+            }
+
+            function applyStyle(element, values) {
+                Object.keys(values).forEach(function (key) {
+                    element.style[key] = values[key];
+                });
+            }
+
+            function animationDelay(player, index) {
+                const row = Core.inferredRow(player);
+                const group = row === 'POSTERIORE' ? 0 : row === 'CENTRALE' ? 1 : 2;
+                return 520 + group * 540 + (index % 6) * 82;
+            }
+
+            function createPlayer(player, roster, index, pageInfo) {
+                const data = Core.displayData(player);
+                const card = document.createElement('article');
+                card.className = 'player-card';
+                card.style.setProperty('--primary', roster.team.primaryColor);
+                card.style.setProperty('--secondary', roster.team.secondaryColor);
+                card.style.setProperty('--delay', animationDelay(player, index) + 'ms');
+                card.setAttribute('aria-label', [data.number && 'Numero ' + data.number, data.name, data.role].filter(Boolean).join(', '));
+
+                const portrait = document.createElement('div');
+                portrait.className = 'portrait';
+                const placeholder = document.createElement('div');
+                placeholder.className = 'portrait-placeholder';
+                placeholder.textContent = 'FOTO';
+                portrait.appendChild(placeholder);
+                const source = Storage.resolvePlayerImage(player);
+                if (source) {
+                    const image = document.createElement('img');
+                    image.alt = '';
+                    if (player.image.shadow) image.classList.add('with-shadow');
+                    if (player.image.glow) image.classList.add('with-glow');
+                    applyStyle(image, playerImageStyle(player.image));
+                    image.addEventListener('load', function () {
+                        placeholder.hidden = true;
+                    });
+                    image.addEventListener('error', function () {
+                        image.remove();
+                        placeholder.hidden = false;
+                    });
+                    image.src = source;
+                    portrait.appendChild(image);
+                }
+                if (pageInfo.pageCount > 1) {
+                    const page = document.createElement('div');
+                    page.className = 'player-page';
+                    page.textContent = (pageInfo.page + 1) + '/' + pageInfo.pageCount;
+                    portrait.appendChild(page);
+                }
+
+                const info = document.createElement('div');
+                info.className = 'player-info';
+                const number = document.createElement('div');
+                number.className = 'player-number';
+                number.textContent = data.number || '—';
+                const copy = document.createElement('div');
+                copy.className = 'player-copy';
+                const name = document.createElement('div');
+                name.className = 'player-name';
+                if (data.name.length > 30) name.classList.add('very-long');
+                else if (data.name.length > 22) name.classList.add('long');
+                name.textContent = data.name;
+                const role = document.createElement('div');
+                role.className = 'player-role';
+                role.textContent = data.role || 'PLAYER';
+                copy.append(name, role);
+                info.append(number, copy);
+                card.append(portrait, info);
+                return card;
+            }
+
+            function cardSize(spec, single) {
+                if (single) {
+                    if (spec.size === 'hero') return { width: 520, height: 600, gap: 42 };
+                    if (spec.size === 'large') return { width: 380, height: 520, gap: 34 };
+                    if (spec.size === 'medium') return { width: 380, height: 390, gap: 30 };
+                    if (spec.size === 'compact') return { width: 330, height: 360, gap: 28 };
+                    return { width: 330, height: 270, gap: 25 };
+                }
+                if (spec.size === 'hero') return { width: 370, height: 600, gap: 34 };
+                if (spec.size === 'large') return { width: 330, height: 385, gap: 28 };
+                if (spec.size === 'medium') return { width: 270, height: 385, gap: 24 };
+                if (spec.size === 'compact') return { width: 205, height: 350, gap: 18 };
+                return { width: 210, height: 264, gap: 18 };
+            }
+
+            function createTeam(roster, side, single) {
+                const panel = document.createElement('section');
+                panel.className = 'team-panel';
+                panel.dataset.side = side;
+                panel.style.setProperty('--primary', roster.team.primaryColor);
+                panel.style.setProperty('--secondary', roster.team.secondaryColor);
+                panel.appendChild(createHeader(roster, side));
+
+                const pageInfo = Core.pagePlayers(
+                    roster,
+                    state.pages[side],
+                    { forceAuto: params.get('formation') === 'auto' }
+                );
+                state.pages[side] = pageInfo.page;
+                const spec = Core.layoutSpec(pageInfo.players.length, single ? 'SINGLE' : 'DUAL');
+                const size = cardSize(spec, single);
+                const grid = document.createElement('div');
+                grid.className = 'player-grid ' + spec.size;
+                grid.style.setProperty('--columns', spec.columns);
+                grid.style.setProperty('--rows', spec.rows);
+                grid.style.setProperty('--card-width', size.width + 'px');
+                grid.style.setProperty('--card-height', size.height + 'px');
+                grid.style.gap = size.gap + 'px';
+                pageInfo.players.forEach(function (player, index) {
+                    grid.appendChild(createPlayer(player, roster, index, pageInfo));
+                });
+                panel.appendChild(grid);
+                return panel;
+            }
+
+            function visibleSides() {
+                if (state.mode === 'A') return state.A ? ['A'] : (state.B ? ['B'] : []);
+                if (state.mode === 'B') return state.B ? ['B'] : (state.A ? ['A'] : []);
+                return ['A', 'B'].filter(function (side) { return !!state[side]; });
+            }
+
+            function render() {
+                const sides = visibleSides();
+                teamsRoot.replaceChildren();
+                warning.hidden = true;
+                if (!sides.length) {
+                    setMessage('NESSUNA ROSA DISPONIBILE', 'Controlla gli ID squadra e il server locale.');
+                    return;
+                }
+                hideMessage();
+                const single = sides.length === 1;
+                stage.classList.toggle('single-mode', single);
+                stage.classList.toggle('dual-mode', !single);
+                sides.forEach(function (side) {
+                    teamsRoot.appendChild(createTeam(state[side], side, single));
+                });
+
+                const overflow = sides.reduce(function (sum, side) {
+                    return sum + Core.qualityReport(state[side]).overflow;
+                }, 0);
+                if (overflow) {
+                    warning.textContent = 'Mostrati i primi 12 giocatori per squadra · usa i comandi pagina per gli altri';
+                    warning.hidden = false;
+                }
+            }
+
+            function replay() {
+                stage.classList.remove('is-hidden', 'replaying');
+                void stage.offsetWidth;
+                stage.classList.add('replaying');
+                setTimeout(function () {
+                    stage.classList.remove('replaying');
+                }, 3900);
+                clearTimeout(state.stayTimer);
+                const stay = Math.max(0, Number.parseInt(params.get('stay'), 10) || 0);
+                if (stay) state.stayTimer = setTimeout(hideRoster, stay);
+            }
+
+            function hideRoster() {
+                stage.classList.add('is-hidden');
+            }
+
+            function showRoster() {
+                stage.classList.remove('is-hidden');
+            }
+
+            function setMode(mode) {
+                if (!['A', 'B', 'BOTH'].includes(mode)) return;
+                if (mode === 'A' && !state.A) return;
+                if (mode === 'B' && !state.B) return;
+                state.mode = mode;
+                render();
+                replay();
+            }
+
+            function changePage(direction) {
+                visibleSides().forEach(function (side) {
+                    const info = Core.pagePlayers(state[side], state.pages[side]);
+                    state.pages[side] = (info.page + direction + info.pageCount) % info.pageCount;
+                });
+                render();
+                replay();
+            }
+
+            function setPreviewBackground(value) {
+                ['preview-dark', 'preview-light', 'preview-field', 'preview-checker'].forEach(function (name) {
+                    stage.classList.remove(name);
+                });
+                state.previewBackground = value;
+                if (value !== 'transparent') stage.classList.add('preview-' + value);
+            }
+
+            async function refresh(options) {
+                if (state.loading) return;
+                state.loading = true;
+                if (!options || !options.silent) setMessage('CARICAMENTO ROSE', 'Lettura delle configurazioni locali…');
+                const errors = [];
+                try {
+                    const tasks = ['A', 'B'].map(async function (side) {
+                        if (!ids[side]) return;
+                        try {
+                            const result = await Storage.loadTeam(ids[side]);
+                            state[side] = result.roster;
+                        } catch (error) {
+                            errors.push('Squadra ' + side + ': ' + error.message);
+                        }
+                    });
+                    await Promise.all(tasks);
+                    render();
+                    if (errors.length && visibleSides().length) {
+                        warning.textContent = errors.join(' · ');
+                        warning.hidden = false;
+                    } else if (errors.length) {
+                        setMessage('ERRORE CARICAMENTO', errors.join(' · '));
+                    }
+                    if (params.get('autoplay') === '1' || options && options.replay) replay();
+                    else showRoster();
+                    try {
+                        parent.postMessage({ type: 'ROSTER_READY', ids: ids }, location.origin);
+                    } catch (error) {
+                        // La pagina può essere usata anche senza iframe.
+                    }
+                } finally {
+                    state.loading = false;
+                }
+            }
+
+            function scheduleRefresh() {
+                clearTimeout(state.refreshTimer);
+                state.refreshTimer = setTimeout(function () {
+                    refresh({ silent: true, replay: false });
+                }, 180);
+            }
+
+            function applyPreviewConfig(packet) {
+                if (!packet || !packet.teams || typeof packet.teams !== 'object') return;
+                if (packet.teams.A) state.A = Core.normalizeRoster(packet.teams.A, ids.A);
+                if (packet.teams.B) state.B = Core.normalizeRoster(packet.teams.B, ids.B);
+                render();
+                showRoster();
+            }
+
+            function handleCommand(packet) {
+                const type = typeof packet === 'string' ? packet : packet && packet.type;
+                if (!type) return;
+                if (type === 'SHOW_ROSTER') {
+                    showRoster();
+                    replay();
+                } else if (type === 'HIDE_ROSTER') {
+                    hideRoster();
+                } else if (type === 'REPLAY_ANIMATION') {
+                    replay();
+                } else if (type === 'REFRESH_ROSTER') {
+                    refresh({ silent: true, replay: false });
+                } else if (type === 'SHOW_TEAM_A') {
+                    setMode('A');
+                } else if (type === 'SHOW_TEAM_B') {
+                    setMode('B');
+                } else if (type === 'SHOW_BOTH_TEAMS') {
+                    setMode('BOTH');
+                } else if (type === 'NEXT_ROSTER_PAGE') {
+                    changePage(1);
+                } else if (type === 'PREVIOUS_ROSTER_PAGE') {
+                    changePage(-1);
+                } else if (type === 'ROSTER_PREVIEW_BACKGROUND') {
+                    setPreviewBackground(packet.value || 'dark');
+                } else if (type === 'PREVIEW_CONFIG') {
+                    applyPreviewConfig(packet);
+                }
+            }
+
+            addEventListener('message', function (event) {
+                if (event.origin !== location.origin) return;
+                handleCommand(event.data || {});
+            });
+            Storage.subscribe(function (packet) {
+                if (/UPDATED|REFRESH_ROSTER/.test(String(packet.type || '')) &&
+                    (!packet.teamId || packet.teamId === ids.A || packet.teamId === ids.B)) {
+                    scheduleRefresh();
+                }
+            });
+            addEventListener('resize', fitViewport);
+            addEventListener('beforeunload', function () {
+                clearTimeout(state.refreshTimer);
+                clearTimeout(state.stayTimer);
+            });
+
+            if (params.get('compact') === '1') stage.classList.add('compact-mode');
+            setPreviewBackground(state.previewBackground);
+            fitViewport();
+            if (!ids.A && !ids.B) {
+                setMessage('ID SQUADRA MANCANTE', 'Usa ?id=2 oppure ?idA=2&idB=5.');
+                return;
+            }
+            refresh({ silent: false, replay: params.get('autoplay') === '1' });
+        })();
     </script>
 </body>
 </html>

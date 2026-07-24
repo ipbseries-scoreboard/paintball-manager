@@ -35,7 +35,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const WebSocket = require('ws');
-const { handleRosterApi } = require('./roster-server');
+const { handleRosterApi, getSetupAuthInfo } = require('./roster-server');
 
 const PORT = parseInt(process.argv[2] || process.env.PORT || '9000', 10);
 const ROOT = __dirname;
@@ -505,6 +505,7 @@ setInterval(() => {
 
 // ---------- AVVIO ----------
 server.listen(PORT, () => {
+    const rosterAuth = getSetupAuthInfo();
     console.log('===================================================');
     console.log('  SERVER PAINTBALL MANAGER ATTIVO (porta ' + PORT + ')');
     console.log('===================================================');
@@ -521,6 +522,14 @@ server.listen(PORT, () => {
     });
     console.log('');
     console.log('  (sostituisci 1674 con il tuo Match ID)');
+    console.log('');
+    if (rosterAuth.configured) {
+        console.log('  Setup rose: password personalizzata attiva.');
+    } else {
+        console.log('  PASSWORD SETUP ROSE: ' + rosterAuth.generatedPassword);
+        console.log('  La password cambia al riavvio del server.');
+        console.log('  Per renderla fissa imposta PM_ROSTER_PASSWORD.');
+    }
     console.log('  LASCIA APERTA QUESTA FINESTRA DURANTE IL TORNEO.');
     console.log('');
 });

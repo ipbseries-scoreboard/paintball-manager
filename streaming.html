@@ -781,7 +781,17 @@
         #roster-live-status { grid-column: 1 / -1; color: #cbd5e1; font-size: 15px; text-align: center; }
         #roster-overlay.modern-roster { background: transparent; backdrop-filter: none; padding: 0; }
         #roster-overlay.modern-roster .roster-title-container { display: none; }
-        #roster-overlay.modern-roster .iframe-scale-wrapper { margin: 0; border-radius: 0; background: transparent; box-shadow: none; }
+        #roster-overlay.modern-roster > .close-overlay-btn { display: none !important; }
+        #roster-overlay.modern-roster .iframe-scale-wrapper {
+            position: absolute;
+            inset: 0;
+            width: 1920px;
+            height: 1080px;
+            margin: 0;
+            border-radius: 0;
+            background: transparent;
+            box-shadow: none;
+        }
         #roster-overlay.modern-roster #roster-iframe { width: 1920px; height: 1080px; transform: none !important; }
 
         .fan-main-badge {
@@ -2914,25 +2924,6 @@
             }
         }
 
-        function goBackToClans() {
-            if (showRoster) {
-                toggleRoster(); // Close roster
-            }
-            if (rosterOpenedFromClans) {
-                openClanOverlay(); // Re-open clans
-            }
-        }
-
-
-        function goBackToClans() {
-            if (showRoster) {
-                toggleRoster(); // Close roster
-            }
-            if (rosterOpenedFromClans) {
-                openClanOverlay(); // Re-open clans
-            }
-        }
-
         function openRoster(teamName) {
             if (!teamName) return;
             const config = clanConfig.find(c => c.name.trim().toLowerCase() === teamName.trim().toLowerCase());
@@ -3100,6 +3091,7 @@
 
         // --- FULL OVERLAY LOGIC ---
         let modernRosterPreview = false;
+        let modernRosterLastMode = 'BOTH';
 
         function extractRosterTeamId(url) {
             const value = String(url || '').trim();
@@ -3154,14 +3146,16 @@
         }
 
         function showModernRoster(mode) {
+            mode = mode === 'A' || mode === 'B' ? mode : 'BOTH';
             const ctx = currentRosterContext(), url = modernRosterUrl(mode);
             if (!url) {
-                const fallback = mode === 'B' ? ctx.fallbackB : ctx.fallbackA;
+                const fallback = mode === 'B' ? ctx.fallbackB : (ctx.fallbackA || ctx.fallbackB);
                 if (fallback) { toggleRoster(fallback, mode === 'B' ? ctx.nameB : ctx.nameA, true); closeClanOverlay(); return; }
                 alert('Nessun ID rosa configurato. Inserisci nel setup squadre un URL IPBA del tipo video-team-giocatori.aspx?id=2.');
                 return;
             }
             const overlay = document.getElementById('roster-overlay'), iframe = document.getElementById('roster-iframe');
+            modernRosterLastMode = mode;
             overlay.classList.add('modern-roster'); iframe.src = url; overlay.style.display = 'flex'; showRoster = true;
             document.getElementById('roster-team-name').textContent = mode === 'BOTH' ? 'ROSE SQUADRE' : (mode === 'B' ? ctx.nameB : ctx.nameA);
             const back = document.getElementById('roster-back-btn'); if (back) back.style.display = 'none';
@@ -3181,7 +3175,7 @@
 
         function setModernRosterPreview(enabled) {
             modernRosterPreview = !!enabled;
-            if (showRoster && document.getElementById('roster-iframe').src.includes('roster-lineup.html')) showModernRoster('BOTH');
+            if (showRoster && document.getElementById('roster-iframe').src.includes('roster-lineup.html')) showModernRoster(modernRosterLastMode);
             else updateModernRosterStatus();
         }
 
