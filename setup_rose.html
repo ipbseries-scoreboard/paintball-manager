@@ -1553,7 +1553,9 @@
                 await Promise.all(['A', 'B'].map(async function (side) {
                     if (!ids[side]) return;
                     try {
-                        const result = await Storage.loadTeam(ids[side]);
+                        // fresh: all'apertura il server ricontrolla IPBA se
+                        // l'ultima lettura ha più di un minuto.
+                        const result = await Storage.loadTeam(ids[side], { fresh: true });
                         state[side] = result.roster;
                         state.storage[side] = result.storage;
                     } catch (error) {
@@ -1586,7 +1588,7 @@
                 if (state.dirty && !confirm('Ci sono modifiche non salvate. Cambiare squadra comunque?')) return;
                 setStatus('CARICAMENTO ROSA…');
                 try {
-                    const result = await Storage.loadTeam(teamId);
+                    const result = await Storage.loadTeam(teamId, { fresh: true });
                     state.A = result.roster;
                     state.B = null;
                     state.storage.A = result.storage;

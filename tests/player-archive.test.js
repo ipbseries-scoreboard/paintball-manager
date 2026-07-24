@@ -263,3 +263,8 @@ test('setup rose espone la modalità archivio con tutte le squadre del registry'
     assert.match(setup, /AGGIORNA TUTTE DA IPBA/);
     assert.match(setup, /registryMode/);
 });
+
+test('anche il setup chiede dati freschi quando apre una squadra', () => {
+    const setup = fs.readFileSync(path.join(__dirname, '..', 'setup_rose.html'), 'utf8');
+    assert.match(setup, /fresh:\s*true/);
+});
