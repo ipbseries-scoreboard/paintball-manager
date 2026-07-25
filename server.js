@@ -101,10 +101,101 @@ function proxyIpba(req, res) {
     fetchRemote(target, 0);
 }
 
+// ---------- API "LOGHI SUL GREEN" ----------
+// Config dell'overlay prospettico (streaming.html → sezione 🌿 GREEN).
+// streaming.html la pubblica con POST; field-logos-overlay.html — anche dentro
+// il Browser Input di vMix, che NON condivide il localStorage di Chrome — la
+// legge con GET. Persistita su disco (data/field-logos/) per sopravvivere ai
+// riavvii. Endpoint opzionale: su GitHub Pages l'overlay usa l'URL ?cfg=.
+const FIELD_LOGOS_DIR = path.join(ROOT, 'data', 'field-logos');
+const FIELD_LOGOS_MAX_BYTES = 8 * 1024 * 1024;
+const fieldLogosCache = new Map(); // chiave -> JSON string
+
+function handleFieldLogosApi(req, res, parsedUrl) {
+    const headers = {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type'
+    };
+    if (req.method === 'OPTIONS') { res.writeHead(204, headers); res.end(); return; }
+    const m = /^\/api\/field-logos\/([a-z0-9_-]{1,40})$/i.exec(parsedUrl.pathname);
+    const key = m ? m[1].toLowerCase() : null;
+    if (!key) {
+        res.writeHead(404, headers);
+        res.end(JSON.stringify({ error: 'Chiave configurazione non valida' }));
+        return;
+    }
+    const filePath = path.join(FIELD_LOGOS_DIR, key + '.json');
+
+    if (req.method === 'GET') {
+        const cached = fieldLogosCache.get(key);
+        if (cached) { res.writeHead(200, headers); res.end(cached); return; }
+        fs.readFile(filePath, 'utf8', (err, txt) => {
+            if (err) {
+                res.writeHead(404, headers);
+                res.end(JSON.stringify({ error: 'Configurazione non trovata' }));
+                return;
+            }
+            fieldLogosCache.set(key, txt);
+            res.writeHead(200, headers);
+            res.end(txt);
+        });
+        return;
+    }
+
+    if (req.method === 'POST') {
+        let size = 0;
+        const chunks = [];
+        let aborted = false;
+        req.on('data', (c) => {
+            size += c.length;
+            if (size > FIELD_LOGOS_MAX_BYTES) {
+                aborted = true;
+                res.writeHead(413, headers);
+                res.end(JSON.stringify({ error: 'Configurazione troppo grande' }));
+                req.destroy();
+                return;
+            }
+            chunks.push(c);
+        });
+        req.on('end', () => {
+            if (aborted) return;
+            const body = Buffer.concat(chunks).toString('utf8');
+            let parsed = null;
+            try { parsed = JSON.parse(body); } catch (e) { }
+            if (!parsed || parsed.type !== 'pm-field-logos') {
+                res.writeHead(400, headers);
+                res.end(JSON.stringify({ error: 'JSON non valido (atteso type=pm-field-logos)' }));
+                return;
+            }
+            fieldLogosCache.set(key, body);
+            fs.mkdir(FIELD_LOGOS_DIR, { recursive: true }, (mkErr) => {
+                if (mkErr) { console.warn('[FIELD-LOGOS] Cartella non creabile: ' + mkErr.message); return; }
+                fs.writeFile(filePath, body, (err) => {
+                    if (err) console.warn('[FIELD-LOGOS] Config non salvata su disco: ' + err.message);
+                });
+            });
+            res.writeHead(200, headers);
+            res.end(JSON.stringify({ ok: true, updatedAt: parsed.updatedAt || null }));
+        });
+        req.on('error', () => { });
+        return;
+    }
+
+    res.writeHead(405, headers);
+    res.end(JSON.stringify({ error: 'Metodo non supportato' }));
+}
+
 // ---------- WEB SERVER (pagine statiche) ----------
 const server = http.createServer((req, res) => {
     try {
         const parsedUrl = new URL(req.url || '/', 'http://localhost');
+        if (parsedUrl.pathname.startsWith('/api/field-logos/') || parsedUrl.pathname === '/api/field-logos') {
+            handleFieldLogosApi(req, res, parsedUrl);
+            return;
+        }
         if (parsedUrl.pathname.startsWith('/api/rosters/')) {
             Promise.resolve(handleRosterApi(req, res, parsedUrl)).catch(error => {
                 if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });

@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <title>Loghi sul Green — Overlay vMix</title>
+    <!--
+        OUTPUT TRASPARENTE PER VMIX (Browser Input, 1920×1080).
+
+        Questa pagina NON mostra mai: screenshot, controlli, maniglie, contorni,
+        messaggi. Solo i due loghi elaborati su sfondo trasparente. Ogni errore
+        finisce esclusivamente nella console.
+
+        Sorgenti dati (in ordine di aggiornamento, vince la config più recente):
+          1. ?cfg=  → configurazione compressa incorporata nell'URL
+                      (per GitHub Pages o quando il server locale non c'è);
+          2. GET /api/field-logos/default → server locale (server.js): è il
+             canale usato in produzione, vMix la riceve senza condividere
+             localStorage con Chrome;
+          3. localStorage + BroadcastChannel → stesso browser del setup
+             (anteprima locale; NON attraversa il Chromium di vMix).
+
+        Squadre e loghi: la pagina si collega DA SOLA alla Regia via pm-client
+        (?id=MATCHID, come obs_bar.html), quindi il cambio squadre aggiorna i
+        loghi anche dentro vMix. In mancanza di collegamento usa lo snapshot
+        squadre incluso nella configurazione pubblicata.
+
+        Parametri URL:
+          ?id=1674      Match ID della Regia (consigliato)
+          ?cfg=...      configurazione incorporata (generata dal setup)
+          ?bg=black     fallback: sfondo nero pieno
+          ?bg=green     fallback: sfondo verde chroma (0,255,0)
+    -->
+    <script src="lib/peerjs.min.js"></script>
+    <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');</script>
+    <script src="pm-client.js?v=2.2.0-fan-turn"></script>
+    <script src="field-logos-core.js?v=1.0.0"></script>
+    <style>
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: transparent;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: transparent;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="out" width="1920" height="1080"></canvas>
+
+    <script>
+        (function () {
+            'use strict';
+
+            var Core = window.FieldLogosCore;
+            var W = Core.W, H = Core.H;
+            var LS_PUB_KEY = 'pm_field_logos_pub';
+            var BC_NAME = 'pm_field_logos';
+            var API_PATH = '/api/field-logos/default';
+            var API_POLL_MS = 4000;
+
+            var canvas = document.getElementById('out');
+            var ctx = canvas.getContext('2d');
+            var renderer = Core.createRenderer();
+
+            // ---- fallback chroma opzionale (?bg=black|green) ----
+            var urlParams = new URLSearchParams(location.search);
+            var bg = urlParams.get('bg');
+            if (bg === 'black') document.body.style.background = '#000';
+            else if (bg === 'green') document.body.style.background = '#00ff00';
+
+            var payload = null;         // ultima configurazione applicata
+            var masks = { left: null, right: null };
+            var shade = null;
+            var applySeq = 0;
+
+            var teams = {
+                left: { name: '', url: null, img: null },
+                right: { name: '', url: null, img: null }
+            };
+            var payloadTeamsUsed = false;
+            var clanConfig = [];
+            try { clanConfig = JSON.parse(localStorage.getItem('pm_stream_clans') || '[]') || []; } catch (e) { }
+
+            var renderQueued = false;
+            function requestRender() {
+                if (renderQueued) return;
+                renderQueued = true;
+                var done = false;
+                function run() {
+                    if (done) return;
+                    done = true;
+                    renderQueued = false;
+                    render();
+                }
+                // rAF può restare sospeso se il browser considera la pagina
+                // nascosta/offscreen: il timeout garantisce comunque il disegno
+                requestAnimationFrame(run);
+                setTimeout(run, 250);
+            }
+
+            function render() {
+                try {
+                    if (!payload || payload.enabled === false) {
+                        ctx.setTransform(1, 0, 0, 1, 0, 0);
+                        ctx.clearRect(0, 0, W, H);
+                        return;
+                    }
+                    renderer.render(ctx, {
+                        left: {
+                            image: teams.left.img,
+                            quad: payload.left.quad,
+                            scale: 1,
+                            opacity: payload.left.opacity,
+                            feather: 0,             // già "cotto" nella maschera pubblicata
+                            blur: payload.left.blur,
+                            desat: payload.left.desat,
+                            fusion: payload.left.fusion,
+                            visible: payload.showLeft !== false
+                        },
+                        right: {
+                            image: teams.right.img,
+                            quad: payload.right.quad,
+                            scale: 1,
+                            opacity: payload.right.opacity,
+                            feather: 0,
+                            blur: payload.right.blur,
+                            desat: payload.right.desat,
+                            fusion: payload.right.fusion,
+                            visible: payload.showRight !== false
+                        },
+                        maskLeft: masks.left,
+                        maskRight: masks.right,
+                        shade: shade,
+                        featherBaked: true
+                    });
+                } catch (e) {
+                    // mai mostrare nulla in live: sfondo trasparente e log in console
+                    console.error('[FieldLogosOverlay] Errore di rendering:', e);
+                    try { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H); } catch (e2) { }
+                }
+            }
+
+            // ------------------------------------------------------------
+            // CONFIGURAZIONE
+            // ------------------------------------------------------------
+            function validPayload(p) {
+                return p && p.type === 'pm-field-logos' && p.left && p.right &&
+                    Array.isArray(p.left.quad) && Array.isArray(p.right.quad);
+            }
+
+            function applyPayload(p, sourceLabel) {
+                if (!validPayload(p)) return;
+                if (payload && (p.updatedAt || 0) <= (payload.updatedAt || 0)) return;
+                var seq = ++applySeq;
+
+                var maskLp = p.maskL ? Core.dataUrlToAlphaMask(p.maskL).catch(function (e) {
+                    console.warn('[FieldLogosOverlay] Maschera SX non leggibile:', e.message);
+                    return null;
+                }) : Promise.resolve(null);
+
+                maskLp.then(function (mL) {
+                    var maskRp = p.maskR === '=L' ? Promise.resolve(mL)
+                        : p.maskR ? Core.dataUrlToAlphaMask(p.maskR).catch(function (e) {
+                            console.warn('[FieldLogosOverlay] Maschera DX non leggibile:', e.message);
+                            return null;
+                        }) : Promise.resolve(null);
+
+                    var shadeP = p.shade ? Core.loadImageAny(p.shade).then(function (img) {
+                        var c = Core.makeCanvas(W, H);
+                        c.getContext('2d').drawImage(img, 0, 0, W, H);
+                        return c;
+                    }).catch(function () { return null; }) : Promise.resolve(null);
+
+                    return Promise.all([maskRp, shadeP]).then(function (rest) {
+                        if (seq !== applySeq) return; // nel frattempo è arrivata una config più nuova
+                        payload = p;
+                        masks.left = mL;
+                        masks.right = rest[0];
+                        shade = rest[1];
+                        console.log('[FieldLogosOverlay] Configurazione applicata da ' + sourceLabel +
+                            ' (aggiornata ' + new Date(p.updatedAt || 0).toLocaleTimeString() + ')');
+                        // snapshot squadre dalla config, finché la Regia non ci parla
+                        if (p.teams && !liveTeamsSeen) {
+                            payloadTeamsUsed = true;
+                            setTeam('left', p.teams.left && p.teams.left.name, p.teams.left && p.teams.left.logoUrl);
+                            setTeam('right', p.teams.right && p.teams.right.name, p.teams.right && p.teams.right.logoUrl);
+                        }
+                        if (!clientConn && p.matchId && !urlParams.get('id') && !urlParams.get('matchId')) {
+                            startClient(p.matchId);
+                        }
+                        requestRender();
+                    });
+                }).catch(function (e) {
+                    console.error('[FieldLogosOverlay] Configurazione non applicabile:', e);
+                });
+            }
+
+            // 1. config incorporata nell'URL
+            var cfgParam = urlParams.get('cfg');
+            if (cfgParam) {
+                Core.decompressPayload(cfgParam).then(function (p) {
+                    applyPayload(p, 'URL (?cfg=)');
+                }).catch(function (e) {
+                    console.error('[FieldLogosOverlay] Config URL non valida:', e.message);
+                });
+            }
+
+            // 2. localStorage (stesso browser del setup)
+            try {
+                var stored = JSON.parse(localStorage.getItem(LS_PUB_KEY) || 'null');
+                if (stored) applyPayload(stored, 'localStorage');
+            } catch (e) { }
+
+            window.addEventListener('storage', function (e) {
+                if (e.key !== LS_PUB_KEY || !e.newValue) return;
+                try { applyPayload(JSON.parse(e.newValue), 'localStorage (evento)'); } catch (err) { }
+            });
+
+            // 3. BroadcastChannel (stesso browser, zero latenza)
+            try {
+                var bc = new BroadcastChannel(BC_NAME);
+                bc.onmessage = function (ev) {
+                    if (ev.data && ev.data.type === 'FLG_CONFIG') applyPayload(ev.data.payload, 'BroadcastChannel');
+                };
+            } catch (e) { }
+
+            // 4. API del server locale (canale principale per vMix)
+            var apiFailures = 0;
+            function pollApi() {
+                if (!/^https?:$/.test(location.protocol)) return;
+                fetch(API_PATH + '?t=' + Date.now(), { cache: 'no-store' }).then(function (r) {
+                    var ct = r.headers.get('Content-Type') || '';
+                    if (ct.indexOf('application/json') === -1) { apiFailures = 99; return null; }
+                    if (!r.ok) return null;
+                    apiFailures = 0;
+                    return r.json();
+                }).then(function (p) {
+                    if (p) applyPayload(p, 'server locale');
+                }).catch(function () {
+                    apiFailures++;
+                }).finally(function () {
+                    // su GitHub Pages (risposta non-JSON) smette di insistere
+                    if (apiFailures < 5) setTimeout(pollApi, API_POLL_MS);
+                    else console.log('[FieldLogosOverlay] API locale non disponibile: uso ?cfg= / localStorage');
+                });
+            }
+            pollApi();
+
+            // ------------------------------------------------------------
+            // SQUADRE E LOGHI (live dalla Regia, come obs_bar.html)
+            // ------------------------------------------------------------
+            var clientConn = null;
+            var liveTeamsSeen = false;
+
+            function setTeam(side, name, packetLogoUrl) {
+                name = Core.cleanTeamName(name || '');
+                var t = teams[side];
+                if (t.name === name && t.img) return;
+                t.name = name;
+                if (Core.isPlaceholderName(name)) {
+                    t.img = null; t.url = null;
+                    requestRender();
+                    return;
+                }
+                var fallback = payload && payload.teams && payload.teams[side === 'left' ? 'left' : 'right'];
+                Core.resolveLogoUrl(name, packetLogoUrl, clanConfig, fallback && fallback.logoUrl)
+                    .then(function (url) {
+                        if (teams[side].name !== name) return;
+                        if (!url) {
+                            console.warn('[FieldLogosOverlay] Logo non trovato per "' + name + '"');
+                            t.img = null; t.url = null;
+                            requestRender();
+                            return;
+                        }
+                        if (t.url === url && t.img) return;
+                        Core.loadLogoImage(url).then(function (img) {
+                            if (teams[side].name !== name) return;
+                            t.img = img; t.url = url;
+                            requestRender();
+                        }).catch(function (err) {
+                            console.error('[FieldLogosOverlay] ' + err.message);
+                            if (teams[side].name === name) { t.img = null; t.url = null; requestRender(); }
+                        });
+                    });
+            }
+
+            function handleData(d) {
+                if (!d || typeof d !== 'object') return;
+                if (Array.isArray(d.clanConfig)) clanConfig = d.clanConfig;
+                if (d.teamLeft || d.teamRight) {
+                    liveTeamsSeen = true;
+                    if (d.teamLeft) setTeam('left', d.teamLeft.name, d.teamLeft.logoUrl);
+                    if (d.teamRight) setTeam('right', d.teamRight.name, d.teamRight.logoUrl);
+                }
+            }
+
+            function startClient(matchId) {
+                if (clientConn || !window.PMClient || !matchId) return;
+                clientConn = PMClient.connect({
+                    id: matchId,
+                    role: 'viewer',
+                    staleBadge: false, // MAI badge o UI in questa pagina
+                    onStatus: function (msg) { console.log('[FieldLogosOverlay]', msg); },
+                    onData: handleData
+                });
+            }
+
+            var urlId = PMClient.getUrlId();
+            if (urlId) startClient(urlId);
+            else console.log('[FieldLogosOverlay] Nessun ?id= nell\'URL: squadre dallo snapshot di configurazione');
+
+            // fallback stesso-browser: ultimo stato della Regia in localStorage
+            setInterval(function () {
+                if (clientConn && clientConn.open) return;
+                try {
+                    var last = JSON.parse(localStorage.getItem('pm_last_state') || 'null');
+                    if (last) handleData(last);
+                } catch (e) { }
+            }, 2000);
+        })();
+    </script>
+</body>
+
+</html>

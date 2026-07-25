@@ -1,13 +1,13 @@
 {
   "schemaVersion": 2,
   "team": {
-    "id": "180",
-    "name": "RANGERS KIDS",
+    "id": "99",
+    "name": "RANGERS",
     "companyName": "A.S. DILETTANTISTICA FIDASC PAINTBALL PARMA CITY",
     "companyCode": "2519",
-    "originalLogoUrl": "https://www.ipba.it/public/team_180/profilo/thumb/20250517163458778.jpg",
+    "originalLogoUrl": "https://www.ipba.it/public/team_99/profilo/thumb/20241209121603289.jpg",
     "customLogoUrl": "",
-    "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=180",
+    "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=99",
     "title": "ROSTER",
     "primaryColor": "#00a7c4",
     "secondaryColor": "#91c11e",
@@ -18,6 +18,6 @@
     "maxVisible": 12
   },
   "players": [],
-  "sourceUpdatedAt": 1785007330948,
-  "updatedAt": 1785007330954
+  "sourceUpdatedAt": 1785007216860,
+  "updatedAt": 1785007216876
 }

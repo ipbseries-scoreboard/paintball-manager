@@ -1,13 +1,13 @@
 {
   "schemaVersion": 2,
   "team": {
-    "id": "182",
-    "name": "HELL BOYS CANDELARA X",
+    "id": "153",
+    "name": "HELL BOYS CANDELARA",
     "companyName": "A.S. DILETTANTISTICA FIDASC PAINTBALL CANDELARA",
     "companyCode": "3015",
-    "originalLogoUrl": "https://www.ipba.it/public/team_182/profilo/thumb/20250719180609820.jpg",
+    "originalLogoUrl": "https://www.ipba.it/public/team_153/profilo/thumb/20240404204745308.jpg",
     "customLogoUrl": "",
-    "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=182",
+    "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=153",
     "title": "ROSTER",
     "primaryColor": "#00a7c4",
     "secondaryColor": "#91c11e",
@@ -18,6 +18,6 @@
     "maxVisible": 12
   },
   "players": [],
-  "sourceUpdatedAt": 1785007332506,
-  "updatedAt": 1785007332511
+  "sourceUpdatedAt": 1785007223248,
+  "updatedAt": 1785007223264
 }

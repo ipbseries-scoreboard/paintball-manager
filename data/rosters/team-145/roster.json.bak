@@ -1,13 +1,13 @@
 {
   "schemaVersion": 2,
   "team": {
-    "id": "186",
-    "name": "TRIGGERINI",
+    "id": "145",
+    "name": "DONKEY",
     "companyName": "A.S.DILETTANTISTICA FIDASC TOP PAINTBALL",
     "companyCode": "2681",
-    "originalLogoUrl": "https://www.ipba.it/public/team_186/profilo/thumb/20250331161945151.jpeg",
+    "originalLogoUrl": "https://www.ipba.it/public/team_145/profilo/thumb/20250626145147123.jpg",
     "customLogoUrl": "",
-    "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=186",
+    "rosterUrl": "https://www.ipba.it/video-team-giocatori.aspx?id=145",
     "title": "ROSTER",
     "primaryColor": "#00a7c4",
     "secondaryColor": "#91c11e",
@@ -18,6 +18,6 @@
     "maxVisible": 12
   },
   "players": [],
-  "sourceUpdatedAt": 1785007335648,
-  "updatedAt": 1785007335652
+  "sourceUpdatedAt": 1785007218454,
+  "updatedAt": 1785007218473
 }
