@@ -68,7 +68,8 @@
             var W = Core.W, H = Core.H;
             var LS_PUB_KEY = 'pm_field_logos_pub';
             var BC_NAME = 'pm_field_logos';
-            var API_PATH = '/api/field-logos/default';
+            // relativo alla pagina (vedi field-logos-setup.js)
+            var API_PATH = new URL('api/field-logos/default', location.href).href;
             var API_POLL_MS = 4000;
 
             var canvas = document.getElementById('out');

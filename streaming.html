@@ -1569,7 +1569,7 @@
                     <button class="btn-stream" onclick="openSetupModal()">⚙️ SETUP</button>
                     <button class="btn-stream" onclick="openClanOverlay()">👥 CLANS</button>
                     <button class="btn-stream" onclick="openStyleModal()">🎨 STYLE</button>
-                    <button class="btn-stream" onclick="window.FieldLogos && FieldLogos.openSetup()"
+                    <button class="btn-stream" onclick="openFieldLogosSetup()"
                         title="Loghi sul green: proietta i loghi delle squadre sul campo (overlay vMix)">🌿 GREEN</button>
                 </div>
                 <div id="extra-overlay-controls">
@@ -2140,6 +2140,25 @@
         let clientConn = null; // Global reference for sending commands
         let styleConfig = { fontSize: 80, fontFamily: "'Oswald', sans-serif", bold: false, scaleX: 1.0, scaleY: 2.1, limit: 11 };
         let lastStatCommandMessage = '';
+
+        // Apertura della sezione "Loghi sul green". Se i moduli non sono stati
+        // caricati (file mancante sul server/GitHub, oppure blocco di rete) il
+        // bottone deve DIRLO: in regia un pulsante che non fa nulla è peggio di
+        // un errore.
+        function openFieldLogosSetup() {
+            if (window.FieldLogos && typeof FieldLogos.openSetup === 'function') {
+                FieldLogos.openSetup();
+                return;
+            }
+            const mancanti = [];
+            if (!window.FieldLogosCore) mancanti.push('field-logos-core.js');
+            if (!window.FieldLogos) mancanti.push('field-logos-setup.js');
+            console.error('[FieldLogos] Moduli non caricati:', mancanti.join(', '));
+            alert('Sezione "Loghi sul green" non disponibile.\n\n' +
+                'File non caricati da questo sito:\n  • ' + mancanti.join('\n  • ') +
+                '\n\nCarica i file mancanti nella stessa cartella di streaming.html ' +
+                '(sul server locale o nel repository GitHub) e ricarica la pagina con CTRL+F5.');
+        }
 
         // Ponte di sola lettura per la sezione "Loghi sul green" (field-logos-setup.js):
         // espone la STESSA fonte dati della pagina (niente doppia gestione squadre).
