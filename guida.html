@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPBA Paintball Manager — Guida alle pagine</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Roboto:wght@400;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --panel: #1e293b;
+            --panel2: #24334a;
+            --line: #334155;
+            --txt: #e2e8f0;
+            --dim: #94a3b8;
+            --accent: #22d3ee;
+            --ok: #4ade80;
+            --warn: #fbbf24;
+            --bad: #f87171;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--txt);
+            font-family: 'Roboto', system-ui, sans-serif;
+            font-size: 15px;
+            line-height: 1.55;
+        }
+
+        header {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            background: linear-gradient(180deg, #16233c, #16233cee);
+            border-bottom: 2px solid var(--accent);
+            padding: 14px 22px;
+            backdrop-filter: blur(6px);
+        }
+
+        header h1 {
+            font-family: 'Oswald', sans-serif;
+            margin: 0;
+            font-size: 22px;
+            letter-spacing: 1px;
+            color: var(--accent);
+        }
+
+        .idbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        .idbar input {
+            background: #0b1220;
+            border: 1px solid var(--line);
+            color: var(--txt);
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-family: 'Roboto', sans-serif;
+            font-size: 15px;
+            width: 120px;
+        }
+
+        .idbar input:focus { outline: 2px solid var(--accent); }
+
+        .idbar .hint { color: var(--dim); font-size: 13px; }
+
+        main { max-width: 1080px; margin: 0 auto; padding: 22px; }
+
+        h2 {
+            font-family: 'Oswald', sans-serif;
+            color: var(--accent);
+            border-bottom: 1px solid var(--line);
+            padding-bottom: 6px;
+            margin-top: 38px;
+            font-size: 20px;
+            letter-spacing: .5px;
+        }
+
+        h3 { font-family: 'Oswald', sans-serif; margin: 22px 0 6px; font-size: 17px; }
+
+        .step {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-left: 4px solid var(--accent);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin: 10px 0;
+        }
+
+        .step b { color: var(--accent); }
+
+        code, .mono {
+            font-family: 'Consolas', 'Courier New', monospace;
+            background: #0b1220;
+            border: 1px solid var(--line);
+            border-radius: 4px;
+            padding: 1px 6px;
+            font-size: 13px;
+            color: #7dd3fc;
+        }
+
+        pre {
+            background: #0b1220;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 12px 14px;
+            overflow-x: auto;
+            font-size: 13px;
+            color: #7dd3fc;
+        }
+
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 0;
+            margin: 14px 0;
+            overflow: hidden;
+        }
+
+        .card-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--panel2);
+            padding: 10px 16px;
+            flex-wrap: wrap;
+        }
+
+        .card-head .ico { font-size: 20px; }
+
+        .card-head .name {
+            font-family: 'Oswald', sans-serif;
+            font-size: 17px;
+            color: var(--txt);
+        }
+
+        .card-head .file {
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+            color: var(--dim);
+        }
+
+        .tag {
+            margin-left: auto;
+            font-size: 11px;
+            padding: 2px 9px;
+            border-radius: 10px;
+            border: 1px solid;
+            white-space: nowrap;
+        }
+
+        .tag.regia { color: var(--warn); border-color: var(--warn); }
+        .tag.overlay { color: var(--accent); border-color: var(--accent); }
+        .tag.schermo { color: var(--ok); border-color: var(--ok); }
+        .tag.tablet { color: #c4b5fd; border-color: #a855f7; }
+        .tag.setup { color: var(--dim); border-color: var(--line); }
+
+        .card-body { padding: 12px 16px; }
+
+        .card-body p { margin: 0 0 8px; }
+
+        .linkrow {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 10px 0 4px;
+        }
+
+        a.open {
+            display: inline-block;
+            background: rgba(34, 211, 238, .13);
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            text-decoration: none;
+            padding: 6px 13px;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        a.open:hover { background: rgba(34, 211, 238, .3); }
+
+        button.copy {
+            background: #334155;
+            border: 1px solid var(--line);
+            color: var(--txt);
+            border-radius: 6px;
+            padding: 6px 11px;
+            font-size: 13px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+
+        button.copy:hover { background: #475569; }
+
+        .url {
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+            color: var(--dim);
+            word-break: break-all;
+            flex: 1;
+            min-width: 220px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0;
+            font-size: 14px;
+        }
+
+        th, td {
+            border: 1px solid var(--line);
+            padding: 7px 10px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th { background: var(--panel2); font-family: 'Oswald', sans-serif; font-weight: 500; }
+
+        td code { font-size: 12px; }
+
+        .note {
+            border-left: 4px solid var(--warn);
+            background: rgba(251, 191, 36, .08);
+            padding: 10px 14px;
+            border-radius: 6px;
+            margin: 12px 0;
+        }
+
+        .note.bad { border-left-color: var(--bad); background: rgba(248, 113, 113, .08); }
+        .note.ok { border-left-color: var(--ok); background: rgba(74, 222, 128, .08); }
+
+        .note b { color: var(--warn); }
+        .note.bad b { color: var(--bad); }
+        .note.ok b { color: var(--ok); }
+
+        ol, ul { margin: 8px 0; padding-left: 22px; }
+        li { margin-bottom: 5px; }
+
+        .toc {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 14px 0 4px;
+        }
+
+        .toc a {
+            color: var(--dim);
+            text-decoration: none;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            padding: 5px 11px;
+            font-size: 13px;
+        }
+
+        .toc a:hover { color: var(--accent); border-color: var(--accent); }
+
+        footer {
+            border-top: 1px solid var(--line);
+            margin-top: 40px;
+            padding: 18px 22px 40px;
+            color: var(--dim);
+            font-size: 13px;
+            text-align: center;
+        }
+
+        @media print {
+            body { background: #fff; color: #000; }
+            header { position: static; }
+            .card, .step, pre, code { background: #fff; color: #000; }
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>🎯 IPBA PAINTBALL MANAGER — GUIDA ALLE PAGINE</h1>
+        <div class="idbar">
+            <label for="mid"><b>Match ID:</b></label>
+            <input id="mid" value="1674" inputmode="numeric" autocomplete="off">
+            <span class="hint">Scrivi qui il tuo ID: tutti i link della guida si aggiornano da soli.</span>
+        </div>
+    </header>
+
+    <main>
+        <div class="toc">
+            <a href="#avvio">1. Avvio</a>
+            <a href="#regia">2. Regia e arbitri</a>
+            <a href="#streaming">3. Streaming e overlay</a>
+            <a href="#schermi">4. Schermi di campo</a>
+            <a href="#rose">5. Rose e giocatori</a>
+            <a href="#green">6. Loghi sul green</a>
+            <a href="#parametri">7. Parametri URL</a>
+            <a href="#problemi">8. Problemi</a>
+        </div>
+
+        <h2 id="avvio">1. Avvio — da fare sempre per primo</h2>
+
+        <p>Un unico server locale sulla porta <code>9000</code> fa due cose: serve le pagine a tutti i dispositivi e
+            fa da <b>relay</b> (la Regia manda lo stato una volta, il server lo inoltra a tutti gli schermi).</p>
+
+        <div class="step">
+            <b>1.</b> Doppio clic su <code>Avvia_Server_Locale.bat</code> (serve Node.js installato).<br>
+            <b>2.</b> La finestra nera mostra gli indirizzi pronti per i tablet e la password del setup rose.<br>
+            <b>3.</b> <b>Lascia aperta quella finestra per tutto il torneo</b>: se la chiudi, si scollega tutto.
+        </div>
+
+        <div class="note">
+            <b>Regola d'oro:</b> apri sempre le pagine da <code>http://localhost:9000/...</code>, non con doppio clic
+            sul file. Con il doppio clic (<code>file://</code>) saltano le funzioni che parlano col server: rose,
+            salvataggi e l'aggiornamento automatico dell'overlay Loghi sul green.
+        </div>
+
+        <p>Dai <b>tablet e dagli altri PC</b> della stessa rete usa l'indirizzo che compare nella finestra nera,
+            del tipo <code>http://192.168.1.50:9000/referee.html?id=1674</code>.</p>
+
+        <h2 id="regia">2. Regia e arbitri</h2>
+
+        <div class="card">
+            <div class="card-head">
+                <span class="ico">🎛️</span>
+                <span class="name">REGIA — il cuore del sistema</span>
+                <span class="file">index.html</span>
+                <span class="tag regia">PC principale</span>
+            </div>
+            <div class="card-body">
+                <p>Gestisce torneo, calendario, timer, punteggi e penalità. È l'unica pagina che <b>comanda</b>: tutte
+                    le altre ricevono da qui. Va aperta per prima, subito dopo il server.</p>
+                <ul>
+                    <li>Il Match ID in alto diventa <b>verde</b> quando è collegata al relay.</li>
+                    <li>In <b>Impostazioni</b> trovi il <b>PIN CONTROLLO</b> di 6 cifre da dare agli arbitri.</li>
+                    <li>Spunta <b>CLOUD</b> solo se qualcuno deve vedere il tabellone da fuori dal campo.</li>
+                    <li>Una sola Regia per Match ID. Una seconda scheda resta in sola lettura.</li>
+                </ul>
+                <div class="linkrow" data-url="index.html">
+                    <a class="open" target="_blank">▶ Apri</a>
+                    <button class="copy">📋 Copia link</button>
+                    <span class="url"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <span class="ico">🚩</span>
+                <span class="name">ARBITRO DI CAMPO</span>
+                <span class="file">referee.html</span>
+                <span class="tag tablet">tablet</span>
+            </div>
+            <div class="card-body">
+                <p>Il tablet dell'arbitro: assegna punti, penalità, pause tecniche. È l'unica pagina oltre alla Regia
+                    che può <b>inviare comandi</b>, quindi chiede il <b>PIN di 6 cifre</b>.</p>
+                <p>Il modo più rapido è il <b>QR code</b> che la Regia mostra: contiene già ID e PIN.</p>
+                <div class="linkrow" data-url="referee.html?id={ID}">
+                    <a class="open" target="_blank">▶ Apri</a>
+                    <button class="copy">📋 Copia link</button>
+                    <span class="url"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <span class="ico">🎙️</span>
+                <span class="name">NOTE PER LA TELECRONACA</span>
+                <span class="file">caster.html</span>
+                <span class="tag setup">commentatore</span>
+            </div>
+            <div class="card-body">
+                <p>Pagina di consultazione per chi commenta: statistiche del torneo, scontri diretti e dati delle
+                    squadre in campo. Se apri senza <code>?id=</code> ti chiede il Match ID con una finestrella.</p>
+                <div class="linkrow" data-url="caster.html?id={ID}">
+                    <a class="open" target="_blank">▶ Apri</a>
+                    <button class="copy">📋 Copia link</button>
+                    <span class="url"></span>
+                </div>
+            </div>
+        </div>
+
+        <h2 id="streaming">3. Streaming e overlay per OBS / vMix</h2>
+
+        <div class="note ok">
+            <b>Per tutti gli overlay:</b> in vMix usa <b>Add Input → More → Web Browser</b>, in OBS <b>Sorgente
+                browser</b>. Imposta sempre <b>1920 × 1080</b> e lascia lo sfondo trasparente (non mettere colore di
+            fondo).
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <span class="ico">📺</span>
+                <span class="name">STREAM MANAGER — grafica principale</span>
+                <span class="file">streaming.html</span>
+                <span class="tag overlay">1920×1080</span>
+            </div>
+            <div class="card-body">
+                <p>La grafica completa dello streaming <b>e</b> il pannello da cui gestisci tutte le altre: rose,
+                    loghi, classifiche, bracket, calendario, pubblico e la sezione <b>🌿 GREEN</b>.</p>
+                <p>I pulsanti in basso al centro: <b>⚙️ SETUP</b> (rose e loghi squadra), <b>👥 CLANS</b>,
+                    <b>🎨 STYLE</b>, <b>🌿 GREEN</b> (loghi sul campo), più la fila con classifiche, bracket,
+                    calendario, layout, info e pubblico.</p>
+                <p>Aggiungi <code>&amp;pin=IL_TUO_PIN</code> solo se da qui vuoi anche modificare le statistiche;
+                    per la sola grafica non serve.</p>
+                <div class="linkrow" data-url="streaming.html?matchId={ID}">
+                    <a class="open" target="_blank">▶ Apri</a>
+                    <button class="copy">📋 Copia link</button>
+                    <span class="url"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <span class="ico">🌿</span>
+                <span class="name">LOGHI SUL GREEN — overlay per vMix</span>
+                <span class="file">field-logos-overlay.html</span>
+                <span class="tag overlay">1920×1080</span>
+            </div>
+            <div class="card-body">
+                <p>I loghi delle due squadre proiettati in prospettiva sul campo, tagliati sui gonfiabili. Questa
+                    pagina è <b>solo l'uscita</b>: non ha comandi e non va mai guardata dall'operatore. Si configura
+                    da <b>streaming.html → 🌿 GREEN</b> (vedi <a href="#green" style="color:var(--accent)">sezione
+                        6</a>).</p>
+                <div class="linkrow" data-url="field-logos-overlay.html?id={ID}">
+                    <a class="open" target="_blank">▶ Apri</a>
+                    <button class="copy">📋 Copia link</button>
+                    <span class="url"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <span class="ico">📊</span>
+                <span class="name">BARRA PUNTEGGI</span>
+                <span class="file">obs_bar.html</span>
+                <span class="tag overlay">1920×1080</span>
+            </div>
+            <div class="card-body">
+                <p>Barra compatta con nomi, loghi, punteggio, timer, penalità e prossimo match. Pensata per OBS ma
+                    funziona identica in vMix. Mostra anche le reazioni del pubblico se le attivi da streaming.html.</p>
+                <div class="linkrow" data-url="obs_bar.html?id={ID}">
+                    <a class="open" target="_blank">▶ Apri</a>
+                    <button class="copy">📋 Copia link</button>
+                    <span class="url"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <span class="ico">🎬</span>
+                <span class="name">SFONDO E TICKER vMix</span>
+                <span class="file">vmix_bg.html</span>
+                <span class="tag overlay">1920×1080</span>
+            </div>
+            <div class="card-body">
+                <p>Sfondo animato con ticker scorrevole (classifiche, prossimi match). Se apri senza
+                    <code>?id=</code> ti chiede il Match ID con una finestrella.</p>
+                <div class="linkrow" data-url="vmix_bg.html?id={ID}">
+                    <a class="open" target="_blank">▶ Apri</a>
+                    <button class="copy">📋 Copia link</button>
+                    <span class="url"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <span class="ico">💬</span>
+                <span class="name">CHAT YOUTUBE</span>
+                <span class="file">youtube_chat.html</span>
+                <span class="tag overlay">1920×1080</span>
+            </div>
+            <div class="card-body">
+                <p>Mostra la chat della diretta YouTube e il messaggio in evidenza. Si collega dal pannello
+                    <b>👥 PUBBLICO</b> di streaming.html.</p>
+                <p>Aggiungi <code>&amp;side=left</code> per spostare la chat a sinistra.</p>
+                <div class="linkrow" data-url="youtube_chat.html?id={ID}">
+                    <a class="open" target="_blank">▶ Apri</a>
+                    <button class="copy">📋 Copia link</button>
+                    <span class="url"></span>
+                </div>
+            </div>
+        </div>
+
+        <h2 id="schermi">4. Schermi di campo e pubblico</h2>
+
+        <div class="card">
+            <div class="card-head">
+                <span class="ico">🖥️</span>
+                <span class="name">TABELLONE PUBBLICO</span>
+                <span class="file">board.html</span>
+                <span class="tag schermo">monitor / pubblico</span>
+            </div>
+            <div class="card-body">
+                <p>Il tabellone da mostrare al pubblico o da far vedere a casa. Per chi guarda da fuori dal campo
+                    serve la spunta <b>CLOUD</b> sulla Regia e il parametro <code>&amp;cloud=1</code>.</p>
+                <div class="linkrow" data-url="board.html?id={ID}">
+                    <a class="open" target="_blank">▶ Apri</a>
+                    <button class="copy">📋 Copia link</button>
+                    <span class="url"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <span class="ico">🔧</span>
+                <span class="name">SCHERMO PIT</span>
+                <span class="file">pit.html</span>
+                <span class="tag schermo">monitor pit</span>
+            </div>
+            <div class="card-body">
+                <p>Schermo per la zona pit: match in corso, timer e prossimo incontro, in caratteri grandi.</p>
+                <div class="linkrow" data-url="pit.html?id={ID}">
+                    <a class="open" target="_blank">▶ Apri</a>
+                    <button class="copy">📋 Copia link</button>
+                    <span class="url"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <span class="ico">🟥</span>
+                <span class="name">LED WALL</span>
+                <span class="file">ledwall.html</span>
+                <span class="tag schermo">ledwall fisico</span>
+            </div>
+            <div class="card-body">
+                <p>Versione ad altissimo contrasto per il muro LED del campo, leggibile da lontano.</p>
+                <div class="linkrow" data-url="ledwall.html?id={ID}">
+                    <a class="open" target="_blank">▶ Apri</a>
+                    <button class="copy">📋 Copia link</button>
+                    <span class="url"></span>
+                </div>
+            </div>
+        </div>
+
+        <h2 id="rose">5. Rose e giocatori</h2>
+
+        <div class="note">
+            Queste due pagine funzionano <b>solo con il server locale</b> (salvano in <code>data/rosters/</code>).
+            Il setup chiede la <b>password</b> che compare nella finestra nera del server, e cambia a ogni riavvio
+            se non ne hai impostata una fissa.
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <span class="ico">🧑‍🎨</span>
+                <span class="name">SETUP ROSE E GIOCATORI</span>
+                <span class="file">setup_rose.html</span>
+                <span class="tag setup">preparazione</span>
+            </div>
+            <div class="card-body">
+                <p>Prepara foto scontornate, nomi, numeri e ruoli. Si apre anche da streaming.html →
+                    <b>⚙️ SETUP → SETUP TUTTI I GIOCATORI</b>. Senza parametri elenca tutte le squadre.</p>
+                <p>Le rose si scaricano da IPBA in automatico: i link vanno messi una volta sola in
+                    <b>GESTIONE ROSE &amp; LOGHI</b>, campo "URL Rosa".</p>
+                <div class="linkrow" data-url="setup_rose.html">
+                    <a class="open" target="_blank">▶ Apri</a>
+                    <button class="copy">📋 Copia link</button>
+                    <span class="url"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <span class="ico">👥</span>
+                <span class="name">GRAFICA ROSE IN ONDA</span>
+                <span class="file">roster-lineup.html</span>
+                <span class="tag overlay">1920×1080</span>
+            </div>
+            <div class="card-body">
+                <p>La grafica delle formazioni da mandare in onda. Si comanda dal pannello <b>TEAMS LIST</b> di
+                    streaming.html; il link diretto serve se la vuoi come sorgente fissa.</p>
+                <table>
+                    <tr><th>Uso</th><th>Indirizzo</th></tr>
+                    <tr><td>Una squadra</td><td><code>roster-lineup.html?id=2</code></td></tr>
+                    <tr><td>Due squadre</td><td><code>roster-lineup.html?idA=2&amp;idB=5&amp;mode=dual</code></td></tr>
+                    <tr><td>Anteprima con sfondo</td><td><code>&amp;preview=1&amp;autoplay=1</code></td></tr>
+                </table>
+                <p class="hint" style="color:var(--dim);font-size:13px;">Gli <code>id</code> qui sono quelli delle rose
+                    IPBA, non il Match ID.</p>
+                <div class="linkrow" data-url="roster-lineup.html?preview=1&autoplay=1">
+                    <a class="open" target="_blank">▶ Apri anteprima</a>
+                    <button class="copy">📋 Copia link</button>
+                    <span class="url"></span>
+                </div>
+            </div>
+        </div>
+
+        <h2 id="green">6. Loghi sul green — procedura completa</h2>
+
+        <p>Proietta i loghi delle due squadre sull'erba, in prospettiva, tagliandoli dove ci sono i gonfiabili.
+            Il setup sta dentro streaming.html; l'uscita per vMix è una pagina separata.</p>
+
+        <h3>A. Preparare lo screenshot della telecamera</h3>
+        <p>La camera è NDI: il fotogramma va preso da vMix. Con la camera collegata, guarda il <b>numero dell'input</b>
+            e apri questo indirizzo nel browser (cambia <code>Input=3</code> col numero giusto):</p>
+        <pre>http://127.0.0.1:8088/api/?Function=SnapshotInput&amp;Input=3&amp;Value=C:\Users\Utente\Desktop\camera-centrale.png</pre>
+        <p>Ti salva un PNG esatto 1920×1080 sul Desktop. In alternativa <code>Win+Shift+S</code> e poi incolli
+            direttamente nell'editor.</p>
+
+        <h3>B. Configurare</h3>
+        <ol>
+            <li>Apri <b>streaming.html</b> e premi <b>🌿 GREEN</b>.</li>
+            <li><b>🖼 SCREENSHOT</b> → <b>📂 Carica screenshot</b> (oppure <code>Ctrl+V</code> per incollarlo).</li>
+            <li><b>💧 Campiona green</b> → clicca 5-6 punti del prato, sia al sole sia in ombra.</li>
+            <li>Trascina le <b>4 maniglie</b> di ogni logo per stenderlo sul terreno.</li>
+            <li><b>Poligono</b> per contornare i gonfiabili (clic su ogni angolo, chiudi sul primo punto);
+                <b>Lazo</b> per le sagome irregolari; <b>Pennello</b> e <b>Gomma</b> per le correzioni.</li>
+            <li>Controlla la scheda <b>Risultato finale</b> e regola opacità e fusione col prato.</li>
+            <li>Premi <b>📡 Aggiorna overlay</b>.</li>
+        </ol>
+
+        <h3>C. Mandarlo in vMix</h3>
+        <ol>
+            <li><b>Add Input → More → Web Browser</b>, <b>1920 × 1080</b>.</li>
+            <li>URL: quello qui sotto (oppure <b>📋 Copia URL per vMix</b> dall'editor).</li>
+            <li>Lascia l'input sempre pronto e mandalo in overlay quando serve.</li>
+        </ol>
+        <div class="linkrow" data-url="field-logos-overlay.html?id={ID}">
+            <a class="open" target="_blank">▶ Prova</a>
+            <button class="copy">📋 Copia URL per vMix</button>
+            <span class="url"></span>
+        </div>
+
+        <div class="note ok">
+            <b>Col server locale non devi più toccare vMix:</b> dopo ogni modifica premi <b>📡 Aggiorna overlay</b> e
+            l'overlay si aggiorna da solo entro pochi secondi. Se invece lavori da GitHub Pages, la configurazione
+            viaggia dentro l'URL: devi usare <b>📋 Copia URL per vMix</b> e re-incollarlo in vMix ogni volta.
+        </div>
+
+        <div class="note">
+            <b>Se non vedi i loghi:</b> la pagina prende le squadre dalla Regia. Se la Regia non è collegata resta
+            trasparente — è normale, non è un errore. Serve anche che il logo della squadra esista: o è nella cartella
+            <code>NO SFONDO</code>, o gli dai un URL in <b>⚙️ SETUP → GESTIONE ROSE &amp; LOGHI</b>.
+        </div>
+
+        <h2 id="parametri">7. Parametri URL</h2>
+
+        <table>
+            <tr><th>Parametro</th><th>Dove</th><th>A cosa serve</th></tr>
+            <tr><td><code>?id=1674</code><br><code>?matchId=1674</code></td><td>quasi tutte</td>
+                <td>Match ID: collega la pagina alla Regia. Sono equivalenti.</td></tr>
+            <tr><td><code>&amp;pin=123456</code></td><td>referee, streaming</td>
+                <td>PIN di 6 cifre per inviare comandi. Sparisce dalla barra indirizzi appena letto.</td></tr>
+            <tr><td><code>&amp;host=192.168.1.50</code></td><td>tutte</td>
+                <td>Forza un server preciso (accetta anche <code>host:porta</code>).</td></tr>
+            <tr><td><code>&amp;nocloud=1</code></td><td>tutte</td><td>Non tentare mai il cloud, solo rete locale.</td></tr>
+            <tr><td><code>&amp;norelay=1</code></td><td>tutte</td><td>Salta il relay, usa il vecchio PeerJS.</td></tr>
+            <tr><td><code>&amp;cloud=1</code></td><td>board, streaming, ledwall</td>
+                <td>Legge lo stato pubblicato per chi guarda da casa.</td></tr>
+            <tr><td><code>&amp;fan=1</code></td><td>streaming</td><td>Vista mobile per il pubblico (non si collega alla Regia).</td></tr>
+            <tr><td><code>&amp;side=left</code></td><td>youtube_chat</td><td>Sposta la chat a sinistra.</td></tr>
+            <tr><td><code>&amp;bg=green</code><br><code>&amp;bg=black</code></td><td>field-logos-overlay</td>
+                <td>Fondo pieno al posto della trasparenza, se ti serve un chroma key.</td></tr>
+        </table>
+
+        <h2 id="problemi">8. Se qualcosa non va</h2>
+
+        <table>
+            <tr><th>Sintomo</th><th>Cosa fare</th></tr>
+            <tr><td>Match ID resta su "Generazione..."</td>
+                <td>Il server non è attivo: avvia <code>Avvia_Server_Locale.bat</code> e ricarica la Regia.</td></tr>
+            <tr><td>Badge rosso <b>DATI NON AGGIORNATI</b></td>
+                <td>La pagina non riceve dati da 15 secondi: quello a schermo è vecchio. Controlla server e Regia.</td></tr>
+            <tr><td>"ALTRA REGIA ATTIVA!"</td>
+                <td>Due Regie sullo stesso Match ID. Chiudi quella di troppo o usa "PRENDI IL CONTROLLO".</td></tr>
+            <tr><td>Il tablet arbitro non si collega</td>
+                <td>Deve stare sulla stessa rete WiFi e usare l'indirizzo <code>http://IP:9000/...</code>. Se il WiFi
+                    isola i dispositivi, attiva CLOUD sulla Regia.</td></tr>
+            <tr><td>L'arbitro viene rifiutato</td>
+                <td>Il PIN è cambiato: riapri il collegamento col nuovo PIN di 6 cifre.</td></tr>
+            <tr><td>Il .bat si chiude subito</td>
+                <td>Manca Node.js, oppure la porta 9000 è già occupata da un altro server aperto prima.</td></tr>
+            <tr><td>Una pagina sembra vecchia dopo un aggiornamento</td>
+                <td>Ricarica con <code>CTRL+F5</code>: il browser tiene la versione in cache.</td></tr>
+            <tr><td>Un pulsante non fa niente</td>
+                <td>Manca un file sul sito. Apri la console del browser (<code>F12</code>): l'errore dice quale.</td></tr>
+        </table>
+
+        <h3>Cosa c'è nella cartella, oltre alle pagine</h3>
+        <table>
+            <tr><th>Elemento</th><th>Cos'è</th></tr>
+            <tr><td><code>Avvia_Server_Locale.bat</code></td><td>Avvia tutto. È il file da cui parti sempre.</td></tr>
+            <tr><td><code>server.js</code></td><td>Il server: pagine, relay dati, API rose e loghi sul green.</td></tr>
+            <tr><td><code>pm-client.js</code></td><td>Il collegamento alla Regia, usato da tutte le pagine.</td></tr>
+            <tr><td><code>field-logos-*.js / .css</code></td><td>Motore ed editor dei loghi sul green.</td></tr>
+            <tr><td><code>roster-*.js</code>, <code>data/rosters/</code></td><td>Sistema rose: dati e foto dei giocatori.</td></tr>
+            <tr><td><code>NO SFONDO/</code></td><td>Loghi PNG delle squadre. Il nome del file deve somigliare al nome squadra.</td></tr>
+            <tr><td><code>lib/</code></td><td>Librerie locali: il sistema funziona anche senza internet.</td></tr>
+            <tr><td><code>docs/</code>, <code>ISTRUZIONI_ROSE.md</code>, <code>istruzioni_avvio.txt</code></td>
+                <td>Documentazione di dettaglio.</td></tr>
+            <tr><td><code>tests/</code></td><td>Test automatici (<code>npm test</code>), utili dopo una modifica.</td></tr>
+        </table>
+    </main>
+
+    <footer>
+        Guida generata per IPBA Paintball Manager · i link seguono il Match ID scritto in alto ·
+        stampabile con <code>CTRL+P</code>
+    </footer>
+
+    <script>
+        (function () {
+            'use strict';
+            var input = document.getElementById('mid');
+
+            function currentId() {
+                var v = (input.value || '').trim().replace(/^IPBA-/i, '');
+                return v || '1674';
+            }
+
+            function absolute(rel) {
+                return new URL(rel, location.href).href;
+            }
+
+            function refresh() {
+                var id = currentId();
+                document.querySelectorAll('.linkrow').forEach(function (row) {
+                    var rel = row.dataset.url.replace('{ID}', encodeURIComponent(id));
+                    var href = absolute(rel);
+                    row.querySelector('a.open').href = href;
+                    row.querySelector('.url').textContent = href;
+                });
+                try { localStorage.setItem('pm_guida_match_id', id); } catch (e) { }
+            }
+
+            input.addEventListener('input', refresh);
+
+            // riprende l'ultimo ID usato: prima quello della guida, poi quello del sistema
+            try {
+                var saved = localStorage.getItem('pm_guida_match_id') || localStorage.getItem('last_match_id');
+                if (saved) input.value = String(saved).replace(/^IPBA-/i, '');
+            } catch (e) { }
+
+            document.querySelectorAll('button.copy').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var url = btn.closest('.linkrow').querySelector('.url').textContent;
+                    var done = function () {
+                        var old = btn.textContent;
+                        btn.textContent = '✓ Copiato';
+                        setTimeout(function () { btn.textContent = old; }, 1400);
+                    };
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(url).then(done, function () { window.prompt('Copia il link:', url); });
+                    } else {
+                        window.prompt('Copia il link:', url);
+                    }
+                });
+            });
+
+            refresh();
+        })();
+    </script>
+</body>
+
+</html>

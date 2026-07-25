@@ -81,7 +81,7 @@
     var renderQueued = false;
     var objSeq = 1;
 
-    var stage, stageCtx, editor, editorCtx, wrapEl;
+    var stage, stageCtx, editor, editorCtx, wrapEl, resizeObs = null;
 
     // ------------------------------------------------------------
     // UTILITY
@@ -382,11 +382,23 @@
         requestRender();
     }
 
-    function setZoom(newScale, centerCss) {
+    // Fattore fra pixel CSS e pixel del canvas MISURATO, non dedotto da
+    // devicePixelRatio: se il buffer resta indietro rispetto al layout, questa
+    // è l'unica cosa che tiene il disegno esattamente sotto il puntatore.
+    function viewMetrics() {
         var rect = wrapEl.getBoundingClientRect();
-        var dpr = global.devicePixelRatio || 1;
-        var cx = centerCss ? (centerCss.x - rect.left) * dpr : stage.width / 2;
-        var cy = centerCss ? (centerCss.y - rect.top) * dpr : stage.height / 2;
+        return {
+            rect: rect,
+            sx: stage.width / Math.max(1, rect.width),
+            sy: stage.height / Math.max(1, rect.height)
+        };
+    }
+
+    function setZoom(newScale, centerCss) {
+        var m = viewMetrics();
+        var rect = m.rect;
+        var cx = centerCss ? (centerCss.x - rect.left) * m.sx : stage.width / 2;
+        var cy = centerCss ? (centerCss.y - rect.top) * m.sy : stage.height / 2;
         newScale = clamp(newScale, 0.04, 12);
         var lx = (cx - view.x) / view.scale;
         var ly = (cy - view.y) / view.scale;
@@ -398,16 +410,15 @@
     }
 
     function updateZoomLabel() {
-        var dpr = global.devicePixelRatio || 1;
         var el = $('flg-zoom-pct');
-        if (el) el.textContent = Math.round(view.scale / dpr * 100) + '%';
+        if (!el || !wrapEl) return;
+        el.textContent = Math.round(view.scale / viewMetrics().sx * 100) + '%';
     }
 
     function toLogical(ev) {
-        var rect = wrapEl.getBoundingClientRect();
-        var dpr = global.devicePixelRatio || 1;
-        var px = (ev.clientX - rect.left) * dpr;
-        var py = (ev.clientY - rect.top) * dpr;
+        var m = viewMetrics();
+        var px = (ev.clientX - m.rect.left) * m.sx;
+        var py = (ev.clientY - m.rect.top) * m.sy;
         return { x: (px - view.x) / view.scale, y: (py - view.y) / view.scale };
     }
 
@@ -1444,9 +1455,9 @@
         var sel = getSelected();
         switch (dragCtx.kind) {
             case 'pan': {
-                var dpr = global.devicePixelRatio || 1;
-                view.x = dragCtx.ox + (e.clientX - dragCtx.startX) * dpr;
-                view.y = dragCtx.oy + (e.clientY - dragCtx.startY) * dpr;
+                var m = viewMetrics();
+                view.x = dragCtx.ox + (e.clientX - dragCtx.startX) * m.sx;
+                view.y = dragCtx.oy + (e.clientY - dragCtx.startY) * m.sy;
                 requestRender();
                 break;
             }
@@ -2364,23 +2375,49 @@
         window.addEventListener('keyup', onKeyUp);
         window.addEventListener('paste', onPaste);
         window.addEventListener('resize', onResize);
+
+        // Sorveglia l'area di disegno: intercetta anche i cambi di layout che
+        // non passano da un resize della finestra (pannelli, header, scrollbar).
+        if (typeof ResizeObserver !== 'undefined') {
+            resizeObs = new ResizeObserver(function () {
+                if (!isOpen) return;
+                if (syncCanvasSize()) requestRender();
+            });
+            resizeObs.observe(wrapEl);
+        }
     }
 
     function onResize() {
         if (!isOpen) return;
-        sizeCanvases();
-        fitView();
+        // Il ridimensionamento della finestra non deve buttare via lo zoom che
+        // l'operatore ha impostato per lavorare di precisione.
+        if (syncCanvasSize()) requestRender();
     }
 
-    function sizeCanvases() {
+    // Allinea il buffer del canvas all'area realmente occupata. Se i due
+    // divergono, i clic risultano spostati (l'errore cresce allontanandosi dal
+    // bordo alto), quindi va richiamata a OGNI cambio di layout, non solo sul
+    // resize della finestra: l'header può crescere da solo, per esempio quando
+    // un messaggio di stato lungo manda i pulsanti a capo.
+    function syncCanvasSize() {
+        if (!wrapEl) return false;
         var dpr = global.devicePixelRatio || 1;
         var rect = wrapEl.getBoundingClientRect();
         var w = Math.max(200, Math.round(rect.width * dpr));
         var h = Math.max(200, Math.round(rect.height * dpr));
-        if (stage.width !== w || stage.height !== h) {
-            stage.width = w; stage.height = h;
-            editor.width = w; editor.height = h;
+        if (stage.width === w && stage.height === h) return false;
+        // conserva il punto inquadrato al centro, così la vista non salta
+        var hadSize = stage.width > 1 && stage.height > 1;
+        var cx = hadSize ? (stage.width / 2 - view.x) / view.scale : 0;
+        var cy = hadSize ? (stage.height / 2 - view.y) / view.scale : 0;
+        stage.width = w; stage.height = h;
+        editor.width = w; editor.height = h;
+        if (hadSize) {
+            view.x = w / 2 - cx * view.scale;
+            view.y = h / 2 - cy * view.scale;
         }
+        updateZoomLabel();
+        return true;
     }
 
     function buildToolbar() {
@@ -2584,7 +2621,7 @@
         $('flg-redo').onclick = redo;
         $('flg-zoom-in').onclick = function () { setZoom(view.scale * 1.25); };
         $('flg-zoom-out').onclick = function () { setZoom(view.scale / 1.25); };
-        $('flg-zoom-100').onclick = function () { setZoom(global.devicePixelRatio || 1); };
+        $('flg-zoom-100').onclick = function () { setZoom(viewMetrics().sx); };
         $('flg-zoom-fit').onclick = fitView;
     }
 
@@ -2881,7 +2918,7 @@
         buildUI();
         isOpen = true;
         $('flg-modal').classList.add('open');
-        sizeCanvases();
+        syncCanvasSize();
         fitView();
         setTool('select');
         refreshAllPanels();
