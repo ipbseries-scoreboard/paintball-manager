@@ -71,7 +71,17 @@
             width: 120px;
         }
 
-        .idbar input:focus { outline: 2px solid var(--accent); }
+        .idbar input:focus, .idbar select:focus { outline: 2px solid var(--accent); }
+
+        .idbar select {
+            background: #0b1220;
+            border: 1px solid var(--line);
+            color: var(--txt);
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-family: 'Roboto', sans-serif;
+            font-size: 14px;
+        }
 
         .idbar .hint { color: var(--dim); font-size: 13px; }
 
@@ -291,7 +301,14 @@
         <div class="idbar">
             <label for="mid"><b>Match ID:</b></label>
             <input id="mid" value="1674" inputmode="numeric" autocomplete="off">
-            <span class="hint">Scrivi qui il tuo ID: tutti i link della guida si aggiornano da soli.</span>
+            <label for="base" style="margin-left:8px;"><b>Apri su:</b></label>
+            <select id="base">
+                <option value="local">PC di regia — localhost:9000</option>
+                <option value="rel">Questo sito (dove sei ora)</option>
+                <option value="ip">Tablet / altro PC — indirizzo IP</option>
+            </select>
+            <input id="ip" placeholder="192.168.1.50" autocomplete="off" style="display:none;width:150px;">
+            <span class="hint" id="basehint"></span>
         </div>
     </header>
 
@@ -326,6 +343,16 @@
 
         <p>Dai <b>tablet e dagli altri PC</b> della stessa rete usa l'indirizzo che compare nella finestra nera,
             del tipo <code>http://192.168.1.50:9000/referee.html?id=1674</code>.</p>
+
+        <div class="note ok">
+            <b>Il menu "Apri su" qui in alto</b> decide dove puntano tutti i link di questa guida:
+            <ul style="margin-top:6px;">
+                <li><b>PC di regia</b> — <code>localhost:9000</code>: da usare su questo computer, con il server acceso.</li>
+                <li><b>Questo sito</b> — link relativi: seguono l'indirizzo da cui hai aperto la guida.</li>
+                <li><b>Tablet / altro PC</b> — scrivi l'IP della finestra nera e ottieni i link pronti da mandare
+                    ai tablet degli arbitri (la porta <code>9000</code> viene aggiunta da sola).</li>
+            </ul>
+        </div>
 
         <h2 id="regia">2. Regia e arbitri</h2>
 
@@ -720,14 +747,52 @@
         (function () {
             'use strict';
             var input = document.getElementById('mid');
+            var baseSel = document.getElementById('base');
+            var ipInput = document.getElementById('ip');
+            var hint = document.getElementById('basehint');
 
             function currentId() {
                 var v = (input.value || '').trim().replace(/^IPBA-/i, '');
                 return v || '1674';
             }
 
+            // Indirizzo di partenza dei link. Accetta "192.168.1.50",
+            // "192.168.1.50:9100" o un URL completo: la porta 9000 viene
+            // aggiunta da sola quando manca.
+            function baseUrl() {
+                var mode = baseSel.value;
+                if (mode === 'local') return 'http://localhost:9000/';
+                if (mode === 'ip') {
+                    var v = (ipInput.value || '').trim();
+                    if (!v) return null;
+                    if (!/^https?:\/\//i.test(v)) v = 'http://' + v;
+                    v = v.replace(/\/+$/, '');
+                    try {
+                        var u = new URL(v);
+                        if (!u.port) u.port = '9000';
+                        return u.origin + '/';
+                    } catch (e) { return null; }
+                }
+                return null; // "questo sito": link relativi alla guida
+            }
+
             function absolute(rel) {
-                return new URL(rel, location.href).href;
+                var b = baseUrl();
+                return new URL(rel, b || location.href).href;
+            }
+
+            function refreshHint() {
+                var mode = baseSel.value;
+                ipInput.style.display = mode === 'ip' ? '' : 'none';
+                if (mode === 'local') {
+                    hint.textContent = 'Link verso il PC dove gira il server: usali su questo computer.';
+                } else if (mode === 'ip') {
+                    hint.textContent = ipInput.value.trim()
+                        ? 'Link da usare sui tablet e sugli altri PC della stessa rete.'
+                        : 'Scrivi l\'IP mostrato nella finestra nera del server (es. 192.168.1.50).';
+                } else {
+                    hint.textContent = 'Link relativi: seguono il sito da cui hai aperto questa guida.';
+                }
             }
 
             function refresh() {
@@ -738,15 +803,29 @@
                     row.querySelector('a.open').href = href;
                     row.querySelector('.url').textContent = href;
                 });
-                try { localStorage.setItem('pm_guida_match_id', id); } catch (e) { }
+                refreshHint();
+                try {
+                    localStorage.setItem('pm_guida_match_id', id);
+                    localStorage.setItem('pm_guida_base', baseSel.value);
+                    localStorage.setItem('pm_guida_ip', ipInput.value.trim());
+                } catch (e) { }
             }
 
             input.addEventListener('input', refresh);
+            baseSel.addEventListener('change', refresh);
+            ipInput.addEventListener('input', refresh);
 
             // riprende l'ultimo ID usato: prima quello della guida, poi quello del sistema
             try {
                 var saved = localStorage.getItem('pm_guida_match_id') || localStorage.getItem('last_match_id');
                 if (saved) input.value = String(saved).replace(/^IPBA-/i, '');
+                var savedIp = localStorage.getItem('pm_guida_ip');
+                if (savedIp) ipInput.value = savedIp;
+                var savedBase = localStorage.getItem('pm_guida_base');
+                if (savedBase) baseSel.value = savedBase;
+                else if (/^https?:$/.test(location.protocol) && /localhost|127\.0\.0\.1/.test(location.hostname)) {
+                    baseSel.value = 'rel'; // già aperta dal server locale: i relativi bastano
+                }
             } catch (e) { }
 
             document.querySelectorAll('button.copy').forEach(function (btn) {
