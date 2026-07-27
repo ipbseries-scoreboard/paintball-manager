@@ -2131,6 +2131,7 @@
                 showLayoutOverlay: false,
                 showSchedule: false, // NEW
                 currentMatchEvents: [],
+                refereeEvents: [],
                 pendingRotationAction: null,
                 outdoorMode: savedSettings.outdoorMode === true,
                 clanConfig: readJsonStorage('pm_stream_clans', []), // Sync team logos
@@ -2152,6 +2153,7 @@
             let pendingTowelSide = null;
             let pendingPointSide = null;
             let pendingPointOriginalMode = null;
+            let pendingPointOpenedAt = null;
             const REMOTE_ACK_STORAGE_KEY = 'pm_remote_ack_cache_v1';
             const recentRemoteCommandIds = new Map();
 
@@ -2740,6 +2742,7 @@
                 pendingTowelSide = null;
                 pendingPointSide = null;
                 pendingPointOriginalMode = null;
+                pendingPointOpenedAt = null;
                 historyStack.length = 0;
                 document.querySelectorAll('.overlay').forEach((overlay) => {
                     overlay.style.display = 'none';
@@ -3439,6 +3442,7 @@
                     stateSentAt: packet.stateSentAt,
                     timer: clipPeerText(packet.timer, 32),
                     mode: clipPeerText(packet.mode, 40),
+                    timerMode: clipPeerText(packet.timerMode, 24),
                     phase: clipPeerText(packet.phase, 80),
                     mercy: packet.mercy,
                     teamLeft: compactPeerTeam(packet.teamLeft),
@@ -3448,6 +3452,8 @@
                     statusText: clipPeerText(packet.statusText, 120),
                     statusClass: clipPeerText(packet.statusClass, 160),
                     nextMatch: compactNextMatch(packet.nextMatch),
+                    pendingPoint: compactPendingPoint(packet.pendingPoint),
+                    refereeEvents: compactRefereeEvents(packet.refereeEvents),
                     layoutUrl: safeRemoteLogoUrl(packet.layoutUrl),
                     showNextMatchOverlay: packet.showNextMatchOverlay,
                     hapticReferee: packet.hapticReferee,
@@ -3494,6 +3500,29 @@
                     time: clipPeerText(match.time, 24),
                     timer: clipPeerText(match.timer, 32)
                 };
+            }
+
+            function compactPendingPoint(point) {
+                if (!point || typeof point !== 'object') return null;
+                const side = point.side === 'left' || point.side === 'right' ? point.side : '';
+                if (!side) return null;
+                return {
+                    side,
+                    teamName: clipPeerText(point.teamName, 160),
+                    openedAt: Number(point.openedAt) || 0
+                };
+            }
+
+            function compactRefereeEvents(events) {
+                if (!Array.isArray(events)) return [];
+                return events.slice(-80).map(event => ({
+                    id: clipPeerText(event && event.id, 100),
+                    type: clipPeerText(event && event.type, 40),
+                    message: clipPeerText(event && event.message, 320),
+                    clock: clipPeerText(event && event.clock, 24),
+                    timer: Number(event && event.timer) || 0,
+                    createdAt: Number(event && event.createdAt) || 0
+                }));
             }
 
             function compactTeamStyle(style) {
@@ -3754,6 +3783,7 @@
                         stateSentAt: now,
                         timer: formatTimeSeconds(state.timer),
                         mode: state.mode,
+                        timerMode: state.timerMode,
                         phase: (state.tournament.active && state.tournament.currentIndex !== -1 && state.tournament.matches[state.tournament.currentIndex]) ? (state.tournament.matches[state.tournament.currentIndex].phase || "GIRONI") : "",
                         mercy: document.getElementById('mercy-msg') ? document.getElementById('mercy-msg').style.display === 'block' : false,
                         teamLeft: teamLeftData,
@@ -3763,6 +3793,12 @@
                         statusText: document.getElementById('game-state-ind') ? document.getElementById('game-state-ind').innerText : state.mode,
                         statusClass: document.getElementById('game-state-ind') ? document.getElementById('game-state-ind').className : '',
                         nextMatch: nextMatchInfo,
+                        pendingPoint: pendingPointSide ? {
+                            side: pendingPointSide,
+                            teamName: pendingPointSide === 'left' ? teamLeftData.name : teamRightData.name,
+                            openedAt: pendingPointOpenedAt || now
+                        } : null,
+                        refereeEvents: compactRefereeEvents(state.refereeEvents),
                         layoutUrl: state.tournament.layoutUrl,
                         showNextMatchOverlay: state.showNextMatchOverlay,
                         hapticReferee: state.settings.hapticReferee !== false,
@@ -3969,7 +4005,7 @@
                                 message = 'Verifica punto già attiva sull\'altro lato';
                             }
                         } else {
-                            requireExecution(handleTeamAction(cmd.side, 'point'), 'Verifica punto non disponibile nello stato corrente');
+                            requireExecution(handleTeamAction(cmd.side, 'point', false, 'REFEREE'), 'Verifica punto non disponibile nello stato corrente');
                         }
                         break;
                     case 'CONFIRM_POINT':
@@ -4000,6 +4036,34 @@
                     case 'STOP_TIMER':
                         if (state.mode !== 'PAUSED' && state.mode !== 'TECH_PAUSED') pause();
                         break;
+                    case 'SET_TIMER': {
+                        const seconds = Number(cmd.settings && cmd.settings.seconds);
+                        if (!Number.isFinite(seconds) || seconds < 0 || seconds > 5999) {
+                            accepted = false;
+                            message = 'Tempo non valido';
+                            break;
+                        }
+                        state.timer = Math.round(seconds);
+                        if (state.timerMode === 'GAME' ||
+                            state.mode === 'POINT' ||
+                            state.mode === 'OVERTIME' ||
+                            (state.mode === 'PAUSED' && (state.prevMode === 'POINT' || state.prevMode === 'OVERTIME'))) {
+                            state.gameTimeRemaining = state.timer;
+                        }
+                        state.flags = { warn60: false, warn30: false, warn20: false, warn10: false };
+                        const phaseLabel = state.timerMode === 'INTERVAL' ? 'INTERVALLO' : 'GARA';
+                        recordRefereeEvent('TIMER_EDIT', `TIMER ${phaseLabel} MODIFICATO A ${formatTimeSeconds(state.timer)} DAL REFEREE`);
+                        log(`[REMOTO] Timer ${phaseLabel.toLowerCase()} modificato a ${formatTimeSeconds(state.timer)} dall'Arbitro`);
+                        if (state.tournament.active && state.tournament.currentIndex !== -1) {
+                            saveMatchState(state.tournament.currentIndex, null, false);
+                        } else {
+                            saveTournamentState();
+                        }
+                        render();
+                        broadcastState(true);
+                        message = `Timer impostato a ${formatTimeSeconds(state.timer)}`;
+                        break;
+                    }
                     case 'requestState':
                     case 'FORCE_SYNC':
                         if (source && source.peerConn) {
@@ -4543,6 +4607,7 @@
                 updateTimerDisplay();
                 speak("Pausa Tecnica", "Technical Pause");
                 log(`PAUSA TECNICA RICHIESTA: ${team.name} (+60s)`);
+                recordRefereeEvent('TECH', `PAUSA TECNICA: ${team.name} (+60s)`);
                 showSmartAlert(`TECH: ${team.name}`, 'tech');
                 if (state.tournament.active) saveMatchState(state.tournament.currentIndex, false, false);
                 render();
@@ -4563,6 +4628,7 @@
                 state.flags = { warn60: false, warn30: false, warn20: false, warn10: false };
 
                 log(`START INTERVALLO ${type.toUpperCase()}`);
+                recordRefereeEvent('INTERVAL_START', `INTERVALLO ${type.toUpperCase()} AVVIATO`);
                 render();
                 saveTournamentState();
                 startTimerLoop();
@@ -4586,6 +4652,7 @@
                 playHorn(1.0);
                 log("START POINT (Gioco attivo)");
                 state.currentMatchEvents.push({ type: 'START', time: state.timer });
+                recordRefereeEvent('START', 'START GAME');
                 recordRealStartTime();
                 render();
                 saveTournamentState();
@@ -4610,6 +4677,10 @@
                     }
 
                     log(`PAUSA (${state.prevMode})`);
+                    recordRefereeEvent(
+                        isAutoPause ? 'AUTO_PAUSE' : 'PAUSE',
+                        isAutoPause ? 'TIMER FERMATO PER VERIFICA PUNTO' : `PAUSA ${state.prevMode}`
+                    );
                     saveTournamentState();
                     render();
                     broadcastState(true);
@@ -4619,6 +4690,7 @@
                     state.mode = state.prevMode || 'IDLE';
                     playBeep('go');
                     log(`RIPRESA DA PAUSA (${state.mode})`);
+                    recordRefereeEvent('RESUME', `RIPRESA ${state.mode}`);
                     saveTournamentState();
                     startTimerLoop();
                     render();
@@ -4651,7 +4723,7 @@
                 return true;
             }
 
-            function handleTeamAction(side, action, bypassConfirm = false) {
+            function handleTeamAction(side, action, bypassConfirm = false, source = 'REGIA') {
                 if ((side !== 'left' && side !== 'right') || (action !== 'point' && action !== 'action')) {
                     log(`BUTTON PRESS RIFIUTATO: lato o azione non validi`);
                     return false;
@@ -4682,6 +4754,11 @@
                         // New Verification Flow
                         pendingPointSide = side;
                         pendingPointOriginalMode = state.mode;
+                        pendingPointOpenedAt = Date.now();
+                        recordRefereeEvent(
+                            'POINT_REQUEST',
+                            `VERIFICA PUNTO: ${team.name} · origine ${String(source || 'REGIA').toUpperCase()}`
+                        );
 
                         // Auto-pause if running
                         if (state.mode === 'POINT' || state.mode === 'INTERVAL' || state.mode === 'OVERTIME') {
@@ -4695,6 +4772,7 @@
                             document.getElementById('verify-title').innerText = `VERIFICA PUNTO: ${team.name}`;
                             document.getElementById('point-verify-modal').style.display = 'flex';
                             log(`RICHIESTA PUNTO da ${team.name}. In attesa di verifica. T: ${formatTimeMs(state.timer)}`);
+                            broadcastState(true);
                             return true;
                         } else {
                             log(`RICHIESTA PUNTO DIRETTA (Buzzer) da ${team.name}`);
@@ -4750,6 +4828,7 @@
 
                     playPointSound();
                     log(`PUNTO APPROVATO: ${team.name} (+1). Score: ${team.score}. T: ${formatTimeMs(state.timer)}`);
+                    recordRefereeEvent('POINT_APPROVED', `PUNTO CONFERMATO: ${team.name} · SCORE ${team.score}-${opponent.score}`);
                     if (state.tournament.active) saveMatchState(state.tournament.currentIndex);
                     state.mode = 'IDLE';
                     render();
@@ -4773,6 +4852,7 @@
 
                     playPointSound();
                     log(`PUNTO REVERSE (Errore ${team.name}). Punto a ${opponent.name}. Score: ${opponent.score}`);
+                    recordRefereeEvent('POINT_REVERSE', `REVERSE POINT: punto a ${opponent.name} · SCORE ${team.score}-${opponent.score}`);
                     if (state.tournament.active) saveMatchState(state.tournament.currentIndex);
                     state.mode = 'IDLE';
                     if (checkMercy()) {
@@ -4782,6 +4862,7 @@
                 } else if (decision === 'REJECT') {
                     speak("Punto Non Approvato. Punto Non Approvato.", "Point Not Approved. Point Not Approved.");
                     log(`PUNTO NON APPROVATO (${team.name}). Nessun punteggio assegnato.`);
+                    recordRefereeEvent('POINT_REJECTED', `PUNTO NON APPROVATO: ${team.name}`);
                     // Resume only when this verification itself paused live play.
                     // If the match was already paused/idle, preserve that state.
                     if (state.gameTimeRemaining > 0 &&
@@ -4800,6 +4881,7 @@
                 } else if (decision === 'NO_POINT') {
                     speak("Nessun Punto. Nessun Punto.", "No Point. No Point.");
                     log(`DECISIONE NO POINT (${team.name}). Salto slot senza cambio campo.`);
+                    recordRefereeEvent('NO_POINT', `NO POINT: richiesta di ${team.name}`);
                     if (!handleNoPoint(true)) {
                         document.getElementById('point-verify-modal').style.display = 'flex';
                         return false;
@@ -4819,6 +4901,8 @@
                 }
                 pendingPointSide = null; // Clear pending state
                 pendingPointOriginalMode = null;
+                pendingPointOpenedAt = null;
+                broadcastState(true);
                 return true;
             }
 
@@ -4844,6 +4928,7 @@
                 playPointSound();
                 speak("Towel. Towel. Towel.", "Towel. Towel. Towel."); // Announce 3 times
                 log(`TOWEL CHIAMATO da ${state.teams[teamId].name}. Punto a ${state.teams[opponentId].name}.`, 'red');
+                recordRefereeEvent('TOWEL', `TOWEL: ${state.teams[teamId].name} · punto a ${state.teams[opponentId].name}`);
                 showSmartAlert(`TOWEL: ${state.teams[teamId].name}`, 'towel');
                 stopTimerLoop();
                 state.gameTimeRemaining = state.timer;
@@ -4923,6 +5008,10 @@
                 }
 
                 log(`PENALITA': ${state.teams[teamId].name} (+${lvl}). Tot: ${state.teams[teamId].penalties}`);
+                recordRefereeEvent(
+                    'PENALTY',
+                    `PENALITÀ ${lvl}x1: ${state.teams[teamId].name} · TOTALE ${state.teams[teamId].penalties}`
+                );
                 if (state.tournament.active) saveMatchState(state.tournament.currentIndex, null, false);
 
                 // AUTOMATIC POINT RULE (< 60s, Major/Gross i.e. lvl >= 2)
@@ -4944,6 +5033,7 @@
                     const timeStr = formatTimeSeconds(state.timer);
                     const msg = `MAJOR PENALTY < 60s: PUNTO AUTOMATICO A ${state.teams[opponentId].name}. Tempo rimanente: ${timeStr}`;
                     log(`${msg} (preciso: ${formatTimeMs(state.timer).trim()})`);
+                    recordRefereeEvent('AUTO_POINT', `PUNTO AUTOMATICO DA PENALITÀ: ${state.teams[opponentId].name}`);
                     speak("Punto Automatico. Rotazione.", "Automatic Point. Rotation.");
                     alert(msg);
 
@@ -5257,6 +5347,7 @@
                 // Remote command or local button: proceed with standard rotation WITHOUT swapping sides
                 speak("Nessun Punto. Nessun Punto.", "No Point. No Point.");
                 log("NO POINT: Nessun buzzer toccato. Rotazione slot senza cambio campo.");
+                if (!pendingPointSide) recordRefereeEvent('NO_POINT', 'NO POINT: nessun buzzer toccato');
                 if (state.tournament.active) {
                     if (state.mode === 'POINT' || state.mode === 'OVERTIME' ||
                         (state.mode === 'PAUSED' && (state.prevMode === 'POINT' || state.prevMode === 'OVERTIME'))) {
@@ -5437,6 +5528,7 @@
                     skipped: resolvedFinished ? !!previous.skipped : false,
                     goldenPending: resolvedFinished ? false : !!previous.goldenPending,
                     history: state.currentMatchEvents || [], // Save Granular History
+                    refereeEvents: state.refereeEvents || [],
                     realStartTime: m.realStartTime,
                     realEndTime: m.realEndTime,
                     gameTimeRemaining: state.gameTimeRemaining // Fix persistence
@@ -5459,6 +5551,7 @@
                 m.realStartTime = s.realStartTime;
                 m.realEndTime = s.realEndTime;
                 state.gameTimeRemaining = (typeof s.gameTimeRemaining !== 'undefined') ? s.gameTimeRemaining : CONFIG.gameTime; // Fix persistence
+                state.refereeEvents = Array.isArray(s.refereeEvents) ? s.refereeEvents : [];
 
                 log(`STATO MATCH RIPRISTINATO (Score ${s.scoreA}-${s.scoreB}, TP: ${state.teams.A.techUsed}/${state.teams.B.techUsed})`);
                 return true;
@@ -5509,6 +5602,7 @@
                         basesSwapped: state.basesSwapped,
                         outdoorMode: state.outdoorMode,
                         currentMatchEvents: state.currentMatchEvents,
+                        refereeEvents: state.refereeEvents,
                         pendingRotationAction: state.pendingRotationAction
                     }));
                 } catch (e) {
@@ -5535,6 +5629,7 @@
                         }
                         if (data.matchLog) state.matchLog = data.matchLog;
                         if (data.currentMatchEvents) state.currentMatchEvents = data.currentMatchEvents;
+                        if (Array.isArray(data.refereeEvents)) state.refereeEvents = data.refereeEvents;
                         if (typeof data.outdoorMode === 'boolean') {
                             state.outdoorMode = data.outdoorMode;
                             state.settings.outdoorMode = data.outdoorMode;
@@ -5873,6 +5968,10 @@
 
             function loadMatch(i, resume = false, autoStart = true, reopenFinished = false) {
                 if (i >= 0 && i < state.tournament.matches.length) {
+                    pendingPointSide = null;
+                    pendingPointOriginalMode = null;
+                    pendingPointOpenedAt = null;
+                    document.getElementById('point-verify-modal').style.display = 'none';
                     const m = state.tournament.matches[i];
                     const wasFinished = !!(m.savedState && m.savedState.finished);
                     state.tournament.currentIndex = i;
@@ -5897,6 +5996,7 @@
 
                         // Restore Granular History
                         state.currentMatchEvents = m.savedState.history || [];
+                        state.refereeEvents = Array.isArray(m.savedState.refereeEvents) ? m.savedState.refereeEvents : [];
                     } else {
                         // Fresh Load
                         resetAll(false);
@@ -5904,6 +6004,7 @@
                         state.teams.B.name = m.teamB;
                         state.basesSwapped = false;
                         state.currentMatchEvents = [];
+                        state.refereeEvents = [];
                     }
 
                     // Preserve the terminal state during recovery or inspection.
@@ -6251,6 +6352,26 @@
             function log(msg, className = '') {
                 const d = document.createElement('div'); d.className = 'log-entry ' + className; d.innerHTML = `<span class="log-time">${new Date().toLocaleTimeString()}</span> <span class="log-msg">${msg}</span>`;
                 document.getElementById('event-log').prepend(d);
+            }
+
+            function recordRefereeEvent(type, message, details = {}) {
+                if (!Array.isArray(state.refereeEvents)) state.refereeEvents = [];
+                const createdAt = Date.now();
+                const timer = Number.isFinite(Number(state.timer)) ? Number(state.timer) : 0;
+                const event = {
+                    id: `${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
+                    type: String(type || 'GAME').slice(0, 40),
+                    message: String(message || '').slice(0, 320),
+                    timer,
+                    clock: formatTimeMs(timer).trim(),
+                    createdAt,
+                    ...details
+                };
+                state.refereeEvents.push(event);
+                if (state.refereeEvents.length > 80) {
+                    state.refereeEvents.splice(0, state.refereeEvents.length - 80);
+                }
+                return event;
             }
 
             function showSmartAlert(msg, type = 'towel') {
@@ -6829,6 +6950,10 @@
                     (state.mode === 'PAUSED' && (state.prevMode === 'POINT' || state.prevMode === 'OVERTIME'))) {
                     state.gameTimeRemaining = state.timer;
                 }
+                recordRefereeEvent(
+                    'TIMER_EDIT',
+                    `TIMER ${state.timerMode === 'INTERVAL' ? 'INTERVALLO' : 'GARA'} MODIFICATO A ${formatTimeSeconds(state.timer)} DALLA REGIA`
+                );
                 updateTimerDisplay();
                 if (state.tournament.active && state.tournament.currentIndex !== -1) {
                     const current = state.tournament.matches[state.tournament.currentIndex];
@@ -7004,6 +7129,7 @@
                 };
                 state.matchLog = [];
                 state.currentMatchEvents = [];
+                state.refereeEvents = [];
                 state.prevMode = null;
                 state.timerMode = 'GAME';
                 state.gameTimeRemaining = CONFIG.gameTime;
@@ -7170,12 +7296,34 @@
                 timeout: null
             };
 
+            function recordBaseBuzzerPriority(action, id, delayMs = 0) {
+                if (action !== 'POINT_A' && action !== 'POINT_B') return;
+                const side = action === 'POINT_A' ? 'left' : 'right';
+                const teamId = !state.basesSwapped
+                    ? (side === 'left' ? 'A' : 'B')
+                    : (side === 'left' ? 'B' : 'A');
+                const teamName = state.teams[teamId] ? state.teams[teamId].name : side.toUpperCase();
+                const buzzerId = String(id || 'N/A');
+                if (delayMs <= 0) {
+                    recordRefereeEvent('BUZZER_FIRST', `PRIMO BUZZER: ${teamName} · ID ${buzzerId}`);
+                } else {
+                    recordRefereeEvent('BUZZER_LATE', `ALTRO BUZZER: ${teamName} · ID ${buzzerId} · +${(delayMs / 1000).toFixed(2)}s`);
+                }
+            }
+
             function executeBuzzerGameAction(action, id) {
                 const now = Date.now();
                 if (!buzzerLockState.active) {
                     buzzerLockState.active = true;
                     buzzerLockState.firstPressTime = now;
                     log(`BUZZER [PRIORITÀ]: ID ${id || 'N/A'} -> ${action}`);
+                    const pointVerificationAlreadyActive =
+                        (action === 'POINT_A' || action === 'POINT_B') && !!pendingPointSide;
+                    recordBaseBuzzerPriority(
+                        action,
+                        id,
+                        pointVerificationAlreadyActive ? Math.max(1, now - (pendingPointOpenedAt || now)) : 0
+                    );
 
                     // Reset lock after 1 second
                     if (buzzerLockState.timeout) clearTimeout(buzzerLockState.timeout);
@@ -7183,13 +7331,18 @@
                         buzzerLockState.active = false;
                     }, 1000);
 
+                    if (pointVerificationAlreadyActive) {
+                        broadcastState(true);
+                        return;
+                    }
+
                     // Execute Original Logic
                     switch (action) {
                         case 'POINT_A':
-                            handleTeamAction('left', 'point');
+                            handleTeamAction('left', 'point', false, `BUZZER ${id || 'N/A'}`);
                             break;
                         case 'POINT_B':
-                            handleTeamAction('right', 'point');
+                            handleTeamAction('right', 'point', false, `BUZZER ${id || 'N/A'}`);
                             break;
                         case 'PAUSE':
                             pause();
@@ -7222,9 +7375,13 @@
                             confirmPoint('REJECT');
                             break;
                     }
+                    broadcastState(true);
                 } else {
-                    const diff = (now - buzzerLockState.firstPressTime) / 1000;
+                    const diffMs = now - buzzerLockState.firstPressTime;
+                    const diff = diffMs / 1000;
                     log(`BUZZER [LOG]: ID ${id || 'N/A'} -> ${action} (+${diff.toFixed(2)}s)`);
+                    recordBaseBuzzerPriority(action, id, diffMs);
+                    broadcastState(true);
                 }
             }
 

@@ -112,13 +112,17 @@
             grid-template-areas:
                 "timer timer"
                 "left right"
-                "bottom bottom";
+                "bottom bottom"
+                "log log";
             grid-template-columns: 1fr 1fr;
-            grid-template-rows: auto 1fr auto;
+            grid-template-rows: auto 1fr auto minmax(130px, 0.45fr);
+        }
+
+        #app.layout-tablet #timer-container {
+            grid-area: timer;
         }
 
         #app.layout-tablet #timer {
-            grid-area: timer;
             font-size: 150px;
         }
 
@@ -132,6 +136,11 @@
 
         #app.layout-tablet .bottom-bar {
             grid-area: bottom;
+        }
+
+        #app.layout-tablet .game-log-panel {
+            grid-area: log;
+            max-height: none;
         }
 
         #app.layout-tablet .team-name {
@@ -239,6 +248,7 @@
         /* TIMER AREA */
         #timer-container {
             display: flex;
+            position: relative;
             background: #111;
             border-radius: 15px;
             border: 5px solid #333;
@@ -246,20 +256,9 @@
             align-items: center;
             justify-content: center;
             gap: 20px;
-        }
-
-        .ref-settings-btn {
-            position: fixed;
-            top: 12px;
-            right: 12px;
-            z-index: 9000;
-            border: 2px solid #64748b;
-            border-radius: 12px;
-            background: rgba(15, 23, 42, 0.92);
-            color: #e2e8f0;
-            padding: 10px 14px;
-            font-size: 16px;
-            font-weight: 900;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
         }
 
         #timer {
@@ -268,6 +267,18 @@
             font-family: 'Oswald', sans-serif;
             line-height: 1;
             color: var(--warning);
+            cursor: pointer;
+        }
+
+        #timer-container::after {
+            content: "TIENI PREMUTO PER MODIFICARE";
+            position: absolute;
+            right: 10px;
+            bottom: 4px;
+            color: #64748b;
+            font-size: 10px;
+            font-weight: 900;
+            letter-spacing: 0.5px;
         }
 
         #timer-phase {
@@ -454,6 +465,92 @@
             line-height: 1;
         }
 
+        .game-log-panel {
+            min-height: 120px;
+            max-height: 210px;
+            overflow: hidden;
+            border: 2px solid #334155;
+            border-radius: 14px;
+            background: #0b1220;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .game-log-title {
+            padding: 8px 12px;
+            border-bottom: 1px solid #334155;
+            color: #94a3b8;
+            font-size: 13px;
+            font-weight: 900;
+            letter-spacing: 1px;
+        }
+
+        #game-event-log {
+            overflow-y: auto;
+            padding: 4px 10px 8px;
+        }
+
+        .game-log-entry {
+            display: grid;
+            grid-template-columns: 82px 1fr;
+            gap: 8px;
+            padding: 7px 0;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.45);
+            color: #e2e8f0;
+            font-size: 14px;
+            font-weight: 700;
+            line-height: 1.25;
+        }
+
+        .game-log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .game-log-clock {
+            color: #fbbf24;
+            font-family: 'Roboto Mono', monospace;
+            font-weight: 900;
+        }
+
+        .game-log-entry.event-BUZZER_FIRST,
+        .game-log-entry.event-POINT_APPROVED {
+            color: #86efac;
+        }
+
+        .game-log-entry.event-PENALTY,
+        .game-log-entry.event-POINT_REVERSE,
+        .game-log-entry.event-TOWEL {
+            color: #fca5a5;
+        }
+
+        .game-log-empty {
+            padding: 18px 8px;
+            color: #64748b;
+            font-size: 13px;
+            font-weight: 700;
+            text-align: center;
+        }
+
+        .timer-edit-fields {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            width: 100%;
+        }
+
+        .timer-edit-fields input {
+            width: 110px;
+            padding: 16px 8px;
+            border: 2px solid #475569;
+            border-radius: 12px;
+            background: #111827;
+            color: white;
+            font-size: 38px;
+            font-weight: 900;
+            text-align: center;
+        }
+
         /* MODAL */
         .modal {
             display: none;
@@ -633,7 +730,6 @@
     </div>
 
     <div id="app">
-        <button class="ref-settings-btn" onclick="openSettings()" aria-label="Impostazioni intervalli">⚙ INTERVALLI</button>
         <div id="timer-container">
             <div id="timer">00:00</div>
             <div id="timer-phase">GARA</div>
@@ -685,6 +781,12 @@
                 <div id="nm-info" class="next-match-info">-- vs --</div>
             </div>
         </div>
+        <section class="game-log-panel" aria-label="Eventi del game">
+            <div class="game-log-title">EVENTI GAME · PIÙ RECENTI IN ALTO</div>
+            <div id="game-event-log" aria-live="polite">
+                <div class="game-log-empty">Nessun evento di gioco</div>
+            </div>
+        </section>
     </div>
 
     <!-- POINT CONFIRMATION MODAL -->
@@ -697,27 +799,16 @@
         <button class="modal-btn btn-cancel" data-point-decision="REJECT" onclick="closeModal()">CANCEL / CLOSE</button>
     </div>
 
-    <!-- SETTINGS MODAL -->
-    <div id="settings-modal" class="modal">
-        <div class="modal-title">IMPOSTAZIONI INTERVALLI</div>
-        <div style="display: flex; flex-direction: column; gap: 15px; width: 100%;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <label>Int. Punto (sec)</label>
-                <input type="number" id="point-interval-duration"
-                    value="30" min="1"
-                    style="width: 80px; padding: 10px; border-radius: 8px; border: 1px solid #333; background: #111; color: white; text-align: center;">
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <label>Int. Slot (sec)</label>
-                <input type="number" id="slot-interval-duration"
-                    value="120" min="1"
-                    style="width: 80px; padding: 10px; border-radius: 8px; border: 1px solid #333; background: #111; color: white; text-align: center;">
-            </div>
-            <button class="modal-btn btn-confirm" style="margin-top: 20px;" onclick="saveSettings()">SALVA E
-                SINCRONIZZA</button>
-            <button class="modal-btn btn-cancel"
-                onclick="document.getElementById('settings-modal').style.display='none'">CHIUDI</button>
+    <!-- TIMER EDIT MODAL -->
+    <div id="timer-edit-modal" class="modal">
+        <div id="timer-edit-title" class="modal-title">MODIFICA TIMER GARA</div>
+        <div class="timer-edit-fields">
+            <input type="number" id="timer-edit-min" min="0" max="99" value="10" inputmode="numeric" aria-label="Minuti">
+            <span style="font-size: 42px; font-weight: 900;">:</span>
+            <input type="number" id="timer-edit-sec" min="0" max="59" value="00" inputmode="numeric" aria-label="Secondi">
         </div>
+        <button class="modal-btn btn-confirm" onclick="saveTimerEdit()">SALVA TEMPO</button>
+        <button class="modal-btn btn-cancel" onclick="closeTimerEdit()">ANNULLA</button>
     </div>
 
     <script>
@@ -739,6 +830,7 @@
 
         let conn = null;
         let currentMode = 'IDLE';
+        let currentTimerMode = 'GAME';
         let pendingSide = null;
         let pointRequestPromise = null;
         let pointRequestPayload = null;
@@ -746,9 +838,14 @@
         let pointDecisionPayload = null;
         let lockedPointDecision = null;
         let pointModalBusy = false;
+        let pointModalSeenInState = false;
+        let syncedPendingPointKey = null;
         let chosenLayout = 'phone';
         let controlToken = '';
         let lastTimerSecond = -1;
+        let currentTimerSeconds = 0;
+        let lastGameEventSignature = '';
+        let timerLongPressHandle = null;
         let lastPensLeft = 0;
         let lastPensRight = 0;
         let lastPenaltyTimeLeft = 0;
@@ -830,7 +927,7 @@
                 START_POINT: 'START',
                 START_INTER: 'INTERVALLO',
                 PAUSE: 'PAUSA/RIPRESA',
-                UPDATE_SETTINGS: 'IMPOSTAZIONI'
+                SET_TIMER: 'MODIFICA TIMER'
             };
             return labels[payload.type] || payload.type || 'COMANDO';
         }
@@ -1121,15 +1218,6 @@
                     vibrationEnabled = data.hapticReferee;
                 }
 
-                // Update local inputs if they are not being edited
-                if (document.getElementById('settings-modal').style.display !== 'flex') {
-                    if (data.tournament && data.tournament.settings) {
-                        const s = data.tournament.settings;
-                        if (s.pointIntervalDuration !== undefined) document.getElementById('point-interval-duration').value = s.pointIntervalDuration;
-                        if (s.slotIntervalDuration !== undefined) document.getElementById('slot-interval-duration').value = s.slotIntervalDuration;
-                    }
-                }
-
                 if (data && data.type === 'PING') {
                     conn.send({ type: 'PONG', ts: data.ts });
                     return;
@@ -1157,6 +1245,7 @@
                 // Timer format MM:SS (strip milliseconds)
                 const mmss = PMTimeFormat.mmss(data.timer);
                 document.getElementById('timer').innerText = mmss;
+                currentTimerSeconds = Math.max(0, parseTimerToSeconds(mmss));
 
                 // Haptic Feedback for Timer
                 const totalSeconds = parseTimerToSeconds(mmss);
@@ -1168,7 +1257,8 @@
 
                 // Update Phase Label
                 const phaseEl = document.getElementById('timer-phase');
-                if (data.mode === 'INTERVAL' || data.mode === 'BREAK_MATCH' || data.mode === 'GOLDEN_BREAK') {
+                currentTimerMode = data.timerMode === 'INTERVAL' ? 'INTERVAL' : 'GAME';
+                if (currentTimerMode === 'INTERVAL' || data.mode === 'BREAK_MATCH' || data.mode === 'GOLDEN_BREAK') {
                     phaseEl.innerText = "Pausa";
                     phaseEl.style.color = "var(--warning)";
                 } else {
@@ -1221,6 +1311,13 @@
                     lastPensRight = newPens;
                 }
 
+                if (Object.prototype.hasOwnProperty.call(data, 'pendingPoint')) {
+                    syncPointVerificationFromState(data.pendingPoint);
+                }
+                if (Array.isArray(data.refereeEvents)) {
+                    renderGameEvents(data.refereeEvents);
+                }
+
                 // Update Main Button (Dynamic START/PAUSA)
                 const mainBtn = document.getElementById('pause-btn');
                 if (data.mode === 'POINT' || data.mode === 'OVERTIME') {
@@ -1271,6 +1368,85 @@
             }
         }
 
+        function renderGameEvents(events) {
+            const normalized = Array.isArray(events) ? events.slice(-80) : [];
+            const signature = normalized.map(event =>
+                `${event && event.id || ''}|${event && event.type || ''}|${event && event.message || ''}`
+            ).join('||');
+            if (signature === lastGameEventSignature) return;
+            lastGameEventSignature = signature;
+
+            const container = document.getElementById('game-event-log');
+            if (!container) return;
+            container.replaceChildren();
+
+            if (normalized.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'game-log-empty';
+                empty.textContent = 'Nessun evento di gioco';
+                container.appendChild(empty);
+                return;
+            }
+
+            normalized.slice().reverse().forEach(event => {
+                const type = String(event && event.type || 'GAME').replace(/[^A-Z0-9_-]/gi, '');
+                const row = document.createElement('div');
+                row.className = `game-log-entry event-${type}`;
+
+                const clock = document.createElement('span');
+                clock.className = 'game-log-clock';
+                clock.textContent = event && event.clock
+                    ? String(event.clock)
+                    : PMTimeFormat.mmss(event && event.timer);
+
+                const message = document.createElement('span');
+                message.textContent = String(event && event.message || 'Evento game');
+
+                row.append(clock, message);
+                container.appendChild(row);
+            });
+        }
+
+        function syncPointVerificationFromState(point) {
+            const hasPoint = point && (point.side === 'left' || point.side === 'right');
+            if (!hasPoint) {
+                if (pointModalSeenInState && pendingSide) {
+                    clearPointVerificationModal();
+                }
+                return;
+            }
+
+            const side = point.side;
+            const key = `${side}:${Number(point.openedAt) || 0}`;
+            const isNewStateRequest = syncedPendingPointKey !== key;
+
+            if (pendingSide && pendingSide !== side && pointDecisionPayload) return;
+
+            if (!pendingSide || pendingSide !== side) {
+                pendingSide = side;
+                pointRequestPromise = null;
+                pointRequestPayload = null;
+                pointDecisionPayload = null;
+                lockPointDecision(null);
+            }
+
+            pointRequestAccepted = true;
+            pointModalSeenInState = true;
+            syncedPendingPointKey = key;
+            const fallbackName = side === 'left'
+                ? document.getElementById('name-left').innerText
+                : document.getElementById('name-right').innerText;
+            const teamName = String(point.teamName || fallbackName);
+            document.getElementById('modal-team-name').innerText = `PUNTO PER: ${teamName}`;
+            document.getElementById('point-modal').style.display = 'flex';
+            if (!pointDecisionPayload) setPointModalBusy(false);
+
+            if (isNewStateRequest) {
+                triggerVibration('point');
+                showCommandFeedback('success', `BUZZER RICEVUTO · VERIFICA ${teamName}`, 2500);
+            }
+        }
+
         function openPointModal(side) {
             if (pendingSide || pointModalBusy) {
                 showCommandFeedback('failure', 'È GIÀ ATTIVA UNA VERIFICA PUNTO', 5000);
@@ -1281,6 +1457,8 @@
             pointRequestPayload = null;
             pointRequestAccepted = false;
             pointDecisionPayload = null;
+            pointModalSeenInState = false;
+            syncedPendingPointKey = null;
             lockPointDecision(null);
             const name = side === 'left' ? document.getElementById('name-left').innerText : document.getElementById('name-right').innerText;
             document.getElementById('modal-team-name').innerText = `PUNTO PER: ${name}`;
@@ -1340,6 +1518,8 @@
             pointDecisionPayload = null;
             lockedPointDecision = null;
             pointModalBusy = false;
+            pointModalSeenInState = false;
+            syncedPendingPointKey = null;
             refreshPointModalButtons();
             document.getElementById('point-modal').style.display = 'none';
         }
@@ -1487,28 +1667,63 @@
             }
         }
 
-        function openSettings() {
-            document.getElementById('settings-modal').style.display = 'flex';
+        function openTimerEdit() {
+            const total = Math.max(0, Math.min(5999, Math.round(currentTimerSeconds || 0)));
+            document.getElementById('timer-edit-title').innerText =
+                currentTimerMode === 'INTERVAL' || currentMode === 'BREAK_MATCH' || currentMode === 'GOLDEN_BREAK'
+                    ? 'MODIFICA TIMER INTERVALLO'
+                    : 'MODIFICA TIMER GARA';
+            document.getElementById('timer-edit-min').value = Math.floor(total / 60);
+            document.getElementById('timer-edit-sec').value = String(total % 60).padStart(2, '0');
+            document.getElementById('timer-edit-modal').style.display = 'flex';
+            triggerVibration('point');
         }
 
-        function saveSettings() {
-            const pointIntervalDuration = Number(document.getElementById('point-interval-duration').value);
-            const slotIntervalDuration = Number(document.getElementById('slot-interval-duration').value);
+        function closeTimerEdit() {
+            document.getElementById('timer-edit-modal').style.display = 'none';
+        }
 
-            if (!Number.isFinite(pointIntervalDuration) || pointIntervalDuration <= 0 ||
-                !Number.isFinite(slotIntervalDuration) || slotIntervalDuration <= 0) {
-                alert('Inserisci durate positive valide per entrambi gli intervalli.');
+        function saveTimerEdit() {
+            const minutes = Number(document.getElementById('timer-edit-min').value);
+            const seconds = Number(document.getElementById('timer-edit-sec').value);
+            if (!Number.isInteger(minutes) || minutes < 0 || minutes > 99 ||
+                !Number.isInteger(seconds) || seconds < 0 || seconds > 59) {
+                alert('Inserisci minuti da 0 a 99 e secondi da 0 a 59.');
                 return;
             }
 
-            sendCommand('UPDATE_SETTINGS', null, null, null, {
-                pointIntervalDuration: pointIntervalDuration,
-                slotIntervalDuration: slotIntervalDuration
+            sendCommand('SET_TIMER', null, null, null, {
+                seconds: (minutes * 60) + seconds
             }).then(result => {
                 if (result.accepted === true) {
-                    document.getElementById('settings-modal').style.display = 'none';
+                    closeTimerEdit();
                 }
             });
+        }
+
+        function setupTimerLongPress() {
+            const timer = document.getElementById('timer-container');
+            if (!timer) return;
+
+            const cancelLongPress = () => {
+                if (timerLongPressHandle) {
+                    clearTimeout(timerLongPressHandle);
+                    timerLongPressHandle = null;
+                }
+            };
+
+            timer.addEventListener('pointerdown', event => {
+                if (event.button !== undefined && event.button !== 0) return;
+                cancelLongPress();
+                timerLongPressHandle = setTimeout(() => {
+                    timerLongPressHandle = null;
+                    openTimerEdit();
+                }, 650);
+            });
+            ['pointerup', 'pointercancel', 'pointerleave'].forEach(eventName => {
+                timer.addEventListener(eventName, cancelLongPress);
+            });
+            timer.addEventListener('contextmenu', event => event.preventDefault());
         }
 
         const params = new URLSearchParams(window.location.search);
@@ -1541,6 +1756,8 @@
                 if (event.key === 'Enter') connectToHost();
             });
         });
+
+        setupTimerLongPress();
 
         if (id && initialPin) {
             setTimeout(connectToHost, 500);
