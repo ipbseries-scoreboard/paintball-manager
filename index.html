@@ -4937,6 +4937,7 @@
                 else saveTournamentState();
                 // Mercy checked inside rotateMatch
                 render();
+                broadcastState(true);
                 log("TOWEL AVVENUTO -> ROTATING MATCH SLOT (Delay 3s)");
                 schedulePitTransition('ROTATE'); // Towel ends the point
                 return true;
@@ -7357,10 +7358,10 @@
                             handleSmartAction('right', true);
                             break;
                         case 'TECH_A':
-                            applyTech('A');
+                            handleTechPause('A');
                             break;
                         case 'TECH_B':
-                            applyTech('B');
+                            handleTechPause('B');
                             break;
                         case 'NO_POINT':
                             handleNoPoint();

@@ -490,6 +490,75 @@
             border-color: #475569;
         }
 
+        #game-event-notice {
+            position: absolute;
+            top: 55px;
+            left: 50%;
+            z-index: 8500;
+            display: flex;
+            width: 1100px;
+            min-height: 190px;
+            box-sizing: border-box;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 50px;
+            border: 8px solid #38bdf8;
+            border-radius: 34px;
+            background: rgba(3, 20, 38, 0.96);
+            box-shadow: 0 20px 70px rgba(0, 0, 0, 0.8), 0 0 50px rgba(56, 189, 248, 0.55);
+            opacity: 0;
+            visibility: hidden;
+            transform: translate(-50%, -35px) scale(0.9);
+            transition: opacity 0.22s ease, transform 0.22s ease, visibility 0.22s;
+            pointer-events: none;
+            text-align: center;
+        }
+
+        #game-event-notice.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translate(-50%, 0) scale(1);
+            animation: board-notice-pulse 0.8s ease-in-out 2;
+        }
+
+        #game-event-notice.towel {
+            border-color: #ef4444;
+            background: rgba(69, 10, 10, 0.97);
+            box-shadow: 0 20px 70px rgba(0, 0, 0, 0.8), 0 0 55px rgba(239, 68, 68, 0.75);
+        }
+
+        #game-event-notice.tech {
+            border-color: #38bdf8;
+            background: rgba(7, 45, 70, 0.97);
+            box-shadow: 0 20px 70px rgba(0, 0, 0, 0.8), 0 0 55px rgba(56, 189, 248, 0.7);
+        }
+
+        .game-event-notice-title {
+            color: white;
+            font-family: 'Oswald', sans-serif;
+            font-size: 76px;
+            font-weight: 900;
+            line-height: 1;
+            letter-spacing: 7px;
+            text-transform: uppercase;
+        }
+
+        .game-event-notice-message {
+            margin-top: 12px;
+            color: #f8fafc;
+            font-family: 'Roboto', sans-serif;
+            font-size: 38px;
+            font-weight: 900;
+            line-height: 1.15;
+            text-transform: uppercase;
+        }
+
+        @keyframes board-notice-pulse {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.35); }
+        }
+
         @keyframes pulse-border {
             0% {
                 border-color: #f59e0b;
@@ -1524,6 +1593,11 @@
         </div>
 
         <!-- Overlays & Widgets (Inside Scaler, Outside Grid) -->
+        <div id="game-event-notice" role="status" aria-live="assertive">
+            <div id="game-event-notice-title" class="game-event-notice-title"></div>
+            <div id="game-event-notice-message" class="game-event-notice-message"></div>
+        </div>
+
         <div id="next-match-layer">
             <div class="nm-header">NEXT MATCH</div>
             <div class="nm-teams">
@@ -1898,10 +1972,63 @@
 
         let oldData = null;
         let currentData = null;
+        let boardGameNoticesInitialized = false;
+        let boardGameNoticeActive = false;
+        let boardGameNoticeTimer = null;
+        const boardGameNoticeQueue = [];
+        const seenBoardGameNoticeIds = new Set();
 
         // Escape HTML: nomi squadra/fase possono arrivare dall'import ipba.it e
         // finiscono in innerHTML → vanno neutralizzati contro iniezioni di codice.
         const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+        function showNextBoardGameNotice() {
+            if (boardGameNoticeActive || boardGameNoticeQueue.length === 0) return;
+            const event = boardGameNoticeQueue.shift();
+            const notice = document.getElementById('game-event-notice');
+            const isTowel = event.type === 'TOWEL';
+
+            boardGameNoticeActive = true;
+            notice.className = isTowel ? 'towel' : 'tech';
+            document.getElementById('game-event-notice-title').textContent = isTowel ? 'TOWEL' : 'TECH PAUSE';
+            document.getElementById('game-event-notice-message').textContent = String(event.message || '');
+            void notice.offsetWidth;
+            notice.classList.add('show');
+
+            clearTimeout(boardGameNoticeTimer);
+            boardGameNoticeTimer = setTimeout(() => {
+                notice.classList.remove('show');
+                setTimeout(() => {
+                    boardGameNoticeActive = false;
+                    showNextBoardGameNotice();
+                }, 300);
+            }, 4200);
+        }
+
+        function processBoardGameNotices(events) {
+            const relevant = Array.isArray(events)
+                ? events.filter(event => event && (event.type === 'TOWEL' || event.type === 'TECH') && event.id)
+                : [];
+
+            if (!boardGameNoticesInitialized) {
+                relevant.forEach(event => seenBoardGameNoticeIds.add(String(event.id)));
+                boardGameNoticesInitialized = true;
+                return;
+            }
+
+            relevant.forEach(event => {
+                const id = String(event.id);
+                if (seenBoardGameNoticeIds.has(id)) return;
+                seenBoardGameNoticeIds.add(id);
+                boardGameNoticeQueue.push(event);
+            });
+
+            if (seenBoardGameNoticeIds.size > 500) {
+                seenBoardGameNoticeIds.clear();
+                relevant.forEach(event => seenBoardGameNoticeIds.add(String(event.id)));
+            }
+            showNextBoardGameNotice();
+        }
 
         function updateBoardFromPacket(data) {
             if (!data) return;
@@ -1922,6 +2049,7 @@
             if (oldData && currentData && currentData.teamLeft && oldData.teamLeft && (currentData.teamLeft.score > oldData.teamLeft.score)) triggerMascotImpact('left');
             if (oldData && currentData && currentData.teamRight && oldData.teamRight && (currentData.teamRight.score > oldData.teamRight.score)) triggerMascotImpact('right');
 
+            processBoardGameNotices(currentData && currentData.refereeEvents);
             oldData = JSON.parse(JSON.stringify(currentData));
             updateBoard(currentData);
         }
