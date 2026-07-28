@@ -67,6 +67,23 @@ function isLocalRequest(req) {
         address === '::ffff:127.0.0.1';
 }
 
+// Difesa CSRF per gli endpoint di scrittura che non possono richiedere la
+// sessione di setup. Un browser invia sempre Origin sulle richieste POST
+// cross-site, quindi un'origine diversa dalla nostra e' un tentativo esterno.
+// Un Origin assente indica un client non-browser (curl, script), che non e'
+// il vettore CSRF.
+function isSameOriginRequest(req) {
+    const origin = req && req.headers && req.headers.origin;
+    if (!origin) return true;
+    try {
+        const host = new URL(origin).host.toLowerCase();
+        const expected = String(req.headers.host || '').toLowerCase();
+        return !!expected && host === expected;
+    } catch (error) {
+        return false;
+    }
+}
+
 function readCookies(req) {
     const output = {};
     String(req.headers.cookie || '').split(';').forEach(part => {
@@ -103,8 +120,17 @@ function cookieHeader(token, maxAgeSeconds) {
 
 function authFailureEntry(address) {
     const now = Date.now();
+    // Pulizia opportunistica: la mappa e' indicizzata per indirizzo e senza
+    // questo passaggio cresceva senza limite.
+    if (loginFailures.size > 256) {
+        loginFailures.forEach((saved, key) => {
+            if (now - saved.windowStartedAt > AUTH_WINDOW_MS && saved.blockedUntil <= now) loginFailures.delete(key);
+        });
+    }
     let entry = loginFailures.get(address);
-    if (!entry || now - entry.windowStartedAt > AUTH_WINDOW_MS) {
+    // Un blocco ancora attivo non va azzerato dalla scadenza della finestra:
+    // altrimenti il blocco da 60 s ne durava in pratica una cinquantina.
+    if (!entry || (now - entry.windowStartedAt > AUTH_WINDOW_MS && entry.blockedUntil <= now)) {
         entry = { windowStartedAt: now, failures: 0, blockedUntil: 0 };
         loginFailures.set(address, entry);
     }
@@ -747,6 +773,16 @@ async function handleRosterApi(req, res, parsedUrl) {
                 return true;
             }
             if (parts.length === 3 && req.method === 'POST') {
+                // Scrivere il registry cambia da quali link vengono riscaricate
+                // le rose. Non si puo' pretendere la sessione di setup (il
+                // pannello GESTIONE ROSE di streaming.html salva senza login),
+                // ma il solo "richiesta locale" lasciava passare il CSRF: un
+                // sito qualunque aperto sul PC di regia poteva riscriverlo
+                // (body JSON senza header custom = nessun preflight).
+                if (!isSameOriginRequest(req)) {
+                    json(res, 403, { error: 'Origine non consentita per la scrittura del registry.' });
+                    return true;
+                }
                 const registry = normalizeRegistry(await readJson(req, 512 * 1024));
                 // Il pannello streaming può avere campi URL vuoti e nomi
                 // diversi da quelli ufficiali IPBA: un URL già registrato per
@@ -855,6 +891,7 @@ module.exports = {
     saveRoster,
     imageInfo,
     isLocalRequest,
+    isSameOriginRequest,
     getSetupAuthInfo,
     readRegistry,
     extractRegistryTeamId,

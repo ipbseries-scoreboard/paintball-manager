@@ -35,7 +35,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const WebSocket = require('ws');
-const { handleRosterApi, getSetupAuthInfo, importAllFromRegistry } = require('./roster-server');
+const { handleRosterApi, getSetupAuthInfo, importAllFromRegistry, isLocalRequest, isSameOriginRequest } = require('./roster-server');
 
 const PORT = parseInt(process.argv[2] || process.env.PORT || '9000', 10);
 const ROOT = __dirname;
@@ -109,15 +109,31 @@ function proxyIpba(req, res) {
 // riavvii. Endpoint opzionale: su GitHub Pages l'overlay usa l'URL ?cfg=.
 const FIELD_LOGOS_DIR = path.join(ROOT, 'data', 'field-logos');
 const FIELD_LOGOS_MAX_BYTES = 8 * 1024 * 1024;
+// Numero massimo di configurazioni distinte: senza tetto, ogni chiave nuova
+// aggiungeva una voce in RAM (fino a 8 MB) e un file su disco, entrambi
+// illimitati e scrivibili senza credenziali.
+const FIELD_LOGOS_MAX_KEYS = positiveEnvInt('PM_FIELD_LOGOS_MAX_KEYS', 32);
 const fieldLogosCache = new Map(); // chiave -> JSON string
+
+// La scrittura dell'overlay in onda e' un'operazione da PC di regia, come il
+// setup rose. La lettura invece resta libera: il Browser Input di vMix gira in
+// un processo separato che non condivide i cookie di Chrome e deve poter fare
+// GET della configurazione senza sessione.
+function fieldLogosWriteAllowed(req) {
+    // Local-only come il setup rose, piu' il controllo di origine che blocca il
+    // CSRF da un sito qualunque aperto sul PC di regia (POST con Content-Type
+    // semplice = nessun preflight che ci protegga).
+    return isLocalRequest(req) && isSameOriginRequest(req);
+}
 
 function handleFieldLogosApi(req, res, parsedUrl) {
     const headers = {
         'Content-Type': 'application/json; charset=utf-8',
         'Cache-Control': 'no-store',
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type'
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'X-Content-Type-Options': 'nosniff'
     };
     if (req.method === 'OPTIONS') { res.writeHead(204, headers); res.end(); return; }
     const m = /^\/api\/field-logos\/([a-z0-9_-]{1,40})$/i.exec(parsedUrl.pathname);
@@ -138,7 +154,7 @@ function handleFieldLogosApi(req, res, parsedUrl) {
                 res.end(JSON.stringify({ error: 'Configurazione non trovata' }));
                 return;
             }
-            fieldLogosCache.set(key, txt);
+            if (fieldLogosCache.size < FIELD_LOGOS_MAX_KEYS) fieldLogosCache.set(key, txt);
             res.writeHead(200, headers);
             res.end(txt);
         });
@@ -146,6 +162,16 @@ function handleFieldLogosApi(req, res, parsedUrl) {
     }
 
     if (req.method === 'POST') {
+        if (!fieldLogosWriteAllowed(req)) {
+            res.writeHead(403, headers);
+            res.end(JSON.stringify({ error: 'La configurazione GREEN si pubblica solo dal PC di regia.' }));
+            return;
+        }
+        if (!fieldLogosCache.has(key) && fieldLogosCache.size >= FIELD_LOGOS_MAX_KEYS) {
+            res.writeHead(429, headers);
+            res.end(JSON.stringify({ error: 'Troppe configurazioni GREEN salvate (max ' + FIELD_LOGOS_MAX_KEYS + ').' }));
+            return;
+        }
         let size = 0;
         const chunks = [];
         let aborted = false;
@@ -211,6 +237,9 @@ const server = http.createServer((req, res) => {
         const rootPrefix = rootPath.endsWith(path.sep) ? rootPath : rootPath + path.sep;
         const insideRoot = filePath.toLowerCase().startsWith(rootPrefix.toLowerCase());
         if (!insideRoot) { res.writeHead(403); res.end('Accesso negato'); return; }
+        // I file di servizio di atomicWrite (.bak e .tmp-PID-TIMESTAMP) non sono
+        // contenuti pubblicabili: erano scaricabili come octet-stream.
+        if (/\.bak$|\.tmp-\d+-\d+$/i.test(filePath)) { res.writeHead(403); res.end('Accesso negato'); return; }
         fs.readFile(filePath, (err, buf) => {
             if (err) { res.writeHead(404); res.end('File non trovato: ' + urlPath); return; }
             res.writeHead(200, {
@@ -239,6 +268,13 @@ const MAX_ROOMS = positiveEnvInt('PM_RELAY_MAX_ROOMS', 1024);
 const HELLO_TIMEOUT_MS = positiveEnvInt('PM_RELAY_HELLO_TIMEOUT_MS', 5000);
 const PING_INTERVAL_MS = positiveEnvInt('PM_RELAY_PING_INTERVAL_MS', 30000);
 const REQUEST_STATE_INTERVAL_MS = positiveEnvInt('PM_RELAY_REQUEST_STATE_INTERVAL_MS', 1500);
+// Una stanza conserva token e ownership anche mentre la Regia e' offline (serve
+// per riprendere il controllo dopo un riavvio del PC di regia), ma non per
+// sempre: senza scadenza le stanze si accumulavano fino a MAX_ROOMS e da quel
+// momento il relay rifiutava OGNI nuovo Match ID, compreso quello legittimo.
+const ROOM_RETENTION_MS = positiveEnvInt('PM_RELAY_ROOM_RETENTION_MS', 12 * 60 * 60 * 1000);
+const ROOM_SWEEP_INTERVAL_MS = positiveEnvInt('PM_RELAY_ROOM_SWEEP_MS', 5 * 60 * 1000);
+const CLIENT_MAX_MESSAGES_PER_SEC = positiveEnvInt('PM_RELAY_CLIENT_MSG_PER_SEC', 40);
 
 const wss = new WebSocket.Server({
     server,
@@ -261,11 +297,50 @@ function getRoom(name) {
             clients: new Set(),
             lastFullSync: null,
             hostToken: null,
-            controlToken: null
+            controlToken: null,
+            lastActiveAt: Date.now()
         };
         rooms.set(name, r);
     }
     return r;
+}
+
+function touchRoom(room) {
+    if (room) room.lastActiveAt = Date.now();
+}
+
+// Libera le stanze rimaste senza Regia e senza schermi oltre la finestra di
+// conservazione. Senza questo, chiunque poteva riservare 1024 Match ID a caso
+// (bastano un hostToken qualsiasi e un PIN a 6 cifre) e bloccare il relay in
+// modo permanente fino al riavvio del server.
+function sweepExpiredRooms() {
+    const now = Date.now();
+    let removed = 0;
+    rooms.forEach((room, name) => {
+        if (room.host || room.clients.size) { touchRoom(room); return; }
+        if (now - (room.lastActiveAt || 0) <= ROOM_RETENTION_MS) return;
+        rooms.delete(name);
+        removed += 1;
+    });
+    if (removed) console.log(`[RELAY] ${removed} stanze inattive liberate (limite ${MAX_ROOMS}).`);
+    return removed;
+}
+
+// Se il tetto e' comunque stato raggiunto, si recupera lo slot piu' vecchio tra
+// le stanze davvero vuote: un evento reale non perde mai la propria stanza,
+// perche' finche' Regia o schermi sono collegati la stanza non e' candidabile.
+function reclaimOldestIdleRoom() {
+    let oldestName = null;
+    let oldestAt = Infinity;
+    rooms.forEach((room, name) => {
+        if (room.host || room.clients.size) return;
+        const at = room.lastActiveAt || 0;
+        if (at < oldestAt) { oldestAt = at; oldestName = name; }
+    });
+    if (oldestName === null) return false;
+    rooms.delete(oldestName);
+    console.log(`[RELAY] Stanza inattiva ${oldestName} liberata per fare posto a un nuovo Match ID.`);
+    return true;
 }
 
 function safeSend(ws, data) {
@@ -384,6 +459,8 @@ wss.on('connection', (ws) => {
     ws.on('pong', () => { ws._isAlive = true; });
 
     const address = clientAddress(ws);
+    // La connessione appena arrivata e' gia' dentro wss.clients, quindi il ">"
+    // ammette esattamente MAX connessioni e rifiuta la successiva.
     if (wss.clients.size > MAX_CONNECTIONS || openConnectionsForAddress(address) > MAX_CONNECTIONS_PER_IP) {
         try { ws.close(1013, 'Relay occupato'); } catch (e) { }
         return;
@@ -402,6 +479,21 @@ wss.on('connection', (ws) => {
 
     ws.on('message', (raw) => {
         if (ws._authRejected) return;
+
+        // Solo la Regia ha motivo di inviare traffico ad alta frequenza (lo
+        // stato del match). Schermi e controller sono limitati: senza questo,
+        // un client poteva far parsare al server payload da 16 MB in loop.
+        if (ws._role && ws._role !== 'host') {
+            const now = Date.now();
+            if (now - (ws._msgWindowAt || 0) > 1000) { ws._msgWindowAt = now; ws._msgCount = 0; }
+            ws._msgCount = (ws._msgCount || 0) + 1;
+            if (ws._msgCount > CLIENT_MAX_MESSAGES_PER_SEC) {
+                ws._authRejected = true;
+                try { ws.close(1008, 'Troppi messaggi'); } catch (e) { }
+                return;
+            }
+        }
+
         const text = raw.toString();
 
         // Primo messaggio: presentazione (hello)
@@ -434,6 +526,8 @@ wss.on('connection', (ws) => {
             }
 
             if (!room) {
+                if (rooms.size >= MAX_ROOMS) sweepExpiredRooms();
+                if (rooms.size >= MAX_ROOMS) reclaimOldestIdleRoom();
                 if (rooms.size >= MAX_ROOMS) {
                     ws._authRejected = true;
                     rejectAuth(ws, 'ROOM_LIMIT', 'Numero massimo di Match ID attivi raggiunto.');
@@ -441,6 +535,7 @@ wss.on('connection', (ws) => {
                 }
                 room = getRoom(roomName);
             }
+            touchRoom(room);
 
             if (role === 'host') {
                 const hostToken = readToken(hello.hostToken || hello.token);
@@ -522,6 +617,7 @@ wss.on('connection', (ws) => {
 
         const room = rooms.get(ws._room);
         if (!room) return;
+        touchRoom(room);
 
         if (ws._role === 'host' && room.host === ws) {
             // Stato dalla Regia: cache del FULL_SYNC + inoltro identico a tutti gli schermi
@@ -564,7 +660,9 @@ wss.on('connection', (ws) => {
             notifyRoster(room);
         }
         // Le stanze inizializzate conservano token e ownership anche se restano
-        // offline. Si eliminano solo attese vuote create da viewer pre-Regia.
+        // offline. Si eliminano subito le attese vuote create da viewer pre-Regia;
+        // le altre restano prenotate per ROOM_RETENTION_MS, poi le libera lo sweep.
+        touchRoom(room);
         cleanupUnusedRoom(ws._room, room);
     });
 });
@@ -583,6 +681,10 @@ const pingInterval = setInterval(() => {
     });
 }, PING_INTERVAL_MS);
 if (typeof pingInterval.unref === 'function') pingInterval.unref();
+
+// Pulizia periodica delle stanze abbandonate (vedi sweepExpiredRooms).
+const roomSweepInterval = setInterval(sweepExpiredRooms, ROOM_SWEEP_INTERVAL_MS);
+if (typeof roomSweepInterval.unref === 'function') roomSweepInterval.unref();
 
 // Heartbeat applicativo: permette agli schermi di capire di essere vivi
 // anche quando la partita è ferma e non arrivano pacchetti di stato.

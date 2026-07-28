@@ -60,14 +60,48 @@
         }
     })();
 
+    // ---------- CONFIGURAZIONE ICE ----------
+    // Gli STUN sono pubblici e restano qui. Le credenziali TURN invece NON
+    // vanno nel sorgente: erano leggibili da chiunque avesse il repo e la banda
+    // dell'account veniva consumata a spese nostre. Ora si caricano da:
+    //   1. window.PM_TURN              -> file turn-config.js (non versionato)
+    //   2. localStorage pm_turn_config -> impostabile senza toccare i file
+    // Senza TURN tutto funziona in LAN e sulla maggior parte delle reti; solo
+    // i NAT simmetrici (alcune reti mobili) richiedono il relay TURN.
     var ICE_CONFIG = {
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun.relay.metered.ca:80' },
-            { urls: 'turn:global.relay.metered.ca:80', username: 'fe841146f64ad98d3f631f65', credential: '1RWiOOZ7GOYCgcBw' },
-            { urls: 'turn:global.relay.metered.ca:443', username: 'fe841146f64ad98d3f631f65', credential: '1RWiOOZ7GOYCgcBw' }
-        ]
+            { urls: 'stun:stun.relay.metered.ca:80' }
+        ].concat(readTurnServers())
     };
+
+    // Dichiarazione di funzione (hoisted): usabile da ICE_CONFIG qui sopra.
+    function readTurnServers() {
+        var raw = null;
+        try {
+            if (global.PM_TURN) raw = global.PM_TURN;
+            else if (global.localStorage) {
+                var stored = global.localStorage.getItem('pm_turn_config');
+                if (stored) raw = JSON.parse(stored);
+            }
+        } catch (e) { return []; }
+        if (!raw) return [];
+        var list = Array.isArray(raw) ? raw : [raw];
+        var out = [];
+        list.forEach(function (item) {
+            if (!item || !item.urls || !item.username || !item.credential) return;
+            // I segnaposto di turn-config.js non sono credenziali: se restano
+            // com'e' il file appena creato, il TURN va semplicemente ignorato
+            // invece di aggiungere un server che fallirebbe ad ogni tentativo.
+            if (/INCOLLA_QUI|INSERISCI_/.test(String(item.username) + String(item.credential))) return;
+            out.push({
+                urls: item.urls,
+                username: String(item.username),
+                credential: String(item.credential)
+            });
+        });
+        return out;
+    }
 
     // Un'unica configurazione anche per i canali PeerJS secondari (Pubblico e
     // overlay OBS). Senza TURN quei canali funzionano in LAN, ma possono fallire

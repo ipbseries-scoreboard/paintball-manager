@@ -9,6 +9,7 @@
     <!-- PeerJS CDN -->
     <script src="lib/peerjs.min.js"></script>
     <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');</script>
+    <script src="turn-config.js?v=1"></script>
     <script src="pm-client.js?v=2.2.0-fan-turn"></script>
     <script src="time-format.js?v=1.0.0-mmss"></script>
     <script src="youtube-chat.js?v=1.0.0"></script>
@@ -4387,9 +4388,22 @@
                 const m = validateFanMessage(raw);
                 if (!m) { counters.rejected++; return; }
                 rec.lastSeen = now();
-                const sid = String(m.spectatorId || rec.spectatorId || '');
+                // L'identita' si fissa al PRIMO messaggio della connessione e non
+                // e' piu' modificabile: prima m.spectatorId aveva la precedenza su
+                // quello memorizzato, quindi una sola connessione poteva cambiare
+                // identita' ad ogni pacchetto e aggirare voto unico, limite
+                // domande, rate limit e lista bloccati.
+                const declared = String(m.spectatorId || '');
+                if (!rec.spectatorId) {
+                    if (!ID_RE.test(declared)) { counters.rejected++; return; }
+                    rec.spectatorId = declared;
+                } else if (declared && declared !== rec.spectatorId) {
+                    counters.rejected++;
+                    fanErr(rec, 'BAD', 'Sessione non valida: ricarica la pagina');
+                    return;
+                }
+                const sid = rec.spectatorId;
                 if (!ID_RE.test(sid)) { counters.rejected++; return; }
-                if (!rec.spectatorId) rec.spectatorId = sid;
                 const S = db.settings;
                 if (!S.enabled && m.type !== 'FAN_PING' && m.type !== 'FAN_PONG' && m.type !== 'FAN_HELLO' && m.type !== 'FAN_OVERLAY_HELLO') {
                     fanErr(rec, 'DISABLED', 'Interazione disattivata'); return;

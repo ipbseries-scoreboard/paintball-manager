@@ -50,7 +50,15 @@
 
     function safeAssetUrl(value) {
         const text = cleanText(value, 1800);
-        if (/^\/?data\/rosters\/[A-Za-z0-9_%./-]+$/i.test(text) && !text.includes('..')) return text.replace(/^\/+/, '');
+        if (/^\/?data\/rosters\/[A-Za-z0-9_%./-]+$/i.test(text)) {
+            // Il controllo su ".." va fatto sulla forma DECODIFICATA: la regex
+            // ammette "%", quindi "%2e%2e" superava il filtro e sarebbe stato
+            // ririsolto dal browser come "..".
+            let decoded = text;
+            try { decoded = decodeURIComponent(text); } catch (error) { return ''; }
+            if (decoded.includes('..') || decoded.includes('\\')) return '';
+            return text.replace(/^\/+/, '');
+        }
         return safeHttpUrl(text);
     }
 
