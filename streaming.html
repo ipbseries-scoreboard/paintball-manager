@@ -2175,29 +2175,62 @@
         window.addEventListener('scroll', noScroll);
         function noScroll() { if (window.__FAN_MODE__) return; window.scrollTo(0, 0); }
 
-        // --- GitHub Logo Fetcher ---
+        // --- Elenco dei loghi squadra ---
+        // Serve l'elenco dei NOMI DEI FILE per il confronto "somigliante".
+        // Prima si chiedeva SOLO all'API di GitHub: senza rete in campo non
+        // compariva nessun logo, nemmeno quelli gia' presenti in NO SFONDO/,
+        // e il retry ogni 10 secondi non si fermava mai.
+        // Ora: prima il server locale (/api/logos), GitHub solo come riserva
+        // per quando la pagina e' aperta da GitHub Pages.
         let githubFilesList = [];
         let githubFilesFetched = false;
+        // Base da cui costruire l'URL dell'immagine: relativa se i file sono
+        // quelli locali, altrimenti raw.githubusercontent.
+        let logoBaseUrl = 'NO%20SFONDO/';
+        let logoFetchAttempts = 0;
+        const LOGO_FETCH_MAX_ATTEMPTS = 5;
 
         async function fetchGithubFiles() {
             if (githubFilesFetched) return;
+            logoFetchAttempts += 1;
+
+            // 1) Cartella locale servita dal server di regia.
             try {
-                console.log("Fetching GitHub logos list...");
+                const local = await fetch('/api/logos', { cache: 'no-store' });
+                if (local.ok) {
+                    const data = await local.json();
+                    if (Array.isArray(data.files) && data.files.length) {
+                        githubFilesList = data.files;
+                        githubFilesFetched = true;
+                        logoBaseUrl = 'NO%20SFONDO/';
+                        console.log("Loghi dalla cartella locale:", githubFilesList.length, "file");
+                        return;
+                    }
+                }
+            } catch (e) { /* niente server locale: si prova GitHub */ }
+
+            // 2) Riserva: elenco da GitHub (pagina aperta da GitHub Pages).
+            try {
                 const response = await fetch('https://api.github.com/repos/ipbseries-scoreboard/paintball-manager/contents/NO%20SFONDO');
                 if (response.ok) {
                     const data = await response.json();
                     githubFilesList = data.map(file => file.name);
                     githubFilesFetched = true;
-                    console.log("SUCCESS: Fetched GitHub logo list:", githubFilesList.length, "files");
-                } else {
-                    console.error("FAILED to fetch GitHub logos:", response.status, response.statusText);
-                    // Retry in 10 seconds
-                    setTimeout(fetchGithubFiles, 10000);
+                    logoBaseUrl = 'https://raw.githubusercontent.com/ipbseries-scoreboard/paintball-manager/main/NO%20SFONDO/';
+                    console.log("Loghi da GitHub:", githubFilesList.length, "file");
+                    return;
                 }
+                console.warn("Elenco loghi da GitHub non disponibile:", response.status);
             } catch (e) {
-                console.error("CRITICAL ERROR fetching GitHub logos:", e);
-                // Retry in 10 seconds
+                console.warn("Elenco loghi non raggiungibile:", e && e.message);
+            }
+
+            // Tetto ai tentativi: senza rete il vecchio codice riprovava ogni
+            // 10 secondi all'infinito, riempiendo la console per tutto l'evento.
+            if (logoFetchAttempts < LOGO_FETCH_MAX_ATTEMPTS) {
                 setTimeout(fetchGithubFiles, 10000);
+            } else {
+                console.warn("Elenco loghi non disponibile: rinuncio dopo " + LOGO_FETCH_MAX_ATTEMPTS + " tentativi.");
             }
         }
 
@@ -2784,7 +2817,9 @@
                 // FALLBACK: Search on GitHub
                 const githubFile = findFuzzyGithubLogo(teamName);
                 if (githubFile) {
-                    const rawUrl = `https://raw.githubusercontent.com/ipbseries-scoreboard/paintball-manager/main/NO%20SFONDO/${encodeURIComponent(githubFile)}`;
+                    // logoBaseUrl e' relativa quando l'elenco arriva dal server
+                    // locale, cosi' il logo si carica anche senza internet.
+                    const rawUrl = `${logoBaseUrl}${encodeURIComponent(githubFile)}`;
                     imgEl.src = rawUrl;
                     imgEl.style.display = 'block';
                     imgEl.onerror = () => {
@@ -3317,7 +3352,7 @@
                 if (!finalLogoUrl) {
                     const fuzzyFile = findFuzzyGithubLogo(clan.name);
                     if (fuzzyFile) {
-                        finalLogoUrl = `https://raw.githubusercontent.com/ipbseries-scoreboard/paintball-manager/main/NO%20SFONDO/${encodeURIComponent(fuzzyFile)}`;
+                        finalLogoUrl = `${logoBaseUrl}${encodeURIComponent(fuzzyFile)}`;
                     }
                 }
 

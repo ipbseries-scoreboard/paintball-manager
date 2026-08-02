@@ -312,6 +312,39 @@ function handleFieldLogosApi(req, res, parsedUrl) {
     res.end(JSON.stringify({ error: 'Metodo non supportato' }));
 }
 
+// ---------- ELENCO DEI LOGHI SQUADRA ----------
+// streaming.html e obs_bar.html cercano il logo di una squadra facendo un
+// confronto "somigliante" sui NOMI DEI FILE, quindi hanno bisogno dell'elenco
+// della cartella. Il browser non puo' leggere una directory, percio' finora lo
+// chiedevano all'API di GitHub: senza rete in campo restavano SENZA loghi anche
+// quando i file erano gia' sul disco, e riprovavano ogni 10 secondi per tutta
+// la giornata. Questo endpoint serve lo stesso elenco dalla cartella locale.
+// Sono solo nomi di file gia' pubblici (le immagini sono servite comunque).
+const LOGOS_DIR = path.join(ROOT, 'NO SFONDO');
+
+function handleLogosApi(req, res) {
+    const headers = {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff'
+    };
+    if (req.method !== 'GET') {
+        res.writeHead(405, headers);
+        res.end(JSON.stringify({ error: 'Metodo non supportato' }));
+        return;
+    }
+    fs.readdir(LOGOS_DIR, (err, names) => {
+        if (err) {
+            res.writeHead(200, headers);
+            res.end(JSON.stringify({ files: [], error: 'Cartella loghi non leggibile' }));
+            return;
+        }
+        const files = names.filter(name => IMAGE_EXT.has(path.extname(name).toLowerCase()));
+        res.writeHead(200, headers);
+        res.end(JSON.stringify({ files }));
+    });
+}
+
 // ---------- COSA E' PUBBLICO ----------
 // Il server serviva qualunque file dentro la cartella del progetto: bastava
 // conoscerne il nome. Dalla rete del campo erano scaricabili server.js,
@@ -378,6 +411,10 @@ const server = http.createServer((req, res) => {
         const parsedUrl = new URL(req.url || '/', 'http://localhost');
         if (parsedUrl.pathname.startsWith('/api/field-logos/') || parsedUrl.pathname === '/api/field-logos') {
             handleFieldLogosApi(req, res, parsedUrl);
+            return;
+        }
+        if (parsedUrl.pathname === '/api/logos') {
+            handleLogosApi(req, res);
             return;
         }
         if (parsedUrl.pathname.startsWith('/api/rosters/')) {
