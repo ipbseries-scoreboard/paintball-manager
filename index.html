@@ -6621,7 +6621,13 @@
             // --- SOUND DATABASE & CUSTOM AUDIO ---
             const soundLibrary = [
                 { name: "Default Electronic Horn", url: "" },
-                { name: "PRO Authentic NXL Horn", url: "https://raw.githubusercontent.com/ipbseries-scoreboard/paintball-manager/main/screen-20260222-191238%20(mp3cut.net).mp3" },
+                // URL RELATIVO, non piu' raw.githubusercontent: il file e' gia'
+                // nella cartella (identico, 24763 byte) ed e' il suono
+                // predefinito sia di Inizio Round sia di Fine Round. Scaricarlo
+                // da internet significava che, senza rete in campo, la sirena
+                // "PRO" non partiva e restava il beep sintetico di ripiego.
+                // Relativo funziona sia sul server locale sia su GitHub Pages.
+                { name: "PRO Authentic NXL Horn", url: "screen-20260222-191238%20(mp3cut.net).mp3" },
                 { name: "PRO Authentic NXL Short", url: "synth:nxlShort" },
                 { name: "PRO Authentic Arena Claxon", url: "synth:claxon" },
                 { name: "PRO Authentic Power Buzzer", url: "synth:buzzer" },
