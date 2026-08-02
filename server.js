@@ -63,11 +63,55 @@ const MIME = {
 // scaricarla direttamente da index.html. Questo endpoint la scarica lato server:
 //   GET /ipba?url=https://www.ipba.it/evento.aspx?id=369
 // Ammessi solo URL del dominio ipba.it (niente proxy aperto).
+// Il proxy limitava correttamente i domini, ma inoltrava la risposta remota
+// senza alcun tetto: nessun limite di byte, nessun limite di richieste, nessun
+// limite di connessioni aperte. Un client della LAN poteva chiamarlo in loop e
+// consumare banda e socket del PC di regia. Questi tre contatori chiudono il
+// buco senza cambiare l'uso normale (l'import evento fa poche richieste).
+const PROXY_MAX_BYTES = positiveEnvInt('PM_PROXY_MAX_BYTES', 5 * 1024 * 1024);
+const PROXY_MAX_PER_MINUTE = positiveEnvInt('PM_PROXY_MAX_PER_MINUTE', 30);
+const PROXY_MAX_CONCURRENT = positiveEnvInt('PM_PROXY_MAX_CONCURRENT', 4);
+const proxyHits = new Map();     // indirizzo -> { windowStartedAt, count }
+let proxyInFlight = 0;
+
+function proxyRateLimited(address) {
+    const now = Date.now();
+    let entry = proxyHits.get(address);
+    if (!entry || now - entry.windowStartedAt > 60000) {
+        entry = { windowStartedAt: now, count: 0 };
+        proxyHits.set(address, entry);
+    }
+    entry.count += 1;
+    if (proxyHits.size > 256) {
+        proxyHits.forEach((saved, key) => {
+            if (now - saved.windowStartedAt > 60000) proxyHits.delete(key);
+        });
+    }
+    return entry.count > PROXY_MAX_PER_MINUTE;
+}
+
 function proxyIpba(req, res) {
+    let released = false;
+    const release = () => { if (!released) { released = true; proxyInFlight -= 1; } };
     const fail = (msg, code) => {
+        release();
         if (!res.headersSent) res.writeHead(code || 502, { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
         res.end(msg);
     };
+
+    const address = String(req.socket && req.socket.remoteAddress || 'unknown');
+    if (proxyRateLimited(address)) {
+        res.writeHead(429, { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+        res.end('Troppe richieste al proxy IPBA. Riprova tra un minuto.');
+        return;
+    }
+    if (proxyInFlight >= PROXY_MAX_CONCURRENT) {
+        res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+        res.end('Proxy IPBA occupato: troppe richieste contemporanee.');
+        return;
+    }
+    proxyInFlight += 1;
+    res.on('close', release);
     const isAllowedTarget = (targetUrl) => !!targetUrl &&
         (targetUrl.protocol === 'http:' || targetUrl.protocol === 'https:') &&
         /(^|\.)(ipba\.it|gunzup\.com)$/i.test(targetUrl.hostname);
@@ -88,12 +132,36 @@ function proxyIpba(req, res) {
                 } catch (e) { fail('Redirect non valido'); }
                 return;
             }
+            // Si accetta solo testo: la pagina evento e' HTML. Un allegato
+            // pesante servito dallo stesso dominio non deve poter passare.
+            const contentType = String(rs.headers['content-type'] || 'text/html');
+            if (!/^\s*(text\/|application\/(xhtml|xml|json))/i.test(contentType)) {
+                rs.resume();
+                fail('Tipo di contenuto non ammesso dal proxy: ' + contentType.split(';')[0], 415);
+                return;
+            }
             res.writeHead(rs.statusCode || 502, {
                 'Content-Type': rs.headers['content-type'] || 'text/html; charset=utf-8',
                 'Access-Control-Allow-Origin': '*',
-                'Cache-Control': 'no-store'
+                'Cache-Control': 'no-store',
+                'X-Content-Type-Options': 'nosniff'
             });
-            rs.pipe(res);
+            // Tetto sui byte inoltrati: senza, una risposta enorme veniva
+            // trasferita per intero verso il client.
+            let forwarded = 0;
+            rs.on('data', (chunk) => {
+                forwarded += chunk.length;
+                if (forwarded > PROXY_MAX_BYTES) {
+                    rs.destroy();
+                    rq.destroy();
+                    release();
+                    if (!res.writableEnded) res.end();
+                    return;
+                }
+                res.write(chunk);
+            });
+            rs.on('end', () => { release(); if (!res.writableEnded) res.end(); });
+            rs.on('error', () => { release(); if (!res.writableEnded) res.end(); });
         });
         rq.on('error', (e) => fail('Errore proxy: ' + e.message));
         rq.setTimeout(15000, () => rq.destroy(new Error('timeout')));
@@ -124,6 +192,24 @@ function fieldLogosWriteAllowed(req) {
     // CSRF da un sito qualunque aperto sul PC di regia (POST con Content-Type
     // semplice = nessun preflight che ci protegga).
     return isLocalRequest(req) && isSameOriginRequest(req);
+}
+
+// Scrittura atomica: si scrive su un temporaneo e si rinomina. Il rename e'
+// atomico sullo stesso filesystem, quindi un file GREEN o e' quello vecchio
+// integro o e' quello nuovo completo, mai troncato a meta'. Stesso schema di
+// atomicWrite() in roster-server.js. Due salvataggi ravvicinati non possono
+// piu' finire fuori ordine con un file mezzo scritto: il temporaneo porta pid
+// e timestamp, quindi non collidono.
+function writeFieldLogosConfig(filePath, body) {
+    const fsp = fs.promises;
+    const temp = filePath + '.tmp-' + process.pid + '-' + Date.now();
+    return fsp.mkdir(FIELD_LOGOS_DIR, { recursive: true })
+        .then(() => fsp.writeFile(temp, body))
+        .then(() => fsp.rename(temp, filePath))
+        .catch((err) => {
+            fsp.unlink(temp).catch(() => { });   // niente temporanei orfani
+            throw err;
+        });
 }
 
 function handleFieldLogosApi(req, res, parsedUrl) {
@@ -196,15 +282,27 @@ function handleFieldLogosApi(req, res, parsedUrl) {
                 res.end(JSON.stringify({ error: 'JSON non valido (atteso type=pm-field-logos)' }));
                 return;
             }
-            fieldLogosCache.set(key, body);
-            fs.mkdir(FIELD_LOGOS_DIR, { recursive: true }, (mkErr) => {
-                if (mkErr) { console.warn('[FIELD-LOGOS] Cartella non creabile: ' + mkErr.message); return; }
-                fs.writeFile(filePath, body, (err) => {
-                    if (err) console.warn('[FIELD-LOGOS] Config non salvata su disco: ' + err.message);
-                });
+            // Prima la cache veniva aggiornata subito, la scrittura partiva in
+            // background e il 200 {ok:true} usciva senza attenderne l'esito: con
+            // disco pieno o permessi mancanti l'interfaccia diceva "salvato" e
+            // la configurazione spariva al riavvio, con l'errore solo in
+            // console. Ora si scrive PRIMA (in modo atomico) e si risponde dopo.
+            writeFieldLogosConfig(filePath, body).then(() => {
+                fieldLogosCache.set(key, body);
+                res.writeHead(200, headers);
+                res.end(JSON.stringify({ ok: true, updatedAt: parsed.updatedAt || null }));
+            }).catch((err) => {
+                // La cache NON viene toccata: meglio continuare a servire la
+                // configurazione precedente che una che non esiste su disco.
+                // Il dettaglio (che contiene il percorso completo sul disco)
+                // resta nella finestra del server; al client va solo il codice.
+                console.error('[FIELD-LOGOS] Salvataggio non riuscito: ' + err.message);
+                res.writeHead(500, headers);
+                res.end(JSON.stringify({
+                    error: 'Configurazione NON salvata su disco (' + (err.code || 'errore') +
+                        '). Controlla spazio e permessi nella finestra del server.'
+                }));
             });
-            res.writeHead(200, headers);
-            res.end(JSON.stringify({ ok: true, updatedAt: parsed.updatedAt || null }));
         });
         req.on('error', () => { });
         return;
@@ -212,6 +310,66 @@ function handleFieldLogosApi(req, res, parsedUrl) {
 
     res.writeHead(405, headers);
     res.end(JSON.stringify({ error: 'Metodo non supportato' }));
+}
+
+// ---------- COSA E' PUBBLICO ----------
+// Il server serviva qualunque file dentro la cartella del progetto: bastava
+// conoscerne il nome. Dalla rete del campo erano scaricabili server.js,
+// package-lock.json, i test, node_modules e soprattutto data/rosters/*.json
+// (registry, rose e archivio giocatori con i dati anagrafici).
+//
+// Qui si rovescia la logica: nulla e' pubblico se non rientra in una regola.
+// Le regole sono state ricavate da cosa le pagine chiedono davvero:
+//   - le pagine, gli script e i CSS che stanno nella cartella principale;
+//   - lib/ (librerie e font);
+//   - "NO SFONDO/" (loghi squadra);
+//   - SOLO le cartelle assets/ dentro data/rosters/ (foto giocatori: finiscono
+//     in <img src="data/rosters/.../assets/x.png">).
+// I dati delle rose NON servono al browser: le pagine passano tutte da
+// /api/rosters/, quindi i JSON restano privati.
+const PUBLIC_EXT = new Set([
+    '.html', '.js', '.css', '.png', '.jpg', '.jpeg', '.webp', '.gif',
+    '.svg', '.ico', '.mp3', '.woff', '.woff2'
+]);
+const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.ico']);
+// Moduli che girano SOLO su Node: non vanno serviti al browser.
+const SERVER_ONLY_FILES = new Set(['server.js', 'roster-server.js']);
+
+function isPublicAsset(filePath, rootPath) {
+    const relative = path.relative(rootPath, filePath);
+    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return false;
+
+    const parts = relative.split(path.sep);
+    // Niente file o cartelle nascoste (.git, .env, .gitignore...).
+    if (parts.some(segment => segment.startsWith('.'))) return false;
+    // File di servizio di atomicWrite: copie e temporanei, mai pubblicabili.
+    if (/\.bak$|\.tmp-\d+-\d+$/i.test(relative)) return false;
+
+    const ext = path.extname(relative).toLowerCase();
+    const name = parts[parts.length - 1].toLowerCase();
+
+    // 1) Cartella principale: pagine e script del client.
+    if (parts.length === 1) {
+        if (SERVER_ONLY_FILES.has(name)) return false;
+        return PUBLIC_EXT.has(ext);
+    }
+
+    const top = parts[0].toLowerCase();
+
+    // 2) Librerie e font.
+    if (top === 'lib') return PUBLIC_EXT.has(ext);
+
+    // 3) Loghi squadra.
+    if (top === 'no sfondo') return IMAGE_EXT.has(ext);
+
+    // 4) Foto giocatori: solo dentro una cartella assets/ di data/rosters/.
+    //    Cosi' roster.json, registry.json e players.json restano privati.
+    if (top === 'data' && parts[1] && parts[1].toLowerCase() === 'rosters') {
+        return parts.includes('assets') && IMAGE_EXT.has(ext);
+    }
+
+    // Tutto il resto (tests/, node_modules/, docs/, data/field-logos/...) e' privato.
+    return false;
 }
 
 // ---------- WEB SERVER (pagine statiche) ----------
@@ -237,9 +395,11 @@ const server = http.createServer((req, res) => {
         const rootPrefix = rootPath.endsWith(path.sep) ? rootPath : rootPath + path.sep;
         const insideRoot = filePath.toLowerCase().startsWith(rootPrefix.toLowerCase());
         if (!insideRoot) { res.writeHead(403); res.end('Accesso negato'); return; }
-        // I file di servizio di atomicWrite (.bak e .tmp-PID-TIMESTAMP) non sono
-        // contenuti pubblicabili: erano scaricabili come octet-stream.
-        if (/\.bak$|\.tmp-\d+-\d+$/i.test(filePath)) { res.writeHead(403); res.end('Accesso negato'); return; }
+        // Prima bastava stare dentro la cartella del progetto: dalla LAN erano
+        // quindi scaricabili sorgenti, test, package-lock, node_modules e — cosa
+        // peggiore — i JSON delle rose e l'archivio giocatori. Ora si pubblica
+        // solo cio' che il browser chiede davvero (vedi isPublicAsset).
+        if (!isPublicAsset(filePath, rootPath)) { res.writeHead(403); res.end('Accesso negato'); return; }
         fs.readFile(filePath, (err, buf) => {
             if (err) { res.writeHead(404); res.end('File non trovato: ' + urlPath); return; }
             res.writeHead(200, {
@@ -276,10 +436,42 @@ const ROOM_RETENTION_MS = positiveEnvInt('PM_RELAY_ROOM_RETENTION_MS', 12 * 60 *
 const ROOM_SWEEP_INTERVAL_MS = positiveEnvInt('PM_RELAY_ROOM_SWEEP_MS', 5 * 60 * 1000);
 const CLIENT_MAX_MESSAGES_PER_SEC = positiveEnvInt('PM_RELAY_CLIENT_MSG_PER_SEC', 40);
 
+// Il relay accettava l'upgrade da qualunque origine: una pagina malevola
+// aperta su un dispositivo della LAN poteva aprire un WebSocket verso la Regia
+// (Cross-Site WebSocket Hijacking) e almeno leggere lo stato di una stanza
+// indovinata. Il browser manda SEMPRE Origin sull'handshake, quindi si puo'
+// filtrare; un Origin assente indica un client non-browser (i test, uno
+// script), che non e' il vettore di questo attacco e resta ammesso.
+//
+// Ammesse: la stessa origine che serve le pagine, piu' il sito pubblicato su
+// GitHub Pages (i QR con ?host= fanno collegare quelle pagine al relay).
+// Altre si aggiungono con PM_RELAY_ALLOWED_ORIGINS="https://a.it,https://b.it".
+const DEFAULT_ALLOWED_ORIGIN_HOSTS = ['ipbseries-scoreboard.github.io'];
+const EXTRA_ALLOWED_ORIGINS = String(process.env.PM_RELAY_ALLOWED_ORIGINS || '')
+    .split(',').map(value => value.trim().toLowerCase()).filter(Boolean);
+
+function isAllowedWsOrigin(origin, hostHeader) {
+    if (!origin) return true;                 // client non-browser
+    let parsed;
+    try { parsed = new URL(origin); } catch (error) { return false; }
+    const host = parsed.host.toLowerCase();
+    if (host && host === String(hostHeader || '').toLowerCase()) return true;
+    if (DEFAULT_ALLOWED_ORIGIN_HOSTS.includes(parsed.hostname.toLowerCase())) return true;
+    return EXTRA_ALLOWED_ORIGINS.includes(origin.toLowerCase()) ||
+        EXTRA_ALLOWED_ORIGINS.includes(host);
+}
+
 const wss = new WebSocket.Server({
     server,
     path: '/ws',
-    maxPayload: WS_MAX_PAYLOAD
+    maxPayload: WS_MAX_PAYLOAD,
+    verifyClient: (info) => {
+        const origin = info.origin || (info.req && info.req.headers && info.req.headers.origin);
+        const host = info.req && info.req.headers && info.req.headers.host;
+        if (isAllowedWsOrigin(origin, host)) return true;
+        console.warn('[RELAY] Connessione rifiutata: origine non ammessa (' + origin + ')');
+        return false;
+    }
 });
 
 // room -> { host, clients, lastFullSync, hostToken, controlToken }
