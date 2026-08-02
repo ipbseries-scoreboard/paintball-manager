@@ -520,12 +520,23 @@
             }
         }
 
+        // I nomi squadra e le fasi arrivano dal palinsesto importato da
+        // ipba.it e finiscono in innerHTML: vanno neutralizzati, come gia
+        // avviene in board.html (esc) e index.html (escHtml). Qui non
+        // c'era alcun filtro.
+        function escPit(value) {
+            return String(value == null ? '' : value).replace(/[&<>"']/g, (c) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+
         function renderUpcoming(tourney) {
             const container = document.getElementById('upcoming-items');
+            if (!container) return;
             container.innerHTML = '';
 
-            const matches = tourney.matches;
-            const currentIdx = tourney.currentIndex;
+            const matches = Array.isArray(tourney && tourney.matches) ? tourney.matches : [];
+            const currentIdx = Number.isInteger(tourney && tourney.currentIndex) ? tourney.currentIndex : -1;
 
             // Show next 2 matches after the current one
             let count = 0;
@@ -533,14 +544,20 @@
                 if (count >= 2) break;
 
                 const m = matches[i];
+                if (!m) continue;
+                // Un match gia' concluso o saltato non e' "prossimo": il ciclo
+                // scorreva solo per indice, quindi restava in elenco anche dopo
+                // essere stato giocato. Si salta e si guarda il successivo.
+                if (m.savedState && (m.savedState.finished || m.savedState.skipped)) continue;
+
                 const div = document.createElement('div');
                 div.className = 'upcoming-item';
                 const tATrunc = smartTruncate(cleanTeamName(m.teamA), 11);
                 const tBTrunc = smartTruncate(cleanTeamName(m.teamB), 11);
                 div.innerHTML = `
-                    <span>${m.time || '--:--'}</span>
-                    <b>${tATrunc} vs ${tBTrunc}</b>
-                    <span style="font-size: 0.8em">${m.phase || ''}</span>
+                    <span>${escPit(m.time || '--:--')}</span>
+                    <b>${escPit(tATrunc)} vs ${escPit(tBTrunc)}</b>
+                    <span style="font-size: 0.8em">${escPit(m.phase || '')}</span>
                 `;
                 container.appendChild(div);
                 count++;
