@@ -8,7 +8,7 @@
     <title>IPBA Stream Manager</title>
     <!-- PeerJS CDN -->
     <script src="lib/peerjs.min.js"></script>
-    <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');</script>
+    <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" integrity="sha384-nlUQ8ZqCbvStErob+biJNzSgltf6urV3VGqhfIfzhmg9RXmpeRm76ELw0pYnKlTR" crossorigin="anonymous"><\/script>');</script>
     <script src="turn-config.js?v=1"></script>
     <script src="pm-client.js?v=2.2.0-fan-turn"></script>
     <script src="time-format.js?v=1.0.0-mmss"></script>
@@ -19,7 +19,7 @@
     <link rel="stylesheet" href="field-logos-setup.css?v=1.0.0">
     <!-- QRCode.js: copia locale, CDN come riserva (per il QR del pubblico) -->
     <script src="lib/qrcode.min.js"></script>
-    <script>window.QRCode || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" crossorigin="anonymous"><\/script>');</script>
+    <script>window.QRCode || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU" crossorigin="anonymous"><\/script>');</script>
     <!-- Modalità pubblico (?fan=1): la pagina diventa la vista mobile per gli spettatori -->
     <script>
         window.__FAN_MODE__ = new URLSearchParams(location.search).get('fan') === '1';

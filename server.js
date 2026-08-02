@@ -312,6 +312,54 @@ function handleFieldLogosApi(req, res, parsedUrl) {
     res.end(JSON.stringify({ error: 'Metodo non supportato' }));
 }
 
+// ---------- HEADER DI SICUREZZA ----------
+// Le risposte statiche mandavano quasi solo Content-Type e Cache-Control.
+//
+// Sulla Content-Security-Policy serve onesta': le pagine sono piene di script
+// inline e di handler onclick="", quindi 'unsafe-inline' e' obbligatorio e la
+// CSP NON ferma una XSS via innerHTML. Quello che fa comunque, e che prima non
+// faceva nessuno, e':
+//   - impedire il caricamento di script da host diversi dai due CDN di riserva;
+//   - azzerare object/embed (object-src 'none');
+//   - bloccare l'iniezione di <base> che dirotterebbe tutti gli URL relativi;
+//   - impedire che le pagine finiscano dentro l'iframe di un altro sito.
+// Immagini, media, frame e connessioni restano larghi di proposito: loghi,
+// layout e bridge sono URL che configura l'utente, e una CSP stretta li
+// romperebbe in diretta.
+const CSP = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https: http:",
+    "media-src 'self' data: blob: https: http:",
+    "font-src 'self' data:",
+    "connect-src 'self' ws: wss: https: http:",
+    "frame-src 'self' https: http:",
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'self'"
+].join('; ');
+
+// Si negano SOLO le funzioni che il progetto non usa. Restano libere serial
+// (pulsantiera arbitro), gamepad e screen-wake-lock: elencarle qui le
+// spegnerebbe.
+const PERMISSIONS_POLICY =
+    'geolocation=(), camera=(), microphone=(), payment=(), usb=(), hid=(), midi=()';
+
+function securityHeaders(contentType) {
+    return {
+        'Content-Type': contentType,
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+        'Referrer-Policy': 'no-referrer',
+        'Permissions-Policy': PERMISSIONS_POLICY,
+        'X-Frame-Options': 'SAMEORIGIN',
+        'Content-Security-Policy': CSP
+    };
+}
+
 // ---------- ELENCO DEI LOGHI SQUADRA ----------
 // streaming.html e obs_bar.html cercano il logo di una squadra facendo un
 // confronto "somigliante" sui NOMI DEI FILE, quindi hanno bisogno dell'elenco
@@ -439,10 +487,9 @@ const server = http.createServer((req, res) => {
         if (!isPublicAsset(filePath, rootPath)) { res.writeHead(403); res.end('Accesso negato'); return; }
         fs.readFile(filePath, (err, buf) => {
             if (err) { res.writeHead(404); res.end('File non trovato: ' + urlPath); return; }
-            res.writeHead(200, {
-                'Content-Type': MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream',
-                'Cache-Control': 'no-store'
-            });
+            res.writeHead(200, securityHeaders(
+                MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream'
+            ));
             res.end(buf);
         });
     } catch (e) {

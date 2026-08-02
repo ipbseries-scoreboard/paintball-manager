@@ -936,7 +936,17 @@ async function handleRosterApi(req, res, parsedUrl) {
         json(res, 405, { error: 'Metodo o endpoint non supportato' });
         return true;
     } catch (error) {
-        json(res, error.status || 500, { error: error.message || 'Errore gestione rose' });
+        // I messaggi con uno "status" sono quelli scritti da noi apposta per
+        // l'operatore ("Rosa non trovata", "Formato non ammesso"...) e vanno
+        // mostrati. Tutto il resto e' un errore imprevisto il cui testo puo'
+        // contenere percorsi del disco o dettagli delle librerie: resta nella
+        // finestra del server e al client va un messaggio generico.
+        if (error && error.status) {
+            json(res, error.status, { error: error.message || 'Errore gestione rose' });
+        } else {
+            console.error('[ROSE] Errore non gestito su ' + pathname + ':', error && error.stack ? error.stack : error);
+            json(res, 500, { error: 'Errore interno del sistema rose. Controlla la finestra del server.' });
+        }
         return true;
     }
 }
