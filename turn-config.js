@@ -45,7 +45,11 @@
  * maggior parte dei casi anche da fuori. Mancherebbe solo sulle reti mobili
  * con NAT simmetrico.
  */
+// Credenziali rigenerate il 02/08/2026. Le precedenti
+// (1b33c5f8c4383a8f26a209f4) erano pubblicate da tempo su GitHub Pages e vanno
+// considerate note a chiunque: sono state rimosse dalla dashboard metered.ca,
+// quindi non funzionano piu'.
 window.PM_TURN = [
-    { urls: 'turn:global.relay.metered.ca:80', username: '1b33c5f8c4383a8f26a209f4', credential: 'BDpSncyfkZxeg6m8' },
-    { urls: 'turn:global.relay.metered.ca:443', username: '1b33c5f8c4383a8f26a209f4', credential: 'BDpSncyfkZxeg6m8' }
+    { urls: 'turn:global.relay.metered.ca:80', username: 'ef31c5d0c169632a77262758', credential: '4OKMBg09c47xLL4+' },
+    { urls: 'turn:global.relay.metered.ca:443', username: 'ef31c5d0c169632a77262758', credential: '4OKMBg09c47xLL4+' }
 ];

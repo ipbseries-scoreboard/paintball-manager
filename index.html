@@ -33,6 +33,9 @@
     <!-- PeerJS: copia locale (funziona senza internet), CDN solo come riserva -->
     <script src="lib/peerjs.min.js"></script>
     <script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" integrity="sha384-nlUQ8ZqCbvStErob+biJNzSgltf6urV3VGqhfIfzhmg9RXmpeRm76ELw0pYnKlTR" crossorigin="anonymous"><\/script>');</script>
+    <!-- TURN: la Regia era l'UNICA pagina che non lo caricava, pur essendo
+         l'estremo che tutti devono raggiungere. Vedi cloudPeerOptions(). -->
+    <script src="turn-config.js?v=1"></script>
     <script src="time-format.js?v=1.0.0-mmss"></script>
     <script src="stat-visibility.js?v=1.0.0"></script>
     <!-- Google Fonts -->
@@ -2837,12 +2840,38 @@
                 return value && value !== 'IPBA-UNDEFINED' ? value : 'IPBA-1674';
             }
 
+            // Legge le credenziali TURN da turn-config.js, con lo stesso filtro
+            // che usa pm-client.js: i segnaposto non sono credenziali e vanno
+            // scartati, altrimenti si aggiunge un server che fallisce sempre.
+            function regiaTurnServers() {
+                try {
+                    const raw = window.PM_TURN;
+                    if (!raw) return [];
+                    return (Array.isArray(raw) ? raw : [raw]).filter(item =>
+                        item && item.urls && item.username && item.credential &&
+                        !/INCOLLA_QUI|INSERISCI_/.test(String(item.username) + String(item.credential))
+                    ).map(item => ({
+                        urls: item.urls,
+                        username: String(item.username),
+                        credential: String(item.credential)
+                    }));
+                } catch (e) { return []; }
+            }
+
             function cloudPeerOptions() {
                 return {
                     secure: true,
                     host: '0.peerjs.com',
                     port: 443,
                     config: {
+                        // Gli STUN dicono solo "qual e' il mio IP pubblico"; su
+                        // NAT simmetrico (tipico di un router 4G in campo) non
+                        // bastano e serve il TURN, che RIMBALZA il traffico.
+                        // La Regia era l'unica pagina senza: tutte le altre
+                        // caricavano turn-config.js, lei no. Risultato: proprio
+                        // l'estremo che tutti devono raggiungere non aveva un
+                        // candidato relay da offrire, e le credenziali TURN
+                        // pagate restavano usate solo a meta'.
                         iceServers: [
                             { urls: 'stun:stun.l.google.com:19302' },
                             { urls: 'stun:stun1.l.google.com:19302' },
@@ -2850,7 +2879,7 @@
                             { urls: 'stun:stun3.l.google.com:19302' },
                             { urls: 'stun:stun4.l.google.com:19302' },
                             { urls: 'stun:stun.relay.metered.ca:80' }
-                        ]
+                        ].concat(regiaTurnServers())
                     },
                     debug: 1
                 };
