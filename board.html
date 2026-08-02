@@ -13,9 +13,8 @@
     <script src="time-format.js?v=1.0.0-mmss"></script>
     <script src="youtube-chat.js?v=1.0.0"></script>
     <!-- Google Fonts: Oswald, Bebas Neue, Orbitron, Black Ops One, Roboto -->
-    <link
-        href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Bebas+Neue&family=Orbitron:wght@600&family=Black+Ops+One&family=Roboto:wght@400;700&display=swap"
-        rel="stylesheet">
+    <link rel="stylesheet" href="lib/fonts/pm-fonts.css">
+    <script src="wake-lock.js?v=1.0.0"></script>
     <script>
         window.onerror = function (msg, url, line, col, error) {
             const stack = error && error.stack ? ("\n\nStack: " + error.stack.split('\n').slice(0, 3).join('\n')) : "";
@@ -2619,25 +2618,11 @@
         }
 
         // --- Screen Wake Lock ---
-        let wakeLock = null;
-        async function requestWakeLock() {
-            try {
-                if ('wakeLock' in navigator) {
-                    wakeLock = await navigator.wakeLock.request('screen');
-                    console.log("Screen Wake Lock acquisito.");
-                }
-            } catch (err) {
-                // Ignore errors on non-supported browsers
-            }
-        }
-
-        document.addEventListener('visibilitychange', async () => {
-            if (wakeLock !== null && document.visibilityState === 'visible') {
-                await requestWakeLock();
-            }
-        });
-
-        window.addEventListener('load', requestWakeLock);
+        // Wake lock spostato in wake-lock.js (condiviso da tutte le pagine).
+        // La versione locale usava solo navigator.wakeLock, che NON esiste su
+        // http://192.168.x.x (non e' un secure context): sugli schermi di campo
+        // non faceva nulla. Inoltre riprovava solo se "wakeLock !== null",
+        // quindi un primo tentativo fallito la disattivava per sempre.
 
 
         function updatePenaltyVisuals(side, teamData) {

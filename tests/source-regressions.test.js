@@ -169,11 +169,29 @@ test('referee commands are idempotent across local and network transports', () =
     assert.match(referee, /pointDecisionPayload && pointDecisionPayload\.decision !== decision/);
 });
 
-test('referee resume toggles pause and settings can be saved', () => {
+test('referee resume toggles pause and MODIFICA TEMPO reaches the Regia', () => {
     assert.match(referee, /currentMode\s*===\s*'PAUSED'[\s\S]{0,160}sendCommand\('PAUSE'\)/);
-    assert.match(referee, /function saveSettings\(\)/);
-    assert.match(referee, /sendCommand\('UPDATE_SETTINGS'/);
-    assert.match(referee, /onclick="openSettings\(\)"/);
+
+    // Il pannello impostazioni del tablet arbitro (openSettings/saveSettings)
+    // e il comando UPDATE_SETTINGS sono stati rimossi: le durate si cambiano
+    // solo dalla Regia. Il test li pretendeva ancora ed era l'unica regressione
+    // rossa della suite.
+    assert.doesNotMatch(referee, /function saveSettings\(\)/);
+    assert.doesNotMatch(referee, /UPDATE_SETTINGS/);
+    // Mirato al codice: in index.html resta solo il commento che ne spiega la
+    // rimozione, e non deve far fallire il test.
+    assert.doesNotMatch(control, /case 'UPDATE_SETTINGS'/);
+
+    // ATTENZIONE: il quinto parametro extraSettings di sendCommand NON e' codice
+    // morto e non va rimosso insieme a UPDATE_SETTINGS. E' l'unico modo con cui
+    // "Modifica Tempo" manda { seconds } dentro SET_TIMER, e la Regia lo legge
+    // da cmd.settings.seconds. Queste asserzioni coprono la catena completa.
+    assert.match(referee, /function createCommandPayload\(type, side, level, decision, extraSettings\)/);
+    assert.match(referee, /if \(extraSettings\) payload\.settings = extraSettings/);
+    assert.match(referee, /function sendCommand\(type, side, level, decision, extraSettings\)/);
+    assert.match(referee, /sendCommand\('SET_TIMER', null, null, null, \{[\s\S]{0,80}seconds:/);
+    assert.match(control, /case 'SET_TIMER'[\s\S]{0,160}cmd\.settings && cmd\.settings\.seconds/);
+
     assert.match(control, /settings:\s*\{[\s\S]{0,300}pointIntervalDuration:/);
     assert.doesNotMatch(control, /settings:\s*state\.settings/);
 });

@@ -1,5 +1,12 @@
 node_modules/
 .codex-backups/
+
+# File di servizio di atomicWrite (roster-server.js): copia di sicurezza del
+# salvataggio precedente e temporanei del rename atomico. Non sono contenuti da
+# versionare (ne erano finiti 18 nel repo). Le rose vere - roster.json,
+# registry.json, players.json - restano versionate di proposito.
+*.bak
+*.tmp-*
 # turn-config.js NON va ignorato: deve essere pubblicato con il sito, altrimenti
 # i dispositivi che si collegano da fuori non ricevono la configurazione TURN.
 # Il motivo per cui quella credenziale e' pubblica per forza e' spiegato in

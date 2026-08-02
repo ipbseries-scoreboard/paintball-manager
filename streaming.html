@@ -26,9 +26,8 @@
         if (window.__FAN_MODE__) document.documentElement.classList.add('fan-mode');
     </script>
     <!-- Google Fonts -->
-    <link
-        href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Bebas+Neue&family=Orbitron:wght@600&family=Black+Ops+One&family=Roboto:wght@400;700&display=swap"
-        rel="stylesheet">
+    <link rel="stylesheet" href="lib/fonts/pm-fonts.css">
+    <script src="wake-lock.js?v=1.0.0"></script>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -2442,7 +2441,19 @@
 
             // Handle Full Sync vs Partial Sync
             if (d.type === 'FULL_SYNC' || d.clanConfig || d.tournament) {
-                if (d.clanConfig) clanConfig = d.clanConfig;
+                // La lista arriva dalla rete: si accettano solo le tre stringhe
+                // previste, con lunghezze limitate. Prima veniva assegnata tale
+                // e quale, portandosi dietro qualunque campo del pacchetto.
+                if (Array.isArray(d.clanConfig)) {
+                    clanConfig = d.clanConfig
+                        .slice(0, 200)
+                        .filter(clan => clan && typeof clan === 'object')
+                        .map(clan => ({
+                            name: String(clan.name == null ? '' : clan.name).slice(0, 120),
+                            logoUrl: String(clan.logoUrl == null ? '' : clan.logoUrl).slice(0, 4 * 1024 * 1024),
+                            rosterUrl: String(clan.rosterUrl == null ? '' : clan.rosterUrl).slice(0, 2048)
+                        }));
+                }
                 currentData = d;
             } else {
                 // Partial Sync - Merge only volatile properties
@@ -2869,7 +2880,9 @@
             }
             return str.substring(0, limit);
         }
-        function escapeName(name) { return name.replace(/'/g, "\\'"); }
+        // (escapeName rimossa: non era chiamata da nessuna parte e sfuggiva solo
+        // l'apice, dando la falsa impressione che i nomi fossero protetti.
+        // L'escape reale per gli attributi e' clanEsc, piu' sotto.)
         function formatTimeSeconds(seconds) {
             return PMTimeFormat.mmss(seconds);
         }
@@ -2977,6 +2990,16 @@
         }
 
         // --- SETUP MODAL LOGIC ---
+        // Escape completo per il contesto ATTRIBUTO (value="...", src="..."):
+        // deve neutralizzare anche apici e virgolette, non solo & < > come ciEsc.
+        // I nomi squadra arrivano da ipba.it -> parseEventoIpba -> pacchetto di
+        // stato -> syncTeamsFromHost -> clanConfig: finivano dentro value="..."
+        // senza filtro, e una virgoletta bastava a chiudere l'attributo e
+        // iniettare un onerror= in questa console.
+        const clanEsc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+
         function openSetupModal() { document.getElementById('clan-setup-modal').style.display = 'flex'; renderSetupList(); }
         function closeSetupModal() { document.getElementById('clan-setup-modal').style.display = 'none'; }
         function renderSetupList() {
@@ -2990,19 +3013,19 @@
                 let logoContent = '';
                 if (clan.logoUrl && clan.logoUrl.length > 0) {
                     logoContent = `<div style="display:flex; flex-direction:column; gap:5px; align-items:center;">
-                        <img src="${clan.logoUrl}" style="width:40px; height:40px; object-fit:contain; border-radius:4px;" onerror="this.style.display='none'">
-                        <input type="text" placeholder="URL Logo" value="${clan.logoUrl}" onchange="updateClan(${idx}, 'logoUrl', this.value)" style="font-size:0.8rem; width:130px;">
+                        <img src="${clanEsc(clan.logoUrl)}" style="width:40px; height:40px; object-fit:contain; border-radius:4px;" onerror="this.style.display='none'">
+                        <input type="text" placeholder="URL Logo" value="${clanEsc(clan.logoUrl)}" onchange="updateClan(${idx}, 'logoUrl', this.value)" style="font-size:0.8rem; width:130px;">
                      </div>`;
                 } else {
                     logoContent = `<input type="text" placeholder="URL Logo (Link Esterno)" onchange="updateClan(${idx}, 'logoUrl', this.value)" style="font-size:0.8rem; width:130px;">`;
                 }
 
                 div.innerHTML = `
-                    <input type="text" placeholder="Nome Squadra" value="${clan.name}" onchange="updateClan(${idx}, 'name', this.value)">
+                    <input type="text" placeholder="Nome Squadra" value="${clanEsc(clan.name)}" onchange="updateClan(${idx}, 'name', this.value)">
                     <div style="display:flex; justify-content:center; align-items:center;">
                         ${logoContent}
                     </div>
-                    <input type="text" placeholder="URL Rosa" value="${clan.rosterUrl}" onchange="updateClan(${idx}, 'rosterUrl', this.value)">
+                    <input type="text" placeholder="URL Rosa" value="${clanEsc(clan.rosterUrl)}" onchange="updateClan(${idx}, 'rosterUrl', this.value)">
                     <button onclick="removeClan(${idx})" style="background:#ef4444; padding:5px 10px;">🗑️</button>
                 `;
                 list.appendChild(div);
@@ -3298,10 +3321,12 @@
                     }
                 }
 
-                const logo = finalLogoUrl ? `<img src="${finalLogoUrl}" class="clan-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">` : '';
+                // Stesso motivo di renderSetupList: nome e URL logo arrivano da
+                // dati esterni e finiscono in un attributo src="...".
+                const logo = finalLogoUrl ? `<img src="${clanEsc(finalLogoUrl)}" class="clan-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">` : '';
                 const placeholder = `<div class="clan-logo-placeholder" style="display:${finalLogoUrl ? 'none' : 'flex'}; justify-content:center; align-items:center; color:#64748b; font-size:50px; background: rgba(255,255,255,0.05); border-radius: 10px; width: 100%; height: 200px;">?</div>`;
 
-                card.innerHTML = `${logo}${placeholder}<div class="clan-card-name">${clan.name}</div>${clan.rosterUrl ? '<div style="color:var(--accent-color); font-size:12px; margin-top:5px;">🔗 OPEN ROSTER</div>' : ''}`;
+                card.innerHTML = `${logo}${placeholder}<div class="clan-card-name">${clanEsc(clan.name)}</div>${clan.rosterUrl ? '<div style="color:var(--accent-color); font-size:12px; margin-top:5px;">🔗 OPEN ROSTER</div>' : ''}`;
                 grid.appendChild(card);
             });
         }

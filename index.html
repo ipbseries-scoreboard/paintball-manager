@@ -36,9 +36,8 @@
     <script src="time-format.js?v=1.0.0-mmss"></script>
     <script src="stat-visibility.js?v=1.0.0"></script>
     <!-- Google Fonts -->
-    <link
-        href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Bebas+Neue&family=Orbitron:wght@600&family=Black+Ops+One&family=Roboto:wght@400;700&display=swap"
-        rel="stylesheet">
+    <link rel="stylesheet" href="lib/fonts/pm-fonts.css">
+    <script src="wake-lock.js?v=1.0.0"></script>
     <!-- QRCode.js: copia locale, CDN come riserva -->
     <script src="lib/qrcode.min.js"></script>
     <script>window.QRCode || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" crossorigin="anonymous"><\/script>');</script>
@@ -2043,6 +2042,16 @@
                 }[c]));
             }
 
+            // Storico del log eventi. Dichiarato QUI, in cima allo script: log()
+            // viene chiamata da parecchie funzioni di avvio e con un const
+            // dichiarato piu' in basso finirebbe nella temporal dead zone.
+            // Il pannello mostra le ultime LOG_DOM_MAX righe (il DOM cresceva
+            // senza limite per tutta la giornata); l'export usa lo storico
+            // completo, che ne conserva LOG_HISTORY_MAX.
+            const LOG_DOM_MAX = 400;
+            const LOG_HISTORY_MAX = 20000;
+            const logHistory = [];
+
             // Load Saved Settings
             const savedSettings = readJsonStorage('pm_settings', {});
             savedSettings.matchId = normalizeMatchIdValue(savedSettings.matchId);
@@ -3330,13 +3339,27 @@
                 const list = document.getElementById('conn-list');
                 if (!list) return;
 
-                if (connections.length === 0) {
+                // PING/PONG esiste solo sul canale PeerJS, ma in LAN tutti i
+                // dispositivi passano dal relay WebSocket: il monitor scriveva
+                // "Nessun dispositivo collegato" con sei tablet in linea.
+                // Finche' il relay non espone il dettaglio per client, almeno
+                // dichiariamo quanti ce ne sono invece di negarne l'esistenza.
+                const relayRow = wsClientCount > 0
+                    ? `<tr style="border-bottom: 1px solid #1e293b;">
+                        <td style="padding: 5px; color: #e2e8f0;">RELAY (${escHtml(wsClientCount)})</td>
+                        <td style="padding: 5px; color: #94a3b8;">n/d</td>
+                        <td style="padding: 5px; color: ${wsRelayActive ? '#22c55e' : '#eab308'}; font-weight: bold;">${wsRelayActive ? 'ONLINE' : 'IN ATTESA'}</td>
+                       </tr>`
+                    : '';
+
+                if (connections.length === 0 && !relayRow) {
                     list.innerHTML = '<div style="color: #64748b; font-size: 0.8rem; font-style: italic;">Nessun dispositivo collegato</div>';
                     return;
                 }
 
                 let html = '<table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">';
                 html += '<tr style="border-bottom: 1px solid #334155; color: #94a3b8; text-align: left;"><th style="padding: 5px;">Client</th><th style="padding: 5px;">Ping</th><th style="padding: 5px;">Stato</th></tr>';
+                html += relayRow;
 
                 connections.forEach(conn => {
                     const health = connHealth[conn.peer] || { latencies: [], status: 'waiting' };
@@ -3450,6 +3473,13 @@
             let stateRevision = 0;
             const MAX_PEER_PAYLOAD_BYTES = 64 * 1024;
             let lastPeerPayloadWarning = 0;
+            // 'pm_last_state' serve solo come snapshot di avvio alle pagine
+            // aperte sullo STESSO PC (board, ledwall, obs_bar, streaming,
+            // field-logos). Scriverlo a 5 Hz per tutta la gara significava una
+            // scrittura sincrona su disco ogni 200 ms: basta 1 Hz.
+            let lastLocalStateSaveTime = 0;
+            const LOCAL_STATE_SAVE_INTERVAL = 1000;
+            let lastLocalStateWarning = 0;
 
             function safeRemoteLogoUrl(value) {
                 if (typeof value !== 'string') return null;
@@ -3919,9 +3949,6 @@
                         // HUGE PERFORMANCE FIX: PeerJS will JSON.stringify the packet for EVERY single connection in conn.send()!
                         // This causes massive CPU locks and SCTP queueing on the Host when 4 clients are connected at 5Hz.
                         // By stringifying it ONCE here, we bypass PeerJS's internal slow stringification.
-                        // PUBLIC SYNC STORAGE: Save to localStorage for public viewers to "poll" if they are local,
-                        // or as a base for a future GitHub Action / Script that pushes this to a JSON file on GH.
-                        localStorage.setItem('pm_last_state', payloadString);
 
                         // RELAY WEBSOCKET: un solo invio, il server lo inoltra a tutti gli schermi
                         // (molto più leggero dei send PeerJS uno-per-connessione qui sotto)
@@ -3952,6 +3979,27 @@
                                 }, index * 25); // Scatter sends artificially to not clog WebRTC channel multiplexing
                             }
                         });
+
+                        // PUBLIC SYNC STORAGE: snapshot di avvio per le pagine aperte
+                        // sullo stesso PC. DEVE restare l'ULTIMA cosa che facciamo e
+                        // avere un try/catch suo: stava PRIMA degli invii di rete, e
+                        // un QuotaExceededError (pm_stream_clans con loghi base64
+                        // riempie da solo i 5 MB dell'origine) faceva saltare relay e
+                        // PeerJS per quel pacchetto. Le schede locali continuavano ad
+                        // aggiornarsi via BroadcastChannel: in regia sembrava tutto a
+                        // posto mentre tablet arbitro e OBS restavano congelati.
+                        if (!peerOnly && (forceFullSync || now - lastLocalStateSaveTime >= LOCAL_STATE_SAVE_INTERVAL)) {
+                            try {
+                                localStorage.setItem('pm_last_state', payloadString);
+                                lastLocalStateSaveTime = now;
+                            } catch (storageError) {
+                                if (now - lastLocalStateWarning > 30000) {
+                                    lastLocalStateWarning = now;
+                                    console.warn('pm_last_state non salvato (spazio esaurito):', storageError && storageError.message);
+                                    log('SNAPSHOT LOCALE NON SALVATO: spazio browser esaurito. La diretta continua.');
+                                }
+                            }
+                        }
                     } catch (e) {
                         console.error("Inner Broadcast State Error:", e);
                     }
@@ -4079,7 +4127,13 @@
                         requireExecution(pause(), 'Pausa/ripresa non eseguita');
                         break;
                     case 'STOP_TIMER':
-                        if (state.mode !== 'PAUSED' && state.mode !== 'TECH_PAUSED') pause();
+                        // Rispondeva sempre "Comando eseguito" anche quando non
+                        // faceva nulla, a differenza di tutti gli altri comandi.
+                        if (state.mode === 'PAUSED' || state.mode === 'TECH_PAUSED') {
+                            message = 'Timer già fermo';
+                        } else {
+                            requireExecution(pause(), 'Timer non fermato nello stato corrente');
+                        }
                         break;
                     case 'SET_TIMER': {
                         const seconds = Number(cmd.settings && cmd.settings.seconds);
@@ -4133,17 +4187,39 @@
                         }
                         break;
                     }
-                    case 'UPDATE_CLANS':
-                        if (Array.isArray(cmd.clanConfig)) {
-                            state.clanConfig = cmd.clanConfig;
-                            localStorage.setItem('pm_stream_clans', JSON.stringify(state.clanConfig));
-                            log(`[REMOTO] Lista Loghi aggiornata da Console Streaming`);
-                            broadcastState(true);
-                        } else {
+                    case 'UPDATE_CLANS': {
+                        // Prima veniva accettato qualunque array e scritto tal
+                        // quale in localStorage: un pacchetto grosso (il relay ne
+                        // ammette fino a 16 MB) riempiva la quota dell'origine e
+                        // la setItem lanciava, interrompendo handleRemoteCommand
+                        // prima dell'ACK. Ora si normalizza e si limita.
+                        if (!Array.isArray(cmd.clanConfig)) {
                             accepted = false;
                             message = 'Lista loghi non valida';
+                            break;
                         }
+                        const cleanClans = cmd.clanConfig
+                            .slice(0, 200)
+                            .filter(clan => clan && typeof clan === 'object')
+                            .map(clan => ({
+                                name: String(clan.name == null ? '' : clan.name).slice(0, 120),
+                                logoUrl: String(clan.logoUrl == null ? '' : clan.logoUrl).slice(0, 4 * 1024 * 1024),
+                                rosterUrl: String(clan.rosterUrl == null ? '' : clan.rosterUrl).slice(0, 2048)
+                            }));
+                        const serializedClans = JSON.stringify(cleanClans);
+                        try {
+                            localStorage.setItem('pm_stream_clans', serializedClans);
+                        } catch (storageError) {
+                            accepted = false;
+                            message = 'Lista loghi troppo grande per lo spazio del browser';
+                            log('[REMOTO] Lista Loghi RIFIUTATA: spazio browser esaurito');
+                            break;
+                        }
+                        state.clanConfig = cleanClans;
+                        log(`[REMOTO] Lista Loghi aggiornata da Console Streaming (${cleanClans.length} squadre)`);
+                        broadcastState(true);
                         break;
+                    }
                     case 'SET_STAT_ROUND_VISIBILITY': {
                         const roundId = String(cmd.roundId || '');
                         if (!state.tournament || !StatVisibility.isRoundId(roundId)) {
@@ -4172,31 +4248,9 @@
                         log(`[REMOTO] ${message}: ${roundId}`);
                         break;
                     }
-                    case 'UPDATE_SETTINGS': {
-                        const incoming = cmd.settings || {};
-                        const allowed = ['pointIntervalDuration', 'slotIntervalDuration', 'singleSlotIntervalDuration'];
-                        let changed = false;
-                        allowed.forEach((key) => {
-                            if (!Object.prototype.hasOwnProperty.call(incoming, key)) return;
-                            const value = Number(incoming[key]);
-                            if (!Number.isFinite(value) || value <= 0 || value > 3600) return;
-                            state.settings[key] = Math.round(value);
-                            changed = true;
-                        });
-                        if (!changed) {
-                            accepted = false;
-                            message = 'Impostazioni non valide';
-                            break;
-                        }
-                        CONFIG.pointInterTime = state.settings.pointIntervalDuration || CONFIG.pointInterTime;
-                        CONFIG.slotInterTime = state.settings.slotIntervalDuration || CONFIG.slotInterTime;
-                        CONFIG.singleSlotInterTime = state.settings.singleSlotIntervalDuration || CONFIG.singleSlotInterTime;
-                        log(`[REMOTO] Impostazioni aggiornate da Arbitro`);
-                        localStorage.setItem('pm_settings', JSON.stringify(state.settings));
-                        saveTournamentState();
-                        broadcastState(true);
-                        break;
-                    }
+                    // (UPDATE_SETTINGS rimosso: il pannello impostazioni del
+                    // tablet arbitro non esiste piu' e nessuna pagina invia piu'
+                    // questo comando. Le durate si cambiano dalla Regia.)
                     default:
                         accepted = false;
                         message = 'Comando sconosciuto';
@@ -4471,7 +4525,9 @@
                             else { playHorn(1.0); state.mode = 'IDLE'; render(); }
                         }
                         else if (state.mode === 'POINT' || state.mode === 'OVERTIME') {
-                            playHorn();
+                            // Suono "Fine Round" della libreria (prima suonava
+                            // playHorn, cioe' il suono di INIZIO round).
+                            playRoundEndSound();
                             speak("Fine tempo!", "Time over!");
                             log("FINE TEMPO (00:00)");
                             state.gameTimeRemaining = 0;
@@ -4508,23 +4564,31 @@
                 }
             }
 
+            // currentIndex !== -1 non bastava: dopo removeMatch() o
+            // clearEntireTournament() l'indice puo' puntare oltre la fine del
+            // palinsesto e matches[idx] e' undefined -> TypeError a inizio/fine
+            // partita. Restituisce il match corrente solo se esiste davvero.
+            function currentScheduledMatch() {
+                if (!state.tournament || !state.tournament.active) return null;
+                const idx = state.tournament.currentIndex;
+                if (idx === -1 || !Array.isArray(state.tournament.matches)) return null;
+                return state.tournament.matches[idx] || null;
+            }
+
             function recordRealStartTime() {
-                if (state.tournament.active && state.tournament.currentIndex !== -1) {
-                    const m = state.tournament.matches[state.tournament.currentIndex];
-                    if (!m.realStartTime) {
-                        m.realStartTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                        log(`ORARIO INIZIO REGISTRATO: ${m.realStartTime}`);
-                    }
+                const m = currentScheduledMatch();
+                if (m && !m.realStartTime) {
+                    m.realStartTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    log(`ORARIO INIZIO REGISTRATO: ${m.realStartTime}`);
                 }
             }
 
             function recordRealEndTime() {
-                if (state.tournament.active && state.tournament.currentIndex !== -1) {
-                    const m = state.tournament.matches[state.tournament.currentIndex];
-                    m.realEndTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    log(`ORARIO FINE REGISTRATO: ${m.realEndTime}`);
-                    updateTournamentDelay(); // Update delay when a match ends
-                }
+                const m = currentScheduledMatch();
+                if (!m) return;
+                m.realEndTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                log(`ORARIO FINE REGISTRATO: ${m.realEndTime}`);
+                updateTournamentDelay(); // Update delay when a match ends
             }
 
             function updateTournamentDelay() {
@@ -6399,8 +6463,20 @@
                 // msg arriva anche da comandi remoti NON autenticati (vedi
                 // handleRemoteCommand: il rifiuto per PIN errato logga cmd.type),
                 // quindi va sempre escapato prima di finire nel DOM.
-                const d = document.createElement('div'); d.className = 'log-entry ' + className; d.innerHTML = `<span class="log-time">${escHtml(new Date().toLocaleTimeString())}</span> <span class="log-msg">${escHtml(msg)}</span>`;
-                document.getElementById('event-log').prepend(d);
+                const stamp = new Date().toLocaleTimeString();
+                // Storico completo in memoria: e' da qui che esportaLogs prende i
+                // dati, cosi' il tetto sul DOM qui sotto non accorcia il file
+                // esportato. Solo stringhe: costa pochissimo.
+                logHistory.push(`[${stamp}] ${String(msg == null ? '' : msg)} `);
+                if (logHistory.length > LOG_HISTORY_MAX) logHistory.splice(0, logHistory.length - LOG_HISTORY_MAX);
+
+                const d = document.createElement('div'); d.className = 'log-entry ' + className; d.innerHTML = `<span class="log-time">${escHtml(stamp)}</span> <span class="log-msg">${escHtml(msg)}</span>`;
+                const logEl = document.getElementById('event-log');
+                if (!logEl) return;
+                logEl.prepend(d);
+                // Su una giornata intera di torneo il log cresceva senza limite:
+                // migliaia di nodi nel DOM che rallentano progressivamente la regia.
+                while (logEl.childElementCount > LOG_DOM_MAX) logEl.removeChild(logEl.lastElementChild);
             }
 
             function recordRefereeEvent(type, message, details = {}) {
@@ -6462,11 +6538,9 @@
             }
 
             function exportLogs() {
-                const entries = Array.from(document.querySelectorAll('.log-entry')).map(e => {
-                    const time = e.querySelector('.log-time').innerText;
-                    const msg = e.querySelector('.log-msg').innerText;
-                    return `[${time}] ${msg} `;
-                }).reverse().join('\n'); // Newest at bottom in file
+                // Legge dallo storico in memoria, non dal DOM: il pannello mostra
+                // solo le ultime righe ma il file esportato resta completo.
+                const entries = logHistory.join('\n'); // Newest at bottom in file
 
                 const blob = new Blob([entries], { type: 'text/plain' });
                 const url = URL.createObjectURL(blob);
@@ -6486,6 +6560,7 @@
                 if (pwd.trim() === target) {
                     if (confirm("Sei sicuro di voler cancellare TUTTI i log?")) {
                         document.getElementById('event-log').innerHTML = '';
+                        logHistory.length = 0; // anche lo storico usato dall'export
                         log("Log cancellati manualmente.");
                     }
                 } else {
@@ -6584,6 +6659,10 @@
                 activeSounds[type].load();
             }
 
+            // Riferimento all'oscillatore interno del punto, catturato PRIMA di
+            // qualunque override: serve sia a synthAudio.point sia come fallback.
+            const originalPointSound = playPointSound;
+
             const synthAudio = {
                 _shaper: null,
                 _getShaper: function () {
@@ -6676,7 +6755,11 @@
                     m.start(now); osc.start(now);
                     m.stop(now + 0.5); osc.stop(now + 0.5);
                 },
-                point: () => playPointSound()
+                // NB: chiama la versione ORIGINALE, non quella sovrascritta piu'
+                // sotto. Se la voce "PRO Authentic Point Signal" viene scelta come
+                // suono PUNTO, l'override chiama synthAudio.point che tornerebbe
+                // qui: con playPointSound() sarebbe ricorsione infinita.
+                point: () => originalPointSound()
             };
 
             function previewSound(type) {
@@ -6728,18 +6811,21 @@
                         selects[key].appendChild(opt);
                     });
 
-                    // Load preference or use default
-                    const saved = localStorage.getItem(`pm_sound_${key}`);
-                    let activeIdx = defaults[key];
-                    if (saved !== null && saved < soundLibrary.length) {
-                        activeIdx = parseInt(saved);
-                    }
+                    // Load preference or use default. Il valore salvato e' una
+                    // stringa: "saved < soundLibrary.length" si reggeva sulla
+                    // coercizione e un valore corrotto portava a
+                    // soundLibrary[NaN].url -> TypeError all'avvio.
+                    const savedIdx = Number.parseInt(localStorage.getItem(`pm_sound_${key}`), 10);
+                    const activeIdx = Number.isInteger(savedIdx) && savedIdx >= 0 && savedIdx < soundLibrary.length
+                        ? savedIdx
+                        : defaults[key];
 
                     selects[key].value = activeIdx;
                     setupActiveSound(key, soundLibrary[activeIdx].url);
 
                     selects[key].addEventListener('change', (e) => {
-                        const idx = e.target.value;
+                        const idx = Number.parseInt(e.target.value, 10);
+                        if (!Number.isInteger(idx) || idx < 0 || idx >= soundLibrary.length) return;
                         localStorage.setItem(`pm_sound_${key}`, idx);
                         setupActiveSound(key, soundLibrary[idx].url);
                     });
@@ -6752,9 +6838,17 @@
                 warn: null
             };
 
+            const customAudioUrls = { horn: '', point: '', warn: '' };
+
             function handleAudioUpload(type, file) {
                 if (!file) return;
+                // Il vecchio object URL va revocato: ricaricando piu' volte un
+                // file si accumulavano blob mai liberati per tutta la sessione.
+                if (customAudioUrls[type]) {
+                    try { URL.revokeObjectURL(customAudioUrls[type]); } catch (e) { }
+                }
                 const url = URL.createObjectURL(file);
+                customAudioUrls[type] = url;
                 customAudio[type] = new Audio(url);
                 log(`Audio personalizzato caricato: ${type} `);
             }
@@ -6766,66 +6860,82 @@
             // Override/Wrap Audio Functions
             const originalPlayHorn = playHorn;
             const originalPlayBeep = playBeep;
-            const originalPlayPoint = typeof playPointSound !== 'undefined' ? playPointSound : null;
-            const originalNotifyRoundEvent = typeof notifyRoundEvent !== 'undefined' ? notifyRoundEvent : null;
-            const originalGrantPoint = typeof grantPoint !== 'undefined' ? grantPoint : null;
 
-            // Consolidated playHorn override
-            playHorn = function (duration = 2.3) {
-                // Priority: 1. Library Sound (Synth or File), 2. Custom Upload, 3. Original Oscillator
-                if (activeSounds.start) {
-                    if (activeSounds.start.synth) {
-                        synthAudio[activeSounds.start.synth](duration);
+            // Riproduce una voce della libreria (file o synth) con fallback.
+            // Prima esisteva la stessa logica duplicata in due blocchi agganciati
+            // a notifyRoundEvent() e grantPoint(), funzioni che in questo file NON
+            // esistono: i typeof erano sempre 'undefined', gli override non si
+            // installavano mai e le scelte "Fine Round" e "Punto" restavano mute
+            // in gara (si sentivano solo col pulsante ▶ di anteprima).
+            function playLibrarySound(slot, fallback, duration) {
+                const entry = activeSounds[slot];
+                if (entry) {
+                    if (entry.synth) {
+                        if (typeof synthAudio[entry.synth] === 'function') {
+                            synthAudio[entry.synth](duration);
+                            return;
+                        }
                     } else {
-                        activeSounds.start.currentTime = 0;
-                        activeSounds.start.play().catch(e => originalPlayHorn(duration));
+                        try {
+                            entry.currentTime = 0;
+                            entry.play().catch(() => fallback());
+                            return;
+                        } catch (e) { /* file non riproducibile: si passa al fallback */ }
                     }
-                } else if (customAudio.horn) {
-                    customAudio.horn.currentTime = 0;
-                    customAudio.horn.play().catch(e => originalPlayHorn(duration));
-                } else {
-                    originalPlayHorn(duration);
                 }
+                fallback();
+            }
+
+            // INIZIO ROUND — invariato: era l'unico dei tre override che si
+            // installava davvero. Priorita': libreria, poi "Sost. Horn", poi
+            // oscillatore interno.
+            playHorn = function (duration = 2.3) {
+                playLibrarySound('start', function () {
+                    if (customAudio.horn) {
+                        try {
+                            customAudio.horn.currentTime = 0;
+                            customAudio.horn.play().catch(() => originalPlayHorn(duration));
+                            return;
+                        } catch (e) { /* fallback sotto */ }
+                    }
+                    originalPlayHorn(duration);
+                }, duration);
             };
 
-            // NotifyRoundEvent Override
-            if (originalNotifyRoundEvent) {
-                notifyRoundEvent = function (type) {
-                    if (type === 'warn' && activeSounds.end) {
-                        if (activeSounds.end.synth) {
-                            synthAudio[activeSounds.end.synth]();
-                        } else {
-                            activeSounds.end.currentTime = 0;
-                            activeSounds.end.play().catch(e => originalNotifyRoundEvent(type));
-                        }
-                    } else if (type === 'point' && activeSounds.point) {
-                        if (activeSounds.point.synth) {
-                            synthAudio[activeSounds.point.synth]();
-                        } else {
-                            activeSounds.point.currentTime = 0;
-                            activeSounds.point.play().catch(e => originalNotifyRoundEvent(type));
-                        }
-                    } else {
-                        originalNotifyRoundEvent(type);
-                    }
-                };
+            // FINE ROUND — la scelta "Fine Round" della libreria non era
+            // collegata a nulla. Il fine tempo in tick() chiamava playHorn(),
+            // cioe' il suono di INIZIO round.
+            function playRoundEndSound() {
+                playLibrarySound('end', function () { originalPlayHorn(2.3); }, 2.3);
             }
 
-            // GrantPoint Override
-            if (originalGrantPoint) {
-                grantPoint = function (side) {
-                    if (activeSounds.point) {
-                        if (activeSounds.point.synth) {
-                            synthAudio[activeSounds.point.synth]();
-                        } else {
-                            activeSounds.point.currentTime = 0;
-                            activeSounds.point.play().catch(e => originalGrantPoint(side));
-                        }
-                    } else {
-                        originalGrantPoint(side);
+            // PUNTO — libreria, poi "Sost. Punto", poi oscillatore interno.
+            playPointSound = function () {
+                playLibrarySound('point', function () {
+                    if (customAudio.point) {
+                        try {
+                            customAudio.point.currentTime = 0;
+                            customAudio.point.play().catch(() => originalPointSound());
+                            return;
+                        } catch (e) { /* fallback sotto */ }
                     }
-                };
-            }
+                    originalPointSound();
+                });
+            };
+
+            // "Sost. Warn" era l'ultimo upload rimasto scollegato: sostituisce
+            // il beep di preavviso (60/30/20/10 secondi).
+            playBeep = function (type) {
+                if (type === 'warn' && customAudio.warn) {
+                    if (!state.settings.voice) return;
+                    try {
+                        customAudio.warn.currentTime = 0;
+                        customAudio.warn.play().catch(() => originalPlayBeep(type));
+                        return;
+                    } catch (e) { /* fallback sotto */ }
+                }
+                originalPlayBeep(type);
+            };
 
             initSoundLibrary();
 
@@ -7588,8 +7698,30 @@
                     if (!window.EventBackup) throw new Error('Modulo backup non disponibile');
                     const parsed = EventBackup.parse(await file.text());
                     const label = parsed.metadata.tournamentName || 'Evento senza nome';
+
+                    // Il backup sostituisce solo le chiavi che contiene. Quelle
+                    // note ma assenti restano quelle dell'evento attuale: senza
+                    // avviso ci si ritrovava con lo stile squadre o la lista
+                    // loghi del torneo precedente, senza capire perché.
+                    const ETICHETTE_CHIAVI = {
+                        pm_tournament_state: 'palinsesto e punteggi',
+                        pm_settings: 'impostazioni (Match ID, PIN, durate)',
+                        pm_team_style: 'stile nomi squadra',
+                        pm_stream_clans: 'lista loghi/rose'
+                    };
+                    const nonSostituite = EventBackup.STORAGE_KEYS.filter(k =>
+                        k !== 'pm_runtime_checkpoint' &&
+                        !parsed.metadata.keys.includes(k) &&
+                        localStorage.getItem(k) !== null
+                    );
+                    const avvisoResidui = nonSostituite.length
+                        ? '\n\nATTENZIONE: il backup non contiene ' +
+                          nonSostituite.map(k => ETICHETTE_CHIAVI[k] || k).join(', ') +
+                          '.\nQuesti dati resteranno quelli attuali.'
+                        : '';
+
                     const warning = `Ripristinare il backup "${label}" con ${parsed.metadata.matchCount} match?\n\n` +
-                        'Lo stato corrente verrà sostituito e la Regia si riavvierà in pausa.';
+                        'Lo stato corrente verrà sostituito e la Regia si riavvierà in pausa.' + avvisoResidui;
                     if (!confirm(warning)) return;
 
                     const result = EventBackup.restore(localStorage, parsed);
@@ -8316,11 +8448,14 @@
 
                 document.getElementById('history-edit-area').style.display = 'none';
                 renderHistory();
+                // Cambiare punteggi e penalità cambia la classifica: senza questo
+                // la tabella in regia restava sui valori vecchi finché non si
+                // riapriva il pannello (gli schermi la ricevevano già aggiornata).
+                renderStats();
                 saveTournamentState();
                 broadcastState(true);
             });
 
-            // PDF EXPORT LOGIC
             // PDF EXPORT LOGIC
             window.exportToPDF = async function (idx) {
                 const m = state.tournament.matches[idx];
@@ -9120,28 +9255,10 @@
 
 
             // --- Screen Wake Lock ---
-            let wakeLock = null;
-            async function requestWakeLock() {
-                try {
-                    if ('wakeLock' in navigator) {
-                        wakeLock = await navigator.wakeLock.request('screen');
-                        console.log("Screen Wake Lock acquisito.");
-                        wakeLock.addEventListener('release', () => {
-                            console.log("Screen Wake Lock rilasciato.");
-                        });
-                    }
-                } catch (err) {
-                    console.error(`${err.name}, ${err.message}`);
-                }
-            }
-
-            document.addEventListener('visibilitychange', async () => {
-                if (wakeLock !== null && document.visibilityState === 'visible') {
-                    await requestWakeLock();
-                }
-            });
-
-            window.addEventListener('load', requestWakeLock);
+            // Spostato in wake-lock.js, condiviso da tutte le pagine. La copia
+            // che stava qui riprovava solo se "wakeLock !== null": se il primo
+            // tentativo falliva (tipico quando la pagina si apre in secondo
+            // piano) restava disattivata per il resto della sessione.
 
             // --- QR CODE VIEWER ---
             function showViewQR(page, title, icon) {

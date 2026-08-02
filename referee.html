@@ -11,8 +11,8 @@
     <script src="turn-config.js?v=1"></script>
     <script src="pm-client.js?v=2.2.0-fan-turn"></script>
     <script src="time-format.js?v=1.0.0-mmss"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@700&family=Inter:wght@400;900&display=swap"
-        rel="stylesheet">
+    <link rel="stylesheet" href="lib/fonts/pm-fonts.css">
+    <script src="wake-lock.js?v=1.0.0"></script>
     <script>
         window.onerror = function (msg, url, line, col, error) {
             const stack = error && error.stack ? ("\n\nStack: " + error.stack.split('\n').slice(0, 3).join('\n')) : "";
@@ -1579,6 +1579,8 @@
             }
         }
 
+        // extraSettings NON e' codice morto: lo usa saveTimerEdit() per mandare
+        // { seconds } dentro SET_TIMER (pulsante "Modifica Tempo").
         function createCommandPayload(type, side, level, decision, extraSettings) {
             const sentAt = Date.now();
             const commandId = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')

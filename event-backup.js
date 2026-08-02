@@ -427,6 +427,19 @@
         const previous = {};
         touchedKeys.forEach((key) => { previous[key] = storage.getItem(key); });
 
+        // Chiavi note che esistono gia' nello storage ma NON sono nel backup:
+        // restore le lascia intatte di proposito (solo pm_runtime_checkpoint
+        // viene rimosso), quindi dopo il ripristino restano dati dell'evento
+        // precedente — tipicamente pm_team_style o pm_stream_clans. Non le
+        // cancelliamo (pm_settings contiene Match ID e PIN arbitro), ma vanno
+        // dichiarate: chi ripristina deve sapere cosa NON e' stato sostituito.
+        const staleKeys = STORAGE_KEYS.filter((key) =>
+            key !== 'pm_runtime_checkpoint' &&
+            !hasOwn(parsed.data, key) &&
+            storage.getItem(key) !== null &&
+            storage.getItem(key) !== undefined
+        );
+
         try {
             parsed.metadata.keys.forEach((key) => storage.setItem(key, encoded[key]));
             if (!hasOwn(parsed.data, 'pm_runtime_checkpoint')) storage.removeItem('pm_runtime_checkpoint');
@@ -446,6 +459,7 @@
             createdAt: parsed.createdAt,
             restoredKeys: parsed.metadata.keys.slice(),
             removedKeys: hasOwn(parsed.data, 'pm_runtime_checkpoint') ? [] : ['pm_runtime_checkpoint'],
+            staleKeys: staleKeys,
             ignoredKeys: parsed.metadata.ignoredKeys.slice(),
             itemCount: parsed.metadata.itemCount,
             matchCount: parsed.metadata.matchCount,

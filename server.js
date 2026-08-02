@@ -389,6 +389,11 @@ function openConnectionsForAddress(address) {
     return count;
 }
 
+// La chiave include il Match ID di proposito: il contatore deve valere per la
+// stanza bersaglio. Cambiare stanza non regala tentativi, perche' un controller
+// su una stanza inesistente riceve REGIA_NOT_READY senza mai arrivare al
+// confronto del PIN (e quindi senza consumare ne' azzerare nulla), mentre per
+// forzare il PIN di una stanza reale bisogna per forza usarne il nome esatto.
 function authFailureKey(ws, role, roomName) {
     return [clientAddress(ws), String(role || ''), String(roomName || '')].join('|');
 }
@@ -501,8 +506,16 @@ wss.on('connection', (ws) => {
             clearTimeout(ws._helloTimer);
             ws._helloTimer = null;
             let hello;
-            try { hello = JSON.parse(text); } catch (e) { ws.close(1008, 'Hello non valido'); return; }
-            if (!hello || hello.type !== 'hello') { ws.close(1008, 'Hello non valido'); return; }
+            // Il timer di hello e' appena stato azzerato e il rate limiter piu'
+            // sopra si applica solo a chi ha gia' un ruolo: senza _authRejected
+            // ogni frame successivo rientrava qui e faceva parsare al server un
+            // altro payload da WS_MAX_PAYLOAD, in loop, fino alla chiusura.
+            const rejectHello = () => {
+                ws._authRejected = true;
+                try { ws.close(1008, 'Hello non valido'); } catch (e) { }
+            };
+            try { hello = JSON.parse(text); } catch (e) { rejectHello(); return; }
+            if (!hello || hello.type !== 'hello') { rejectHello(); return; }
 
             const roomName = normalizeRoomName(hello.room);
             const role = normalizeRole(hello.role);
@@ -688,13 +701,15 @@ if (typeof roomSweepInterval.unref === 'function') roomSweepInterval.unref();
 
 // Heartbeat applicativo: permette agli schermi di capire di essere vivi
 // anche quando la partita è ferma e non arrivano pacchetti di stato.
-setInterval(() => {
+const heartbeatInterval = setInterval(() => {
     const hb = JSON.stringify({ type: '_hb', ts: Date.now() });
     rooms.forEach(room => {
         room.clients.forEach(c => safeSend(c, hb));
         safeSend(room.host, hb);
     });
 }, 5000);
+// Come gli altri due timer del relay: non deve tenere vivo il processo da solo.
+if (typeof heartbeatInterval.unref === 'function') heartbeatInterval.unref();
 
 // ---------- AVVIO ----------
 server.listen(PORT, () => {
@@ -738,6 +753,14 @@ server.listen(PORT, () => {
         }).catch(error => console.log('[ROSE] Aggiornamento automatico non riuscito: ' + error.message));
     }, 3000);
 });
+
+// Il WebSocket.Server e' agganciato allo stesso http server e ne RI-EMETTE gli
+// errori su di se'. Non avendo un ascoltatore, un errore di listen (tipicamente
+// EADDRINUSE) diventava un "Unhandled 'error' event" e usciva con lo stack
+// trace di Node: il messaggio in italiano qui sotto non si vedeva mai, proprio
+// nel caso per cui era stato scritto. Qui lo assorbiamo e lasciamo rispondere
+// il gestore del server, che stampa la spiegazione e chiude.
+wss.on('error', () => { });
 
 server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {

@@ -5,9 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IPBA Paintball Manager — Guida alle pagine</title>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Roboto:wght@400;700&display=swap"
-        rel="stylesheet">
+    <link rel="stylesheet" href="lib/fonts/pm-fonts.css">
     <style>
         :root {
             --bg: #0f172a;
@@ -728,10 +726,12 @@
             <tr><td><code>Avvia_Server_Locale.bat</code></td><td>Avvia tutto. È il file da cui parti sempre.</td></tr>
             <tr><td><code>server.js</code></td><td>Il server: pagine, relay dati, API rose e loghi sul green.</td></tr>
             <tr><td><code>pm-client.js</code></td><td>Il collegamento alla Regia, usato da tutte le pagine.</td></tr>
+            <tr><td><code>wake-lock.js</code></td><td>Tiene acceso lo schermo di tablet e monitor per tutta la gara.</td></tr>
             <tr><td><code>field-logos-*.js / .css</code></td><td>Motore ed editor dei loghi sul green.</td></tr>
             <tr><td><code>roster-*.js</code>, <code>data/rosters/</code></td><td>Sistema rose: dati e foto dei giocatori.</td></tr>
             <tr><td><code>NO SFONDO/</code></td><td>Loghi PNG delle squadre. Il nome del file deve somigliare al nome squadra.</td></tr>
             <tr><td><code>lib/</code></td><td>Librerie locali: il sistema funziona anche senza internet.</td></tr>
+            <tr><td><code>lib/fonts/</code></td><td>Font della grafica (Oswald, Roboto…). Sono qui apposta: senza internet in campo la grafica resta identica.</td></tr>
             <tr><td><code>docs/</code>, <code>ISTRUZIONI_ROSE.md</code>, <code>istruzioni_avvio.txt</code></td>
                 <td>Documentazione di dettaglio.</td></tr>
             <tr><td><code>tests/</code></td><td>Test automatici (<code>npm test</code>), utili dopo una modifica.</td></tr>

@@ -280,7 +280,28 @@ async function atomicWrite(file, data) {
     await fsp.rename(temp, file);
 }
 
-async function readRoster(teamId) {
+// ---------- SERIALIZZAZIONE DELLE SCRITTURE ----------
+// roster.json e players.json si aggiornano con un ciclo leggi-modifica-scrivi.
+// setup_rose.html apre le due squadre in parallelo (Promise.all + ?fresh=1):
+// due importazioni simultanee leggevano lo STESSO players.json e la seconda
+// riscriveva sopra le voci appena aggiunte dalla prima, perdendole. atomicWrite
+// rende atomico il singolo file, non serializza gli scrittori: serve una coda.
+//
+// ATTENZIONE: il lock NON e' rientrante. Va preso solo dai punti di ingresso
+// (readRoster / saveRoster / la sezione critica di importRoster, savePhoto,
+// deletePhoto e della POST registry) e MAI dalle funzioni *Unlocked che quei
+// punti richiamano, altrimenti si blocca tutto in attesa di se stesso.
+let rosterQueue = Promise.resolve();
+
+function withRosterLock(task) {
+    // Il secondo argomento di then() fa proseguire la coda anche quando
+    // l'operazione precedente e' fallita: un errore non deve incastrarla.
+    const run = rosterQueue.then(task, task);
+    rosterQueue = run.then(() => undefined, () => undefined);
+    return run;
+}
+
+async function readRosterUnlocked(teamId) {
     let raw;
     try {
         raw = JSON.parse(await fsp.readFile(configPath(teamId), 'utf8'));
@@ -290,7 +311,7 @@ async function readRoster(teamId) {
     return syncRosterWithArchive(Core.normalizeRoster(raw, teamId), false);
 }
 
-async function saveRoster(roster, options) {
+async function saveRosterUnlocked(roster, options) {
     const id = roster && roster.team && roster.team.id;
     let clean = Core.normalizeRoster(roster, id);
     if (!clean.team.id) throw Object.assign(new Error('ID squadra non valido'), { status: 400 });
@@ -298,6 +319,16 @@ async function saveRoster(roster, options) {
     clean.updatedAt = Date.now();
     await atomicWrite(configPath(clean.team.id), JSON.stringify(clean, null, 2));
     return clean;
+}
+
+// readRoster scrive comunque: syncRosterWithArchive semina in players.json le
+// configurazioni inline pre-archivio. Anche la lettura va quindi serializzata.
+function readRoster(teamId) {
+    return withRosterLock(() => readRosterUnlocked(teamId));
+}
+
+function saveRoster(roster, options) {
+    return withRosterLock(() => saveRosterUnlocked(roster, options));
 }
 
 function readBody(req, limit) {
@@ -502,8 +533,13 @@ async function importRoster(teamId) {
     if (!imported.team.name || imported.team.name === 'TEAM ' + id) {
         throw Object.assign(new Error('La pagina IPBA non contiene una squadra valida'), { status: 502 });
     }
-    const merged = Core.mergeImported(await readRoster(id), imported);
-    return saveRoster(merged);
+    // Il download da IPBA resta FUORI dal lock (fino a 20 s di timeout): dentro
+    // ci sta solo il leggi-fondi-scrivi, che deve essere indivisibile perche'
+    // tocca anche players.json condiviso fra tutte le squadre.
+    return withRosterLock(async () => {
+        const merged = Core.mergeImported(await readRosterUnlocked(id), imported);
+        return saveRosterUnlocked(merged);
+    });
 }
 
 // Una rosa mostrata in diretta con ?fresh=1 viene riscaricata da IPBA se
@@ -654,12 +690,21 @@ async function savePhoto(req, teamId, playerKey) {
         ? 'data/rosters/players/assets/'
         : 'data/rosters/team-' + encodeURIComponent(id) + '/assets/') + encodeURIComponent(filename);
     const hasTransparency = mime !== 'image/jpeg' && req.headers['x-image-transparency'] === '1';
-    player.image.customImageUrl = url;
-    player.image.selectedSource = 'CUSTOM';
-    player.image.hasTransparency = hasTransparency;
-    player.image.width = info.width;
-    player.image.height = info.height;
-    await saveRoster(roster, { updateArchive: true });
+
+    // La rosa va riletta DENTRO il lock: fra il controllo iniziale e qui sono
+    // passati l'upload del file e la scrittura su disco, durante i quali un
+    // altro salvataggio puo' aver modificato roster.json o players.json.
+    await withRosterLock(async () => {
+        const fresh = await readRosterUnlocked(id);
+        const target = fresh && fresh.players.find(item => item.playerKey === key);
+        if (!target) throw Object.assign(new Error('Giocatore non trovato'), { status: 404 });
+        target.image.customImageUrl = url;
+        target.image.selectedSource = 'CUSTOM';
+        target.image.hasTransparency = hasTransparency;
+        target.image.width = info.width;
+        target.image.height = info.height;
+        await saveRosterUnlocked(fresh, { updateArchive: true });
+    });
 
     return {
         url,
@@ -672,27 +717,33 @@ async function savePhoto(req, teamId, playerKey) {
 async function deletePhoto(teamId, playerKey) {
     const id = Core.safeTeamId(teamId);
     const key = Core.safePlayerKey(playerKey);
-    const roster = await readRoster(id);
-    const player = roster && roster.players.find(item => item.playerKey === key);
-    if (!player) throw Object.assign(new Error('Giocatore non trovato'), { status: 404 });
 
-    const pid = player.source.playerId;
-    const assets = pid ? path.join(DATA_ROOT, 'players', 'assets') : path.join(teamDir(id), 'assets');
-    const baseName = pid || key;
-    try {
-        const files = await fsp.readdir(assets);
-        await Promise.all(files
-            .filter(name => name.startsWith(baseName + '.'))
-            .map(name => fsp.unlink(path.join(assets, name)).catch(() => undefined)));
-    } catch (error) {
-        // L'assenza della cartella assets equivale a una foto già rimossa.
-    }
-    player.image.customImageUrl = '';
-    player.image.selectedSource = 'ORIGINAL';
-    player.image.hasTransparency = false;
-    player.image.width = 0;
-    player.image.height = 0;
-    await saveRoster(roster, { updateArchive: true });
+    // Cancellazione file e aggiornamento rosa sono un'unica sezione critica:
+    // sono tutte operazioni locali e veloci, non c'e' attesa di rete da tenere
+    // fuori dal lock come invece serve nell'upload.
+    await withRosterLock(async () => {
+        const roster = await readRosterUnlocked(id);
+        const player = roster && roster.players.find(item => item.playerKey === key);
+        if (!player) throw Object.assign(new Error('Giocatore non trovato'), { status: 404 });
+
+        const pid = player.source.playerId;
+        const assets = pid ? path.join(DATA_ROOT, 'players', 'assets') : path.join(teamDir(id), 'assets');
+        const baseName = pid || key;
+        try {
+            const files = await fsp.readdir(assets);
+            await Promise.all(files
+                .filter(name => name.startsWith(baseName + '.'))
+                .map(name => fsp.unlink(path.join(assets, name)).catch(() => undefined)));
+        } catch (error) {
+            // L'assenza della cartella assets equivale a una foto già rimossa.
+        }
+        player.image.customImageUrl = '';
+        player.image.selectedSource = 'ORIGINAL';
+        player.image.hasTransparency = false;
+        player.image.width = 0;
+        player.image.height = 0;
+        await saveRosterUnlocked(roster, { updateArchive: true });
+    });
 }
 
 async function handleAuthRoute(req, res, parts) {
@@ -784,27 +835,34 @@ async function handleRosterApi(req, res, parsedUrl) {
                     return true;
                 }
                 const registry = normalizeRegistry(await readJson(req, 512 * 1024));
-                // Il pannello streaming può avere campi URL vuoti e nomi
-                // diversi da quelli ufficiali IPBA: un URL già registrato per
-                // la stessa squadra non deve andare perso, e le squadre note
-                // solo al registry (con link valido) vengono conservate.
-                const existing = await readRegistry();
-                const byName = new Map(existing.teams.map(team => [team.name.toLowerCase(), team]));
-                registry.teams = registry.teams.map(team => {
-                    if (team.rosterUrl) return team;
-                    const old = byName.get(team.name.toLowerCase());
-                    return old && old.rosterUrl
-                        ? Object.assign({}, team, { rosterUrl: old.rosterUrl, teamId: old.teamId })
-                        : team;
+                // Anche qui il ciclo e' leggi-fondi-scrivi: due SALVA MODIFICHE
+                // ravvicinati si sovrascrivevano a vicenda perdendo le squadre
+                // conservate dal merge. Il body e' gia' stato letto: dentro il
+                // lock resta solo lavoro locale.
+                const savedRegistry = await withRosterLock(async () => {
+                    // Il pannello streaming può avere campi URL vuoti e nomi
+                    // diversi da quelli ufficiali IPBA: un URL già registrato per
+                    // la stessa squadra non deve andare perso, e le squadre note
+                    // solo al registry (con link valido) vengono conservate.
+                    const existing = await readRegistry();
+                    const byName = new Map(existing.teams.map(team => [team.name.toLowerCase(), team]));
+                    registry.teams = registry.teams.map(team => {
+                        if (team.rosterUrl) return team;
+                        const old = byName.get(team.name.toLowerCase());
+                        return old && old.rosterUrl
+                            ? Object.assign({}, team, { rosterUrl: old.rosterUrl, teamId: old.teamId })
+                            : team;
+                    });
+                    const incomingNames = new Set(registry.teams.map(team => team.name.toLowerCase()));
+                    existing.teams.forEach(team => {
+                        if (team.teamId && !incomingNames.has(team.name.toLowerCase())) registry.teams.push(team);
+                    });
+                    registry.teams = registry.teams.slice(0, 100);
+                    registry.updatedAt = Date.now();
+                    await atomicWrite(registryPath(), JSON.stringify(registry, null, 2));
+                    return registry;
                 });
-                const incomingNames = new Set(registry.teams.map(team => team.name.toLowerCase()));
-                existing.teams.forEach(team => {
-                    if (team.teamId && !incomingNames.has(team.name.toLowerCase())) registry.teams.push(team);
-                });
-                registry.teams = registry.teams.slice(0, 100);
-                registry.updatedAt = Date.now();
-                await atomicWrite(registryPath(), JSON.stringify(registry, null, 2));
-                json(res, 200, registry);
+                json(res, 200, savedRegistry);
                 return true;
             }
             if (parts.length === 4 && parts[3] === 'import-all' && req.method === 'POST') {

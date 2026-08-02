@@ -237,7 +237,12 @@
 
         fresh.players = fresh.players.map((player, index) => {
             const old = byKey.get(player.playerKey) || byFallback.get(fallbackIdentity(player));
-            if (!old) return player;
+            // Un giocatore precedente puo' essere reclamato UNA volta sola.
+            // L'aggancio di riserva e' per nome+numero normalizzati: due
+            // giocatori nuovi con la stessa identita' di riserva prendevano
+            // entrambi la stessa playerKey e il dedup di normalizeRoster ne
+            // buttava via uno in silenzio. Il secondo tiene la propria identita'.
+            if (!old || retained.has(old.playerKey)) return player;
             retained.add(old.playerKey);
             const merged = defaultPlayer(fresh.team.id, player, index);
             merged.playerKey = old.playerKey || merged.playerKey;

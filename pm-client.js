@@ -128,6 +128,7 @@
     var PEER_WATCHDOG_MS = 9000;   // PeerJS/cloud hanno bisogno di più tempo
     var END_OF_CYCLE_PAUSE = 6000; // pausa a fine giro per non martellare i server
     var STALE_AFTER_MS = 15000;    // dopo quanto i dati si considerano "vecchi"
+    var AUTH_RETRY_MAX_MS = 60000; // tetto del backoff sugli errori di accesso
 
     function normalizeId(raw) {
         if (!raw) return null;
@@ -269,6 +270,9 @@
         var resumeTimer = null;
         var resumeVerifyTimer = null;
         var connectStartedAt = Date.now();
+        // Ritardo corrente del retry dopo un errore di accesso al relay:
+        // cresce a ogni rifiuto e si azzera appena il relay ci accetta.
+        var authBackoffMs = 0;
         // Ogni tentativo incrementa "gen": gli handler dei tentativi vecchi
         // si auto-disattivano (evita i loop di riconnessione sovrapposti).
         var gen = 0;
@@ -394,14 +398,27 @@
                     // Messaggi di servizio del relay
                     if (d.type === '_authError') {
                         authRejected = true;
-                        authRetryAllowed = d.code === 'REGIA_NOT_READY';
+                        // Solo un PIN/token davvero sbagliato e' definitivo: li'
+                        // riprovare all'infinito non serve e martella il relay.
+                        // Le altre cause sono TRANSITORIE e prima finivano nello
+                        // stesso vicolo cieco: il watchdog veniva azzerato e
+                        // nessuno rischedulava piu' nulla, quindi l'unico modo di
+                        // riprendersi era ricaricare la pagina a mano. Con
+                        // AUTH_RATE_LIMIT era palese: il messaggio dice
+                        // "Attendere 30 secondi" ma non riprovava mai.
+                        authRetryAllowed = d.code !== 'HOST_TOKEN_INVALID' &&
+                            d.code !== 'CONTROL_TOKEN_INVALID' &&
+                            d.code !== 'HOST_TOKEN_REQUIRED' &&
+                            d.code !== 'ROOM_INVALID';
                         if (watchdog) { clearTimeout(watchdog); watchdog = null; }
-                        status('Accesso negato dal relay: ' + (d.message || 'credenziali non valide.'), true);
+                        status('Accesso negato dal relay: ' + (d.message || 'credenziali non valide.') +
+                            (authRetryAllowed ? ' Riprovo tra poco...' : ''), true);
                         fireClose();
                         try { s.close(); } catch (e) { }
                     } else if (d.type === '_welcome') {
                         if (watchdog) { clearTimeout(watchdog); watchdog = null; }
                         parked = true;
+                        authBackoffMs = 0; // il relay ci ha accettati: backoff azzerato
                         if (role === 'host') {
                             fireOpen(cand.label);
                         } else if (d.hostOnline) {
@@ -439,7 +456,13 @@
                 if (authRejected) {
                     // Il token puÃ² diventare valido quando parte la Regia o
                     // dopo un cambio PIN: riprova senza martellare il relay.
-                    if (authRetryAllowed) scheduleNext(END_OF_CYCLE_PAUSE);
+                    // Backoff crescente (6s -> 12s -> 24s -> max 60s) perche' se
+                    // la causa persiste — es. PIN cambiato in Regia — riprovare
+                    // ogni 6 secondi farebbe scattare il rate limit del relay.
+                    if (authRetryAllowed) {
+                        authBackoffMs = Math.min(authBackoffMs ? authBackoffMs * 2 : END_OF_CYCLE_PAUSE, AUTH_RETRY_MAX_MS);
+                        scheduleNext(authBackoffMs);
+                    }
                 } else if (wasParked) {
                     // Il relay funzionava: riprova subito lo stesso candidato
                     status('Connessione al relay persa. Riconnessione...', true);
