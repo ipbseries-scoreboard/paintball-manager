@@ -32,6 +32,9 @@ function makeSandbox(gamepads, mapping) {
   const logs = [];
   const teamActions = [];
   const alerts = []; // ogni riproduzione del segnale acustico di chiamata
+  // Riga sotto il titolo del modale di verifica: e' cio' che l'arbitro legge
+  // per decidere, quindi va controllata come un output a tutti gli effetti.
+  const marginEl = { style: { display: 'none', color: '' }, innerText: '' };
   const clock = 5000;
 
   const sandbox = {
@@ -63,7 +66,8 @@ function makeSandbox(gamepads, mapping) {
     confirmPoint: () => {},
     pause: () => {},
     startPoint: () => {},
-    document: { getElementById: () => null },
+    marginEl,
+    document: { getElementById: (id) => (id === 'verify-margin' ? marginEl : null) },
     navigator: { getGamepads: () => gamepads },
     state: {
       basesSwapped: false,
@@ -114,11 +118,36 @@ test('vince GP0 quando e GP0 ad aver premuto prima', () => {
   assert.strictEqual(s.teamActions[0].side, 'left');
 });
 
-test('il distacco sotto il millisecondo compare a referto invece di +0.00s', () => {
-  const s = makeSandbox(racePads(4994.1, 4994.5)); // 0.4 ms
+// --- chi ha premuto per primo ----------------------------------------------
+// Il primo buzzer registrato e' quello che ha premuto per primo: e' quello che
+// apre la verifica del punto, e il modale deve nominarlo SEMPRE. Il distacco
+// in millisecondi e' un'informazione in piu' e si aggiunge solo quando supera
+// la soglia dell'impianto (433 MHz: frequenza condivisa, codice ripetuto,
+// rele' meccanico, quindi ~100-250 ms di ritardo variabile).
+
+test('il modale nomina sempre chi ha premuto per primo', () => {
+  const s = makeSandbox(racePads(4998.2, 4994.1)); // GP1 (TEAM B) ha premuto prima
   s.pollGamepads();
-  const late = s.events.find(e => e.type === 'BUZZER_LATE');
-  assert.match(late.msg, /0\.4 ms/, `distacco perso nell'arrotondamento: ${late.msg}`);
+  assert.match(s.marginEl.innerText, /^PRIMO BUZZER: TEAM B/, `va nominato il primo: ${s.marginEl.innerText}`);
+  assert.strictEqual(s.teamActions[0].side, 'right', 'la verifica si apre sul primo');
+});
+
+test('uno scarto sotto la soglia nomina il primo senza numero', () => {
+  const s = makeSandbox(racePads(4994.1, 4994.5)); // 0.4 ms: sotto la soglia
+  s.pollGamepads();
+  assert.strictEqual(s.marginEl.innerText, 'PRIMO BUZZER: TEAM A', `atteso il solo nome: ${s.marginEl.innerText}`);
+});
+
+test('uno scarto sopra la soglia aggiunge il distacco', () => {
+  const s = makeSandbox(racePads(4994.1, 5394.1)); // 400 ms
+  s.pollGamepads();
+  assert.strictEqual(s.marginEl.innerText, 'PRIMO BUZZER: TEAM A · +400 ms', `distacco atteso: ${s.marginEl.innerText}`);
+});
+
+test('il distacco non porta decimali che il sensore non puo produrre', () => {
+  const s = makeSandbox(racePads(4994.1, 5394.6)); // 400.5 ms
+  s.pollGamepads();
+  assert.doesNotMatch(s.marginEl.innerText, /\d\.\d/, `precisione inventata: ${s.marginEl.innerText}`);
 });
 
 test('pareggio esatto di timestamp assegna comunque un vincitore unico', () => {
@@ -129,7 +158,53 @@ test('pareggio esatto di timestamp assegna comunque un vincitore unico', () => {
   assert.strictEqual(first.length, 1, 'anche in pareggio deve esserci un solo primo');
   assert.strictEqual(late.length, 1);
   assert.strictEqual(s.teamActions.length, 1, 'il punto non deve restare senza assegnatario');
-  assert.match(late[0].msg, /PHOTO FINISH/, `il pareggio va segnalato: ${late[0].msg}`);
+  assert.match(s.marginEl.innerText, /^PRIMO BUZZER: /, `il primo va nominato comunque: ${s.marginEl.innerText}`);
+});
+
+// --- stessa base che preme due volte ---------------------------------------
+// Regressione coperta: la seconda pressione veniva trattata come "l'altra
+// squadra ha chiamato" senza mai confrontare i due lati. L'arbitro che ribatte
+// perche' non vede reazione (o il pulsante che rimbalza) produceva a referto la
+// stessa squadra come prima E come seconda, piu' un distacco mai esistito.
+
+function sameSidePads(ts0, ts1) {
+  return {
+    pads: [
+      { index: 0, timestamp: ts0, buttons: [{ pressed: true, value: 1 }] },
+      { index: 1, timestamp: ts1, buttons: [{ pressed: true, value: 1 }] }
+    ],
+    mapping: { GP0_B0: 'POINT_A', GP1_B0: 'POINT_A' }
+  };
+}
+
+test('la stessa base che preme due volte non genera un ALTRO BUZZER', () => {
+  const cfg = sameSidePads(4994.1, 4998.2);
+  const s = makeSandbox(cfg.pads, cfg.mapping);
+  s.pollGamepads();
+
+  assert.strictEqual(s.events.filter(e => e.type === 'BUZZER_FIRST').length, 1);
+  assert.strictEqual(
+    s.events.filter(e => e.type === 'BUZZER_LATE').length, 0,
+    `la stessa squadra non puo risultare anche seconda: ${JSON.stringify(s.events)}`
+  );
+  assert.strictEqual(s.events.filter(e => e.type === 'BUZZER_REPEAT').length, 1);
+});
+
+test('la ripetizione non fa comparire un distacco nel modale', () => {
+  const cfg = sameSidePads(4994.1, 4998.2);
+  const s = makeSandbox(cfg.pads, cfg.mapping);
+  s.pollGamepads();
+
+  assert.strictEqual(s.marginEl.innerText, '', `nessuna gara, nessun distacco: ${s.marginEl.innerText}`);
+  assert.strictEqual(s.marginEl.style.display, 'none');
+});
+
+test('la ripetizione non apre un secondo punto', () => {
+  const cfg = sameSidePads(4994.1, 4998.2);
+  const s = makeSandbox(cfg.pads, cfg.mapping);
+  s.pollGamepads();
+  assert.strictEqual(s.teamActions.length, 1);
+  assert.strictEqual(s.teamActions[0].side, 'left');
 });
 
 test('driver che non aggiorna timestamp (0) non manda in tilt lordine', () => {

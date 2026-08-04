@@ -118,6 +118,65 @@ function cookieHeader(token, maxAgeSeconds) {
         '; Path=/; HttpOnly; SameSite=Strict; Max-Age=' + maxAgeSeconds;
 }
 
+// Le pagine pubbliche della LAN devono ricevere solo cio' che renderizzano.
+// La chiave interna, gli identificatori IPBA, il profilo, l'eta' e i campi di
+// setup restano disponibili esclusivamente alla sessione locale autenticata.
+const publicRosterKeySecret = crypto.randomBytes(32);
+
+function publicPlayerKey(teamId, playerKey) {
+    return 'PUBLIC-' + crypto.createHmac('sha256', publicRosterKeySecret)
+        .update(String(teamId || '') + '|' + String(playerKey || ''), 'utf8')
+        .digest('hex')
+        .slice(0, 20)
+        .toUpperCase();
+}
+
+function publicRosterView(roster) {
+    const clean = Core.normalizeRoster(roster, roster && roster.team && roster.team.id);
+    return {
+        schemaVersion: clean.schemaVersion,
+        team: Object.assign({}, clean.team, { rosterUrl: '' }),
+        settings: Object.assign({}, clean.settings),
+        players: clean.players
+            .filter(player => player.customData.visible !== false)
+            .map(player => {
+                const display = Core.displayData(player);
+                return {
+                    playerKey: publicPlayerKey(clean.team.id, player.playerKey),
+                    source: {
+                        type: player.source.type,
+                        playerId: '',
+                        profileUrl: '',
+                        originalPhotoUrl: player.source.originalPhotoUrl,
+                        markupId: '',
+                        stale: player.source.stale === true
+                    },
+                    originalData: {
+                        fullName: display.name,
+                        number: display.number,
+                        role: display.role,
+                        age: ''
+                    },
+                    customData: {
+                        firstName: '',
+                        lastName: '',
+                        displayName: display.name,
+                        number: display.number,
+                        role: display.role,
+                        nickname: '',
+                        visible: true,
+                        order: player.customData.order,
+                        row: player.customData.row,
+                        rowPosition: player.customData.rowPosition
+                    },
+                    image: Object.assign({}, player.image)
+                };
+            }),
+        sourceUpdatedAt: clean.sourceUpdatedAt,
+        updatedAt: clean.updatedAt
+    };
+}
+
 function authFailureEntry(address) {
     const now = Date.now();
     // Pulizia opportunistica: la mappa e' indicizzata per indirizzo e senza
@@ -178,12 +237,54 @@ function normalizeRegistry(input) {
     };
 }
 
-async function readRegistry() {
-    try {
-        return normalizeRegistry(JSON.parse(await fsp.readFile(registryPath(), 'utf8')));
-    } catch (error) {
-        return { updatedAt: 0, teams: [] };
+function isPlainObject(value) {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function invalidLocalData(message) {
+    const error = new Error(message);
+    error.code = 'LOCAL_DATA_INVALID';
+    return error;
+}
+
+async function readJsonWithBackup(file, options) {
+    options = options || {};
+    const validate = typeof options.validate === 'function' ? options.validate : () => true;
+    const attempts = [file, file + '.bak'];
+    const errors = [];
+
+    for (let index = 0; index < attempts.length; index += 1) {
+        try {
+            const value = JSON.parse(await fsp.readFile(attempts[index], 'utf8'));
+            if (!validate(value)) throw invalidLocalData('struttura JSON non valida');
+            if (index === 1) {
+                console.warn('[ROSE] Recupero da backup valido: ' + path.basename(file) + '.bak');
+            }
+            return value;
+        } catch (error) {
+            errors.push(error);
+        }
     }
+
+    if (errors.every(error => error && error.code === 'ENOENT')) {
+        return typeof options.defaultValue === 'function' ? options.defaultValue() : options.defaultValue;
+    }
+
+    const error = new Error(
+        'Dati locali illeggibili in ' + path.basename(file) +
+        ' e nel relativo backup. Nessun dato e stato sovrascritto.'
+    );
+    error.code = 'LOCAL_DATA_CORRUPT';
+    error.cause = errors.find(item => item && item.code !== 'ENOENT') || errors[0];
+    throw error;
+}
+
+async function readRegistry() {
+    const raw = await readJsonWithBackup(registryPath(), {
+        defaultValue: () => ({ updatedAt: 0, teams: [] }),
+        validate: value => isPlainObject(value) && Array.isArray(value.teams)
+    });
+    return normalizeRegistry(raw);
 }
 
 // ---------- ARCHIVIO GIOCATORI ----------
@@ -198,15 +299,14 @@ function archivePath() {
 }
 
 async function readArchive() {
-    try {
-        const raw = JSON.parse(await fsp.readFile(archivePath(), 'utf8'));
-        return {
-            updatedAt: Math.max(0, Number(raw && raw.updatedAt) || 0),
-            players: raw && raw.players && typeof raw.players === 'object' ? raw.players : {}
-        };
-    } catch (error) {
-        return { updatedAt: 0, players: {} };
-    }
+    const raw = await readJsonWithBackup(archivePath(), {
+        defaultValue: () => ({ updatedAt: 0, players: {} }),
+        validate: value => isPlainObject(value) && isPlainObject(value.players)
+    });
+    return {
+        updatedAt: Math.max(0, Number(raw.updatedAt) || 0),
+        players: raw.players
+    };
 }
 
 function archiveEntryFromPlayer(player) {
@@ -266,18 +366,39 @@ function configPath(teamId) {
     return path.join(teamDir(teamId), 'roster.json');
 }
 
+async function backupCurrentFile(file, nextData) {
+    try {
+        if (typeof nextData === 'string') {
+            // Non rimpiazzare mai un .bak valido con un JSON gia' corrotto.
+            JSON.parse(await fsp.readFile(file, 'utf8'));
+        } else {
+            await fsp.access(file);
+        }
+        await fsp.copyFile(file, file + '.bak');
+    } catch (error) {
+        if (error && error.code === 'ENOENT') return;
+        if (error instanceof SyntaxError) {
+            console.warn('[ROSE] File primario non valido; backup precedente preservato: ' + path.basename(file));
+            return;
+        }
+        // Il backup e' prudenziale: un errore qui non deve bloccare il
+        // salvataggio atomico del nuovo contenuto gia' pronto.
+        console.warn('[ROSE] Backup non aggiornato per ' + path.basename(file) + ': ' + error.message);
+    }
+}
+
 async function atomicWrite(file, data) {
     await fsp.mkdir(path.dirname(file), { recursive: true });
-    const temp = file + '.tmp-' + process.pid + '-' + Date.now();
-    if (fs.existsSync(file)) {
-        try {
-            await fsp.copyFile(file, file + '.bak');
-        } catch (error) {
-            // Il backup è prudenziale: un errore qui non deve bloccare il salvataggio atomico.
-        }
+    const temp = file + '.tmp-' + process.pid + '-' + Date.now() + '-' +
+        crypto.randomBytes(6).toString('hex');
+    try {
+        await fsp.writeFile(temp, data);
+        await backupCurrentFile(file, data);
+        await fsp.rename(temp, file);
+    } catch (error) {
+        await fsp.unlink(temp).catch(() => undefined);
+        throw error;
     }
-    await fsp.writeFile(temp, data);
-    await fsp.rename(temp, file);
 }
 
 // ---------- SERIALIZZAZIONE DELLE SCRITTURE ----------
@@ -302,13 +423,16 @@ function withRosterLock(task) {
 }
 
 async function readRosterUnlocked(teamId) {
-    let raw;
-    try {
-        raw = JSON.parse(await fsp.readFile(configPath(teamId), 'utf8'));
-    } catch (error) {
-        return null;
-    }
-    return syncRosterWithArchive(Core.normalizeRoster(raw, teamId), false);
+    const id = Core.safeTeamId(teamId);
+    const raw = await readJsonWithBackup(configPath(id), {
+        defaultValue: () => null,
+        validate: value => isPlainObject(value) &&
+            isPlainObject(value.team) &&
+            Core.safeTeamId(value.team.id) === id &&
+            Array.isArray(value.players)
+    });
+    if (!raw) return null;
+    return syncRosterWithArchive(Core.normalizeRoster(raw, id), false);
 }
 
 async function saveRosterUnlocked(roster, options) {
@@ -653,65 +777,61 @@ function validateImageDimensions(info) {
 async function savePhoto(req, teamId, playerKey) {
     const id = Core.safeTeamId(teamId);
     const key = Core.safePlayerKey(playerKey);
-    const roster = await readRoster(id);
-    const player = roster && roster.players.find(item => item.playerKey === key);
-    if (!player) throw Object.assign(new Error('Giocatore non trovato'), { status: 404 });
+    if (!id || !key) throw Object.assign(new Error('Squadra o giocatore non valido'), { status: 400 });
 
     const mime = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
     if (!['image/png', 'image/webp', 'image/jpeg'].includes(mime)) {
         throw Object.assign(new Error('Formato non ammesso: usa PNG, WebP o JPEG'), { status: 415 });
     }
+    // Il body di rete resta fuori dalla coda globale; da questo punto in poi
+    // file, pulizia e aggiornamento JSON formano invece un'unica transazione.
     const buffer = await readBody(req, MAX_PHOTO);
     const info = imageInfo(buffer, mime);
     if (!validateImageDimensions(info)) {
         throw Object.assign(new Error('Firma o dimensioni immagine non valide'), { status: 415 });
     }
 
-    // Le foto dei giocatori IPBA sono condivise tra tutte le squadre
-    // (archivio per playerId); quelle dei giocatori manuali restano di squadra.
-    const pid = player.source.playerId;
-    const assets = pid ? path.join(DATA_ROOT, 'players', 'assets') : path.join(teamDir(id), 'assets');
-    const baseName = pid || key;
-    await fsp.mkdir(assets, { recursive: true });
-    const filename = baseName + info.ext;
-    await atomicWrite(path.join(assets, filename), buffer);
-    try {
-        const oldFiles = (await fsp.readdir(assets)).filter(name =>
-            name.startsWith(baseName + '.') &&
-            name !== filename &&
-            name !== filename + '.bak'
-        );
-        await Promise.all(oldFiles.map(name => fsp.unlink(path.join(assets, name)).catch(() => undefined)));
-    } catch (error) {
-        // La nuova foto è già stata salvata; la pulizia dei vecchi formati è secondaria.
-    }
+    return withRosterLock(async () => {
+        const roster = await readRosterUnlocked(id);
+        const player = roster && roster.players.find(item => item.playerKey === key);
+        if (!player) throw Object.assign(new Error('Giocatore non trovato'), { status: 404 });
 
-    const url = (pid
-        ? 'data/rosters/players/assets/'
-        : 'data/rosters/team-' + encodeURIComponent(id) + '/assets/') + encodeURIComponent(filename);
-    const hasTransparency = mime !== 'image/jpeg' && req.headers['x-image-transparency'] === '1';
+        const pid = player.source.playerId;
+        const assets = pid ? path.join(DATA_ROOT, 'players', 'assets') : path.join(teamDir(id), 'assets');
+        const baseName = pid || key;
+        await fsp.mkdir(assets, { recursive: true });
+        const filename = baseName + info.ext;
+        await atomicWrite(path.join(assets, filename), buffer);
+        try {
+            const oldFiles = (await fsp.readdir(assets)).filter(name =>
+                name.startsWith(baseName + '.') &&
+                name !== filename &&
+                name !== filename + '.bak'
+            );
+            await Promise.all(oldFiles.map(name => fsp.unlink(path.join(assets, name)).catch(() => undefined)));
+        } catch (error) {
+            // La nuova foto e' gia' stata salvata; la pulizia secondaria non
+            // deve rendere incoerente il riferimento appena scritto.
+        }
 
-    // La rosa va riletta DENTRO il lock: fra il controllo iniziale e qui sono
-    // passati l'upload del file e la scrittura su disco, durante i quali un
-    // altro salvataggio puo' aver modificato roster.json o players.json.
-    await withRosterLock(async () => {
-        const fresh = await readRosterUnlocked(id);
-        const target = fresh && fresh.players.find(item => item.playerKey === key);
-        if (!target) throw Object.assign(new Error('Giocatore non trovato'), { status: 404 });
-        target.image.customImageUrl = url;
-        target.image.selectedSource = 'CUSTOM';
-        target.image.hasTransparency = hasTransparency;
-        target.image.width = info.width;
-        target.image.height = info.height;
-        await saveRosterUnlocked(fresh, { updateArchive: true });
+        const url = (pid
+            ? 'data/rosters/players/assets/'
+            : 'data/rosters/team-' + encodeURIComponent(id) + '/assets/') + encodeURIComponent(filename);
+        const hasTransparency = mime !== 'image/jpeg' && req.headers['x-image-transparency'] === '1';
+        player.image.customImageUrl = url;
+        player.image.selectedSource = 'CUSTOM';
+        player.image.hasTransparency = hasTransparency;
+        player.image.width = info.width;
+        player.image.height = info.height;
+        await saveRosterUnlocked(roster, { updateArchive: true });
+
+        return {
+            url,
+            width: info.width,
+            height: info.height,
+            hasTransparency
+        };
     });
-
-    return {
-        url,
-        width: info.width,
-        height: info.height,
-        hasTransparency
-    };
 }
 
 async function deletePhoto(teamId, playerKey) {
@@ -897,7 +1017,12 @@ async function handleRosterApi(req, res, parsedUrl) {
                 json(res, 404, { error: 'Rosa non trovata' });
                 return true;
             }
-            json(res, 200, { roster, storage: 'SERVER_LOCALE' });
+            const session = authenticatedSession(req);
+            json(res, 200, {
+                roster: session ? roster : publicRosterView(roster),
+                storage: 'SERVER_LOCALE',
+                visibility: session ? 'FULL' : 'PUBLIC'
+            });
             return true;
         }
 

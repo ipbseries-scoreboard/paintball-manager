@@ -1028,9 +1028,10 @@
         <div id="point-verify-modal" class="overlay">
             <div class="modal-content" style="text-align: center; align-items: center;">
                 <h2 id="verify-title" style="color: var(--accent-color);">VERIFICA PUNTO</h2>
-                <!-- Distacco della gara al buzzer: compare solo quando anche
-                     l'altra squadra ha premuto, cosi' l'arbitro sa di quanto
-                     ha vinto il primo invece di doverlo stimare a occhio. -->
+                <!-- Esito della gara al buzzer: compare solo quando ha premuto
+                     anche l'ALTRA base. Sopra la soglia dell'impianto mostra il
+                     distacco; sotto dichiara che l'ordine non e' attribuibile,
+                     invece di stampare un numero che sembra una misura. -->
                 <div id="verify-margin" style="display: none; margin: -8px 0 12px; font-family: 'Roboto Mono', monospace; font-weight: 900; font-size: 0.95em; color: #fbbf24;"></div>
                 <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
                     <button id="btn-verify-approve" class="btn"
@@ -5012,9 +5013,9 @@
                         if (!bypassConfirm) {
                             document.getElementById('verify-title').innerText = `VERIFICA PUNTO: ${team.name}`;
                             // Il distacco si conosce solo se preme anche
-                            // l'altra squadra: si apre nascosto e lo riempie
+                            // l'altra base: si apre nascosto e lo riempie
                             // executeBuzzerGameAction al secondo buzzer.
-                            lastBuzzerRaceMargin = null;
+                            lastBuzzerRace = null;
                             updateVerifyMarginLabel();
                             document.getElementById('point-verify-modal').style.display = 'flex';
                             log(`RICHIESTA PUNTO da ${team.name}. In attesa di verifica. T: ${formatTimeMs(state.timer)}`);
@@ -7648,16 +7649,35 @@
                     : Date.now();
             }
 
+            // Soglia sotto la quale lo scarto misurato NON e' attribuibile alla
+            // differenza fra le due pressioni. L'impianto in uso passa da
+            // telecomandi 433 MHz: frequenza unica condivisa (due trasmissioni
+            // contemporanee si sovrappongono e il ricevitore ne decodifica una
+            // per volta, agganciando la piu' forte e non la prima), codice
+            // ripetuto piu' volte prima di essere accettato, rele' meccanico in
+            // fondo alla catena. Ne esce un ritardo dell'ordine dei 100-250 ms
+            // e per di piu' variabile: qualunque numero piu' piccolo e' rumore
+            // dell'impianto, non un distacco fra i due arbitri.
+            // Con buzzer cablati direttamente sull'encoder USB (niente radio)
+            // si puo' scendere a ~20 ms, cioe' il passo del polling.
+            const BUZZER_RACE_UNCERTAINTY_MS = 300;
+
             function formatBuzzerGap(ms) {
                 if (!(ms > 0)) return '0 ms';
-                if (ms < 1000) return `${ms.toFixed(1)} ms`;
-                return `${(ms / 1000).toFixed(3)} s`;
+                // Niente decimali: la sorgente piu' fine e' il report del
+                // dispositivo USB, che non scende sotto il millisecondo.
+                if (ms < 1000) return `${Math.round(ms)} ms`;
+                return `${(ms / 1000).toFixed(2)} s`;
             }
 
             let buzzerLockState = {
                 active: false,
                 firstPressTime: 0,
                 firstId: null,
+                // Serve a distinguere l'altra base che chiama dalla stessa base
+                // che ribatte: senza, ogni seconda pressione veniva scambiata
+                // per una gara fra le due squadre.
+                firstAction: null,
                 timeout: null
             };
 
@@ -7666,47 +7686,69 @@
             // VERIFY_* restano muti: sono comandi di regia, non chiamate fatte
             // dal campo dai giocatori.
             const BUZZER_ALERT_ACTIONS = ['POINT_A', 'POINT_B', 'TOWEL_A', 'TOWEL_B', 'TECH_A', 'TECH_B'];
-            // Distacco dell'ultima gara al buzzer: viene mostrato sotto il
-            // titolo del modale di verifica, cosi' l'arbitro vede di quanto ha
-            // vinto il primo invece di dover indovinare.
-            let lastBuzzerRaceMargin = null;
+            // Esito dell'ultima gara al buzzer, mostrato sotto il titolo del
+            // modale di verifica: null = nessuna gara, altrimenti chi ha
+            // premuto per primo e di quanto.
+            let lastBuzzerRace = null;
+
+            // Squadra corrispondente a una chiamata di punto, tenendo conto
+            // dell'inversione delle basi.
+            function buzzerTeamName(action) {
+                const side = action === 'POINT_A' ? 'left' : 'right';
+                const teamId = !state.basesSwapped
+                    ? (side === 'left' ? 'A' : 'B')
+                    : (side === 'left' ? 'B' : 'A');
+                return state.teams[teamId] ? state.teams[teamId].name : side.toUpperCase();
+            }
 
             function updateVerifyMarginLabel() {
                 const el = document.getElementById('verify-margin');
                 if (!el) return;
-                if (lastBuzzerRaceMargin === null) {
+                if (!lastBuzzerRace) {
                     el.style.display = 'none';
                     el.innerText = '';
                     return;
                 }
                 el.style.display = 'block';
-                el.innerText = lastBuzzerRaceMargin > 0
-                    ? `PRIMO BUZZER DI ${formatBuzzerGap(lastBuzzerRaceMargin)}`
-                    : 'PHOTO FINISH · distacco sotto la risoluzione del sensore';
+                el.style.color = '#fbbf24';
+                // Il primo buzzer registrato E' quello che ha premuto per
+                // primo: e' quello su cui si apre la verifica, e va nominato.
+                // Il distacco si aggiunge solo quando supera la soglia
+                // dell'impianto: sotto sarebbe un numero senza contenuto, ma il
+                // vincitore resta comunque dichiarato.
+                el.innerText = lastBuzzerRace.gapMs >= BUZZER_RACE_UNCERTAINTY_MS
+                    ? `PRIMO BUZZER: ${lastBuzzerRace.firstTeam} · +${formatBuzzerGap(lastBuzzerRace.gapMs)}`
+                    : `PRIMO BUZZER: ${lastBuzzerRace.firstTeam}`;
             }
 
-            function recordBaseBuzzerPriority(action, id, delayMs = 0, isFirst = false) {
+            // kind: 'FIRST' = vincitore della gara · 'RACE' = l'altra base ha
+            // chiamato dopo · 'REPEAT' = la stessa base ha premuto di nuovo.
+            // Qualunque altro valore non finisce a referto: resta nel log
+            // tecnico, perche' non e' una gara fra le due basi.
+            function recordBaseBuzzerPriority(action, id, delayMs = 0, kind = 'FIRST') {
                 if (action !== 'POINT_A' && action !== 'POINT_B') return;
-                const side = action === 'POINT_A' ? 'left' : 'right';
-                const teamId = !state.basesSwapped
-                    ? (side === 'left' ? 'A' : 'B')
-                    : (side === 'left' ? 'B' : 'A');
-                const teamName = state.teams[teamId] ? state.teams[teamId].name : side.toUpperCase();
+                const teamName = buzzerTeamName(action);
                 const buzzerId = String(id || 'N/A');
-                if (isFirst) {
+                if (kind === 'FIRST') {
                     recordRefereeEvent('BUZZER_FIRST', `PRIMO BUZZER: ${teamName} · ID ${buzzerId}`);
-                } else {
-                    // Prima "chi e' primo" si deduceva da delayMs <= 0: due
-                    // pressioni nello stesso tick davano delta 0 ed entrambe
-                    // finivano registrate come PRIMO BUZZER, quindi a referto
-                    // risultavano due vincitori e non lo prendeva nessuno dei
-                    // due. Ora il vincitore e' deciso a monte (ordinamento per
-                    // timestamp di pressione) e passato qui esplicitamente.
-                    const gap = delayMs > 0
-                        ? `+${formatBuzzerGap(delayMs)}`
-                        : 'PHOTO FINISH (sotto la risoluzione del sensore)';
-                    recordRefereeEvent('BUZZER_LATE', `ALTRO BUZZER: ${teamName} · ID ${buzzerId} · ${gap}`);
+                    return;
                 }
+                if (kind === 'REPEAT') {
+                    // Stessa base che preme di nuovo: l'arbitro che non vede
+                    // reazione e ribatte, oppure il rimbalzo del pulsante. Non
+                    // e' una gara, e a referto non deve risultare che ha
+                    // chiamato anche l'altra squadra.
+                    recordRefereeEvent('BUZZER_REPEAT', `RIPETIZIONE BUZZER: ${teamName} · ID ${buzzerId} · +${formatBuzzerGap(delayMs)}`);
+                    return;
+                }
+                if (kind !== 'RACE') return;
+                // Prima "chi e' primo" si deduceva da delayMs <= 0: due
+                // pressioni nello stesso tick davano delta 0 ed entrambe
+                // finivano registrate come PRIMO BUZZER, quindi a referto
+                // risultavano due vincitori e non lo prendeva nessuno dei
+                // due. Ora il vincitore e' deciso a monte (ordinamento per
+                // timestamp di pressione) e passato qui esplicitamente.
+                recordRefereeEvent('BUZZER_LATE', `ALTRO BUZZER: ${teamName} · ID ${buzzerId} · +${formatBuzzerGap(delayMs)}`);
             }
 
             function executeBuzzerGameAction(action, id, pressTs) {
@@ -7720,7 +7762,8 @@
                     buzzerLockState.active = true;
                     buzzerLockState.firstPressTime = ts;
                     buzzerLockState.firstId = String(id || 'N/A');
-                    lastBuzzerRaceMargin = null;
+                    buzzerLockState.firstAction = action;
+                    lastBuzzerRace = null;
                     // Il segnale parte dalla PRESSIONE, non dall'esito: cosi'
                     // si sente anche quando l'azione viene poi rifiutata. Solo
                     // sul primo buzzer della gara, altrimenti due pressioni
@@ -7729,6 +7772,10 @@
                     log(`BUZZER [PRIORITÀ]: ID ${id || 'N/A'} -> ${action}`);
                     const pointVerificationAlreadyActive =
                         (action === 'POINT_A' || action === 'POINT_B') && !!pendingPointSide;
+                    // Se la verifica gia' aperta e' della stessa base, questa e'
+                    // una ripetizione e non la chiamata dell'altra squadra.
+                    const repeatOfOpenVerification = pointVerificationAlreadyActive &&
+                        pendingPointSide === (action === 'POINT_A' ? 'left' : 'right');
                     recordBaseBuzzerPriority(
                         action,
                         id,
@@ -7738,6 +7785,8 @@
                         // valore inviato alle altre pagine.
                         pointVerificationAlreadyActive ? Math.max(1, Date.now() - (pendingPointOpenedAt || Date.now())) : 0,
                         !pointVerificationAlreadyActive
+                            ? 'FIRST'
+                            : (repeatOfOpenVerification ? 'REPEAT' : 'RACE')
                     );
 
                     // Reset lock after 1 second
@@ -7802,11 +7851,27 @@
                         log(`BUZZER [ORDINE]: ID ${id || 'N/A'} risulta anteriore di ${formatBuzzerGap(-rawDiff)} ma è arrivato dopo (trasporti diversi): resta primo ${buzzerLockState.firstId}`);
                     }
                     log(`BUZZER [LOG]: ID ${id || 'N/A'} -> ${action} (+${formatBuzzerGap(diffMs)})`);
-                    if (action === 'POINT_A' || action === 'POINT_B') {
-                        lastBuzzerRaceMargin = diffMs;
+
+                    // Una gara c'e' solo se ENTRAMBE le pressioni sono chiamate
+                    // di punto e vengono da basi diverse. Senza questo confronto
+                    // la stessa base che premeva due volte (arbitro che ribatte,
+                    // pulsante che rimbalza) finiva a referto come prima E come
+                    // seconda, e il modale mostrava un distacco mai esistito.
+                    const firstAction = buzzerLockState.firstAction;
+                    const bothArePointCalls = (action === 'POINT_A' || action === 'POINT_B') &&
+                        (firstAction === 'POINT_A' || firstAction === 'POINT_B');
+                    const kind = !bothArePointCalls
+                        ? 'OTHER'
+                        : (firstAction === action ? 'REPEAT' : 'RACE');
+
+                    if (kind === 'RACE') {
+                        lastBuzzerRace = {
+                            gapMs: diffMs,
+                            firstTeam: buzzerTeamName(firstAction)
+                        };
                         updateVerifyMarginLabel();
                     }
-                    recordBaseBuzzerPriority(action, id, diffMs, false);
+                    recordBaseBuzzerPriority(action, id, diffMs, kind);
                     broadcastState(true);
                 }
             }

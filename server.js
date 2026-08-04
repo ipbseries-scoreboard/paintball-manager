@@ -202,7 +202,10 @@ function fieldLogosWriteAllowed(req) {
 // e timestamp, quindi non collidono.
 function writeFieldLogosConfig(filePath, body) {
     const fsp = fs.promises;
-    const temp = filePath + '.tmp-' + process.pid + '-' + Date.now();
+    // Date.now() da solo non rende un nome univoco: due POST nello stesso
+    // millisecondo, nello stesso processo, finivano sul medesimo temporaneo.
+    const temp = filePath + '.tmp-' + process.pid + '-' + Date.now() + '-' +
+        crypto.randomBytes(6).toString('hex');
     return fsp.mkdir(FIELD_LOGOS_DIR, { recursive: true })
         .then(() => fsp.writeFile(temp, body))
         .then(() => fsp.rename(temp, filePath))
@@ -519,6 +522,12 @@ const REQUEST_STATE_INTERVAL_MS = positiveEnvInt('PM_RELAY_REQUEST_STATE_INTERVA
 const ROOM_RETENTION_MS = positiveEnvInt('PM_RELAY_ROOM_RETENTION_MS', 12 * 60 * 60 * 1000);
 const ROOM_SWEEP_INTERVAL_MS = positiveEnvInt('PM_RELAY_ROOM_SWEEP_MS', 5 * 60 * 1000);
 const CLIENT_MAX_MESSAGES_PER_SEC = positiveEnvInt('PM_RELAY_CLIENT_MSG_PER_SEC', 40);
+const CLIENT_MAX_BYTES_PER_SEC = positiveEnvInt('PM_RELAY_CLIENT_BYTES_PER_SEC', 1024 * 1024);
+// Una Regia normale trasmette pochi pacchetti al secondo e un FULL_SYNC
+// occasionale. Il ruolo host non puo' essere esente dai limiti: su una stanza
+// nuova chiunque puo' presentarsi come host e usare il relay come amplificatore.
+const HOST_MAX_MESSAGES_PER_SEC = positiveEnvInt('PM_RELAY_HOST_MSG_PER_SEC', 30);
+const HOST_MAX_BYTES_PER_SEC = positiveEnvInt('PM_RELAY_HOST_BYTES_PER_SEC', 32 * 1024 * 1024);
 
 // Il relay accettava l'upgrade da qualunque origine: una pagina malevola
 // aperta su un dispositivo della LAN poteva aprire un WebSocket verso la Regia
@@ -732,6 +741,21 @@ function normalizeRole(role) {
     return 'viewer';
 }
 
+function trafficLimitExceeded(ws, byteLength) {
+    const now = Date.now();
+    if (now - (ws._trafficWindowAt || 0) >= 1000) {
+        ws._trafficWindowAt = now;
+        ws._trafficMessages = 0;
+        ws._trafficBytes = 0;
+    }
+    ws._trafficMessages = (ws._trafficMessages || 0) + 1;
+    ws._trafficBytes = (ws._trafficBytes || 0) + Math.max(0, Number(byteLength) || 0);
+    const isHost = ws._role === 'host';
+    const messageLimit = isHost ? HOST_MAX_MESSAGES_PER_SEC : CLIENT_MAX_MESSAGES_PER_SEC;
+    const byteLimit = isHost ? HOST_MAX_BYTES_PER_SEC : CLIENT_MAX_BYTES_PER_SEC;
+    return ws._trafficMessages > messageLimit || ws._trafficBytes > byteLimit;
+}
+
 wss.on('connection', (ws) => {
     // Registra subito i gestori di trasporto: anche un payload rifiutato da
     // `ws` o una connessione oltre i limiti non deve produrre errori non gestiti.
@@ -761,18 +785,14 @@ wss.on('connection', (ws) => {
     ws.on('message', (raw) => {
         if (ws._authRejected) return;
 
-        // Solo la Regia ha motivo di inviare traffico ad alta frequenza (lo
-        // stato del match). Schermi e controller sono limitati: senza questo,
-        // un client poteva far parsare al server payload da 16 MB in loop.
-        if (ws._role && ws._role !== 'host') {
-            const now = Date.now();
-            if (now - (ws._msgWindowAt || 0) > 1000) { ws._msgWindowAt = now; ws._msgCount = 0; }
-            ws._msgCount = (ws._msgCount || 0) + 1;
-            if (ws._msgCount > CLIENT_MAX_MESSAGES_PER_SEC) {
-                ws._authRejected = true;
-                try { ws.close(1008, 'Troppi messaggi'); } catch (e) { }
-                return;
-            }
+        // Tutti i ruoli autenticati sono limitati sia per numero di frame sia
+        // per byte. Limitare solo il conteggio permetterebbe comunque decine di
+        // payload da 16 MB al secondo; esentare l'host renderebbe sufficiente
+        // creare una stanza nuova per aggirare completamente la protezione.
+        if (ws._role && trafficLimitExceeded(ws, raw && raw.length)) {
+            ws._authRejected = true;
+            try { ws.close(1008, 'Traffico eccessivo'); } catch (e) { }
+            return;
         }
 
         const text = raw.toString();
@@ -919,8 +939,7 @@ wss.on('connection', (ws) => {
             // Solo un controller autenticato puÃ² inviare comandi alla Regia.
             safeSend(room.host, text);
         } else if (ws._role === 'viewer') {
-            // I viewer sono di sola lettura, ma possono chiedere un nuovo stato
-            // completo dopo l'ingresso o una riconnessione.
+            // I viewer possono soltanto chiedere un nuovo stato completo.
             try {
                 const packet = JSON.parse(text);
                 if (packet && packet.type === 'requestState' && room.host) {
