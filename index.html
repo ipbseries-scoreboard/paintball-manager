@@ -1028,6 +1028,10 @@
         <div id="point-verify-modal" class="overlay">
             <div class="modal-content" style="text-align: center; align-items: center;">
                 <h2 id="verify-title" style="color: var(--accent-color);">VERIFICA PUNTO</h2>
+                <!-- Distacco della gara al buzzer: compare solo quando anche
+                     l'altra squadra ha premuto, cosi' l'arbitro sa di quanto
+                     ha vinto il primo invece di doverlo stimare a occhio. -->
+                <div id="verify-margin" style="display: none; margin: -8px 0 12px; font-family: 'Roboto Mono', monospace; font-weight: 900; font-size: 0.95em; color: #fbbf24;"></div>
                 <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
                     <button id="btn-verify-approve" class="btn"
                         style="background-color: var(--success-color); color: white; padding: 20px;">POINT
@@ -2087,6 +2091,16 @@
                 savedSettings.upgradedToEnglishTTS = true;
                 localStorage.setItem('pm_settings', JSON.stringify(savedSettings));
             }
+            // Passaggio una tantum alla voce maschile: populateVoiceList sceglie
+            // il motore solo quando voiceURI e' vuoto, quindi senza azzerarlo
+            // chi aveva gia' salvato una voce femminile se la terrebbe per
+            // sempre. Il flag viaggia dentro state.settings (vedi sotto) cosi'
+            // sopravvive ai salvataggi e la scelta manuale non viene piu' toccata.
+            if (!savedSettings.upgradedToMaleTTS) {
+                savedSettings.voiceURI = null;
+                savedSettings.upgradedToMaleTTS = true;
+                localStorage.setItem('pm_settings', JSON.stringify(savedSettings));
+            }
             // Persist the generated control PIN even on a fresh installation.
             localStorage.setItem('pm_settings', JSON.stringify(savedSettings));
 
@@ -2120,6 +2134,11 @@
                     singleSlotIntervalDuration: parseInt(savedSettings.singleSlotIntervalDuration) || 120,
                     goldenDuration: parseInt(savedSettings.goldenDuration) || 3,
                     voiceURI: savedSettings.voiceURI || null,
+                    // Deve stare qui dentro: ogni salvataggio riscrive
+                    // pm_settings con state.settings, e un flag lasciato fuori
+                    // andrebbe perso facendo ripartire la migrazione a ogni
+                    // avvio (azzerando la voce scelta a mano dall'utente).
+                    upgradedToMaleTTS: savedSettings.upgradedToMaleTTS === true,
                     mercyDiff: parseInt(savedSettings.mercyDiff) || 4,
                     matchId: typeof savedSettings.matchId === 'string' ? savedSettings.matchId : "",
                     controlPin: String(savedSettings.controlPin),
@@ -4295,6 +4314,23 @@
             const synth = window.speechSynthesis;
             let voices = [];
 
+            // La Web Speech API non espone il genere della voce: l'unico
+            // appiglio e' il nome del motore TTS. Questi sono i nomi maschili
+            // installati di serie su Windows/Chrome/Edge.
+            const MALE_VOICE_HINTS = [
+                'david', 'mark', 'guy', 'ryan', 'christopher', 'eric', 'roger',
+                'steffan', 'brian', 'andrew', 'george', 'james', 'alex',
+                'daniel', 'fred', 'male', 'cosimo', 'diego', 'giuseppe',
+                'gianni', 'rinaldo', 'lisandro'
+            ];
+
+            function isMaleVoice(v) {
+                if (!v || !v.name) return false;
+                const n = v.name.toLowerCase();
+                if (n.includes('female')) return false; // "Google UK English Female"
+                return MALE_VOICE_HINTS.some(hint => n.includes(hint));
+            }
+
             function populateVoiceList() {
                 voices = synth.getVoices().sort(function (a, b) {
                     const aname = a.name.toUpperCase(), bname = b.name.toUpperCase();
@@ -4311,25 +4347,39 @@
 
                 const all = [...enVoices, ...otherVoices];
 
-                // Priority: Any "en-US" > Any "en" > Default Browser Voice
-                let targetVoice = null;
-                const googleEn = enVoices.find(v => v.name.includes('Google') && v.lang === 'en-US');
-                if (googleEn) targetVoice = googleEn;
-                else if (enVoices.length > 0) targetVoice = enVoices[0];
+                // Priorita': maschile e locale > maschile > qualsiasi inglese.
+                // localService = motore installato sul PC: esce piu' corposo
+                // delle voci Google di rete e soprattutto non ha latenza, cosa
+                // che in campo conta piu' del timbro.
+                const maleEn = enVoices.filter(isMaleVoice);
+                const targetVoice =
+                    maleEn.find(v => v.localService && v.lang === 'en-US') ||
+                    maleEn.find(v => v.lang === 'en-US') ||
+                    maleEn.find(v => v.localService) ||
+                    maleEn[0] ||
+                    voices.filter(isMaleVoice)[0] ||
+                    enVoices.find(v => v.name.includes('Google') && v.lang === 'en-US') ||
+                    enVoices[0] ||
+                    null;
 
                 all.forEach(v => {
                     const opt = document.createElement('option');
-                    opt.textContent = `${v.name} (${v.lang})`;
+                    // Il marcatore serve a ritrovare a colpo d'occhio le voci
+                    // maschili nella tendina, che ne elenca decine.
+                    opt.textContent = `${isMaleVoice(v) ? '♂ ' : ''}${v.name} (${v.lang})`;
                     opt.value = v.voiceURI;
-                    // If we haven't set a preference yet, or if this is the target voice, set it
-                    if (!state.settings.voiceURI && targetVoice && v.voiceURI === targetVoice.voiceURI) {
-                        state.settings.voiceURI = v.voiceURI;
-                    } else if (!state.settings.voiceURI && v.default) {
-                        // Fallback to default if no Italian found/preferred
-                        state.settings.voiceURI = v.voiceURI;
-                    }
                     vSelect.appendChild(opt);
                 });
+
+                // La scelta va fatta FUORI dal ciclo. Prima veniva decisa
+                // dentro il forEach e bastava che una voce con v.default
+                // comparisse in ordine alfabetico prima di targetVoice perche'
+                // vincesse lei: su un PC con "Google US English" come default
+                // la preferenza calcolata sopra non veniva mai applicata.
+                if (!state.settings.voiceURI) {
+                    const picked = targetVoice || all.find(v => v.default) || all[0] || null;
+                    if (picked) state.settings.voiceURI = picked.voiceURI;
+                }
 
                 if (state.settings.voiceURI) vSelect.value = state.settings.voiceURI;
             }
@@ -4411,6 +4461,40 @@
                 });
             }
 
+            // --- SEGNALE DI CHIAMATA (BUZZER / TIMEOUT / TOWEL) ---
+            // Parte quando viene chiamato un punto dalle basi oppure un
+            // timeout/towel, da qualunque origine: buzzer fisico, pulsanti
+            // della Regia o tablet arbitro. Suona sulla Regia, che e' la
+            // postazione collegata all'impianto audio del campo.
+            // Non e' legato a state.settings.voice: come la sirena, e' un
+            // segnale di campo che deve sentirsi sempre.
+            const BUZZER_ALERT_SRC = 'buzzer-alert.mp3';
+            let buzzerAlertAudio = null;
+            let lastBuzzerAlertAt = -Infinity;
+
+            function playBuzzerAlert() {
+                // Una sola pressione attraversa piu' funzioni in cascata
+                // (buzzer -> azione smart -> pausa tecnica): senza questa
+                // finestra il file ripartirebbe due o tre volte di seguito.
+                const now = buzzerNow();
+                if (now - lastBuzzerAlertAt < 400) return;
+                lastBuzzerAlertAt = now;
+
+                try {
+                    if (!buzzerAlertAudio) {
+                        buzzerAlertAudio = new Audio(BUZZER_ALERT_SRC);
+                        buzzerAlertAudio.preload = 'auto';
+                    }
+                    buzzerAlertAudio.currentTime = 0;
+                    const played = buzzerAlertAudio.play();
+                    if (played && typeof played.catch === 'function') {
+                        played.catch(() => log("SEGNALE: suono di chiamata non riproducibile (file mancante o audio bloccato)."));
+                    }
+                } catch (e) {
+                    console.warn("Buzzer alert non riproducibile (non fatale):", e);
+                }
+            }
+
             function playBeep(type) {
                 if (!state.settings.voice) return; // Mute beeps if voice off? No, usually separate. But let's keep simple.
                 switch (type) {
@@ -4428,20 +4512,26 @@
                     const text = state.settings.lang === 'it-IT' ? textIT : textEN;
                     const utter = new SpeechSynthesisUtterance(text);
 
-                    // Apply improved settings
-                    utter.rate = 0.9; // Slightly slower
-                    utter.pitch = 1.0;
-                    utter.volume = 1.0; // Browser max volume. Web Speech API cannot exceed 1.0 natively.
-
                     // Select specific voice
+                    let chosenVoice = null;
                     if (state.settings.voiceURI) {
                         const selected = voices.find(v => v.voiceURI === state.settings.voiceURI);
-                        if (selected) utter.voice = selected;
-                    } else {
-                        // Fallback to lang match
-                        const v = voices.find(v => v.lang === state.settings.lang) || voices[0];
-                        if (v) utter.voice = v;
+                        if (selected) chosenVoice = selected;
                     }
+                    if (!chosenVoice) {
+                        // Fallback to lang match, preferendo comunque un timbro maschile
+                        const sameLang = voices.filter(v => v.lang === state.settings.lang);
+                        chosenVoice = sameLang.find(isMaleVoice) || sameLang[0] || voices.find(isMaleVoice) || voices[0] || null;
+                    }
+                    if (chosenVoice) utter.voice = chosenVoice;
+
+                    // Apply improved settings
+                    utter.rate = 0.95; // Slightly slower, ma non strascicato
+                    // pitch piu' basso = timbro piu' grave. Se il motore e' gia'
+                    // maschile bastano pochi punti, se e' femminile (unica voce
+                    // disponibile su quel PC) serve scendere parecchio.
+                    utter.pitch = isMaleVoice(chosenVoice) ? 0.85 : 0.6;
+                    utter.volume = 1.0; // Browser max volume. Web Speech API cannot exceed 1.0 natively.
 
                     synth.cancel(); // Clear any stuck utterances in the queue
                     synth.speak(utter);
@@ -4716,6 +4806,12 @@
             }
 
             function handleTechPause(teamId) {
+                // Timeout chiamato: si segnala la chiamata in se', prima dei
+                // controlli, perche' il segnale deve partire anche quando la
+                // richiesta viene poi rifiutata (meno di 10s, timeout gia'
+                // usato): serve a far sapere che qualcuno ha premuto.
+                playBuzzerAlert();
+
                 // Allow if PAUSED (from Interval) OR directly in INTERVAL
                 if (!((state.mode === 'PAUSED' && state.prevMode === 'INTERVAL') || state.mode === 'INTERVAL')) {
                     log("Pausa tecnica possibile solo durante l'intervallo!");
@@ -4743,7 +4839,9 @@
                 team.techUsed = true;
                 state.timer += 60;
                 updateTimerDisplay();
-                speak("Pausa Tecnica", "Technical Pause");
+                // I giocatori la chiamano "timeout": l'annuncio dice TIMEOUT,
+                // non "Tech Pause". Il nome interno dell'evento resta TECH.
+                speak("Timeout", "Timeout");
                 log(`PAUSA TECNICA RICHIESTA: ${team.name} (+60s)`);
                 recordRefereeEvent('TECH', `PAUSA TECNICA: ${team.name} (+60s)`);
                 showSmartAlert(`TECH: ${team.name}`, 'tech');
@@ -4889,6 +4987,11 @@
                             return pendingPointSide === side;
                         }
 
+                        // Punto chiamato dalle basi: vale per il buzzer, per il
+                        // pulsante PUNTO della Regia e per il tablet arbitro,
+                        // che passano tutti da qui.
+                        playBuzzerAlert();
+
                         // New Verification Flow
                         pendingPointSide = side;
                         pendingPointOriginalMode = state.mode;
@@ -4908,6 +5011,11 @@
 
                         if (!bypassConfirm) {
                             document.getElementById('verify-title').innerText = `VERIFICA PUNTO: ${team.name}`;
+                            // Il distacco si conosce solo se preme anche
+                            // l'altra squadra: si apre nascosto e lo riempie
+                            // executeBuzzerGameAction al secondo buzzer.
+                            lastBuzzerRaceMargin = null;
+                            updateVerifyMarginLabel();
                             document.getElementById('point-verify-modal').style.display = 'flex';
                             log(`RICHIESTA PUNTO da ${team.name}. In attesa di verifica. T: ${formatTimeMs(state.timer)}`);
                             broadcastState(true);
@@ -4918,6 +5026,7 @@
                         }
                     }
                     else if (action === 'action') { // This is for TOWEL
+                        playBuzzerAlert();
                         if (state.settings.confirmTowel && !bypassConfirm) {
                             pendingTowelSide = side;
                             document.getElementById('towel-confirm-modal').style.display = 'flex';
@@ -5090,6 +5199,12 @@
                 if (state.mode === 'POINT' || state.mode === 'OVERTIME') {
                     const teamId = !state.basesSwapped ? (side === 'left' ? 'A' : 'B') : (side === 'left' ? 'B' : 'A');
                     const teamName = state.teams[teamId].name;
+
+                    // Towel chiamato: si segnala subito, anche quando si apre
+                    // prima il modale di conferma. La finestra anti-ripetizione
+                    // dentro playBuzzerAlert evita il doppio suono con
+                    // executeTowel piu' sotto.
+                    playBuzzerAlert();
 
                     // Game phase -> TOWEL
                     if (state.settings.confirmTowel && !bypassConfirm) {
@@ -7387,12 +7502,20 @@
                     while (buzzerKeepReading) {
                         const { value, done } = await buzzerReader.read();
                         if (done) break;
+                        // Istante di arrivo del chunk, preso subito: se due
+                        // pulsanti vengono premuti insieme la centralina manda
+                        // le due righe nello stesso chunk.
+                        const chunkTs = buzzerNow();
                         buffer += value;
                         if (buffer.includes('\n')) {
                             const lines = buffer.split('\n');
                             buffer = lines.pop();
-                            for (const line of lines) {
-                                processBuzzerRawInput(line.trim());
+                            for (let i = 0; i < lines.length; i++) {
+                                // La centralina ha rilevato i pulsanti nell'ordine
+                                // in cui li manda: quell'ordine e' il fronte reale.
+                                // Il delta di 1 microsecondo lo conserva e impedisce
+                                // che due righe dello stesso chunk pareggino.
+                                processBuzzerRawInput(lines[i].trim(), chunkTs + i * 0.001);
                             }
                         }
                     }
@@ -7419,6 +7542,14 @@
 
             function pollGamepads() {
                 const gamepads = navigator.getGamepads ? navigator.getGamepads() : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads() : []);
+                const frameTs = buzzerNow();
+                // Il polling gira su requestAnimationFrame (~16.7 ms): due
+                // buzzer premuti quasi insieme cadono nello stesso frame. Prima
+                // venivano eseguiti nell'ordine di enumerazione, quindi vinceva
+                // sempre l'indice piu' basso a prescindere da chi avesse
+                // premuto prima. Ora si raccolgono tutti i fronti del frame e
+                // si eseguono ordinati per istante reale di pressione.
+                const framePresses = [];
 
                 for (let i = 0; i < gamepads.length; i++) {
                     const gp = gamepads[i];
@@ -7429,6 +7560,14 @@
                     }
 
                     const prevState = gamepadStates[gp.index];
+                    // gp.timestamp e' l'istante in cui il driver ha aggiornato
+                    // quel device: e' l'unico dato con risoluzione reale sotto
+                    // il millisecondo. Si accetta solo se e' plausibilmente
+                    // nella base tempi di performance.now(); i driver che non
+                    // lo aggiornano lasciano 0 e si ripiega sul frame.
+                    const gpTs = (typeof gp.timestamp === 'number' && gp.timestamp > 0 && gp.timestamp <= frameTs + 1000)
+                        ? gp.timestamp
+                        : frameTs;
 
                     gp.buttons.forEach((btn, bIdx) => {
                         const isPressed = btn.pressed || btn.value > 0.5;
@@ -7450,12 +7589,22 @@
                             const action = state.settings.buzzerMapping[buzzerId] || state.settings.buzzerMapping[bIdx.toString()];
 
                             if (action) {
-                                executeBuzzerGameAction(action, buzzerId);
+                                framePresses.push({ action, id: buzzerId, ts: gpTs, order: gp.index * 1000 + bIdx });
                             }
                         }
 
                         prevState.buttons[bIdx] = isPressed;
                     });
+                }
+
+                if (framePresses.length > 1) {
+                    // A parita' esatta di timestamp (driver che non discrimina)
+                    // l'ordine di enumerazione fa da spareggio deterministico:
+                    // conta che un vincitore ci sia sempre e sia sempre uno solo.
+                    framePresses.sort((a, b) => (a.ts - b.ts) || (a.order - b.order));
+                }
+                for (const press of framePresses) {
+                    executeBuzzerGameAction(press.action, press.id, press.ts);
                 }
 
                 requestAnimationFrame(pollGamepads);
@@ -7464,7 +7613,7 @@
             // Start Gamepad Polling
             requestAnimationFrame(pollGamepads);
 
-            function processBuzzerRawInput(line) {
+            function processBuzzerRawInput(line, pressTs) {
                 if (!line) return;
                 // Format: INGRESSO X
                 const match = line.match(/INGRESSO\s+(\d+)/i);
@@ -7482,18 +7631,61 @@
 
                 const action = state.settings.buzzerMapping[id];
                 if (action) {
-                    executeBuzzerGameAction(action, id);
+                    executeBuzzerGameAction(action, id, pressTs);
                 }
             }
 
             // --- BUZZER PRIORITY LOGIC ---
+            // Orologio monotono ad alta risoluzione. Date.now() ha risoluzione
+            // di 1 ms (e puo' persino tornare indietro durante una sincronia
+            // NTP): due pressioni nello stesso millisecondo davano differenza
+            // zero. performance.now() scende sotto il millisecondo ed e' la
+            // stessa base tempi di Gamepad.timestamp, quindi i due valori sono
+            // confrontabili fra loro.
+            function buzzerNow() {
+                return (typeof performance !== 'undefined' && typeof performance.now === 'function')
+                    ? performance.now()
+                    : Date.now();
+            }
+
+            function formatBuzzerGap(ms) {
+                if (!(ms > 0)) return '0 ms';
+                if (ms < 1000) return `${ms.toFixed(1)} ms`;
+                return `${(ms / 1000).toFixed(3)} s`;
+            }
+
             let buzzerLockState = {
                 active: false,
                 firstPressTime: 0,
+                firstId: null,
                 timeout: null
             };
 
-            function recordBaseBuzzerPriority(action, id, delayMs = 0) {
+            // Buzzer che fanno partire il segnale acustico: quelli delle basi
+            // (punto) e quelli di timeout/towel. START, PAUSE, NO_POINT e i
+            // VERIFY_* restano muti: sono comandi di regia, non chiamate fatte
+            // dal campo dai giocatori.
+            const BUZZER_ALERT_ACTIONS = ['POINT_A', 'POINT_B', 'TOWEL_A', 'TOWEL_B', 'TECH_A', 'TECH_B'];
+            // Distacco dell'ultima gara al buzzer: viene mostrato sotto il
+            // titolo del modale di verifica, cosi' l'arbitro vede di quanto ha
+            // vinto il primo invece di dover indovinare.
+            let lastBuzzerRaceMargin = null;
+
+            function updateVerifyMarginLabel() {
+                const el = document.getElementById('verify-margin');
+                if (!el) return;
+                if (lastBuzzerRaceMargin === null) {
+                    el.style.display = 'none';
+                    el.innerText = '';
+                    return;
+                }
+                el.style.display = 'block';
+                el.innerText = lastBuzzerRaceMargin > 0
+                    ? `PRIMO BUZZER DI ${formatBuzzerGap(lastBuzzerRaceMargin)}`
+                    : 'PHOTO FINISH · distacco sotto la risoluzione del sensore';
+            }
+
+            function recordBaseBuzzerPriority(action, id, delayMs = 0, isFirst = false) {
                 if (action !== 'POINT_A' && action !== 'POINT_B') return;
                 const side = action === 'POINT_A' ? 'left' : 'right';
                 const teamId = !state.basesSwapped
@@ -7501,25 +7693,51 @@
                     : (side === 'left' ? 'B' : 'A');
                 const teamName = state.teams[teamId] ? state.teams[teamId].name : side.toUpperCase();
                 const buzzerId = String(id || 'N/A');
-                if (delayMs <= 0) {
+                if (isFirst) {
                     recordRefereeEvent('BUZZER_FIRST', `PRIMO BUZZER: ${teamName} · ID ${buzzerId}`);
                 } else {
-                    recordRefereeEvent('BUZZER_LATE', `ALTRO BUZZER: ${teamName} · ID ${buzzerId} · +${(delayMs / 1000).toFixed(2)}s`);
+                    // Prima "chi e' primo" si deduceva da delayMs <= 0: due
+                    // pressioni nello stesso tick davano delta 0 ed entrambe
+                    // finivano registrate come PRIMO BUZZER, quindi a referto
+                    // risultavano due vincitori e non lo prendeva nessuno dei
+                    // due. Ora il vincitore e' deciso a monte (ordinamento per
+                    // timestamp di pressione) e passato qui esplicitamente.
+                    const gap = delayMs > 0
+                        ? `+${formatBuzzerGap(delayMs)}`
+                        : 'PHOTO FINISH (sotto la risoluzione del sensore)';
+                    recordRefereeEvent('BUZZER_LATE', `ALTRO BUZZER: ${teamName} · ID ${buzzerId} · ${gap}`);
                 }
             }
 
-            function executeBuzzerGameAction(action, id) {
-                const now = Date.now();
+            function executeBuzzerGameAction(action, id, pressTs) {
+                const now = buzzerNow();
+                // pressTs = istante reale della pressione (timestamp del driver
+                // gamepad o del chunk seriale). Chi non lo passa (hotkey,
+                // comando remoto) ricade sull'istante corrente.
+                const ts = (typeof pressTs === 'number' && isFinite(pressTs)) ? pressTs : now;
+
                 if (!buzzerLockState.active) {
                     buzzerLockState.active = true;
-                    buzzerLockState.firstPressTime = now;
+                    buzzerLockState.firstPressTime = ts;
+                    buzzerLockState.firstId = String(id || 'N/A');
+                    lastBuzzerRaceMargin = null;
+                    // Il segnale parte dalla PRESSIONE, non dall'esito: cosi'
+                    // si sente anche quando l'azione viene poi rifiutata. Solo
+                    // sul primo buzzer della gara, altrimenti due pressioni
+                    // ravvicinate lo farebbero ripartire a meta'.
+                    if (BUZZER_ALERT_ACTIONS.includes(action)) playBuzzerAlert();
                     log(`BUZZER [PRIORITÀ]: ID ${id || 'N/A'} -> ${action}`);
                     const pointVerificationAlreadyActive =
                         (action === 'POINT_A' || action === 'POINT_B') && !!pendingPointSide;
                     recordBaseBuzzerPriority(
                         action,
                         id,
-                        pointVerificationAlreadyActive ? Math.max(1, now - (pendingPointOpenedAt || now)) : 0
+                        // Il ritardo rispetto a una verifica gia' aperta e' un
+                        // tempo da orologio, non una gara al buzzer: resta su
+                        // Date.now() perche' pendingPointOpenedAt e' lo stesso
+                        // valore inviato alle altre pagine.
+                        pointVerificationAlreadyActive ? Math.max(1, Date.now() - (pendingPointOpenedAt || Date.now())) : 0,
+                        !pointVerificationAlreadyActive
                     );
 
                     // Reset lock after 1 second
@@ -7574,10 +7792,21 @@
                     }
                     broadcastState(true);
                 } else {
-                    const diffMs = now - buzzerLockState.firstPressTime;
-                    const diff = diffMs / 1000;
-                    log(`BUZZER [LOG]: ID ${id || 'N/A'} -> ${action} (+${diff.toFixed(2)}s)`);
-                    recordBaseBuzzerPriority(action, id, diffMs);
+                    const rawDiff = ts - buzzerLockState.firstPressTime;
+                    // Puo' risultare negativo solo se due trasporti diversi
+                    // (seriale e gamepad) consegnano fuori ordine. In quel caso
+                    // il vincitore resta quello gia' bloccato, ma la cosa va
+                    // detta a referto invece di stampare un ritardo negativo.
+                    const diffMs = rawDiff > 0 ? rawDiff : 0;
+                    if (rawDiff < 0) {
+                        log(`BUZZER [ORDINE]: ID ${id || 'N/A'} risulta anteriore di ${formatBuzzerGap(-rawDiff)} ma è arrivato dopo (trasporti diversi): resta primo ${buzzerLockState.firstId}`);
+                    }
+                    log(`BUZZER [LOG]: ID ${id || 'N/A'} -> ${action} (+${formatBuzzerGap(diffMs)})`);
+                    if (action === 'POINT_A' || action === 'POINT_B') {
+                        lastBuzzerRaceMargin = diffMs;
+                        updateVerifyMarginLabel();
+                    }
+                    recordBaseBuzzerPriority(action, id, diffMs, false);
                     broadcastState(true);
                 }
             }
