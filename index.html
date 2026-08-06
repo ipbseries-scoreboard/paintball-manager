@@ -4469,6 +4469,8 @@
             // postazione collegata all'impianto audio del campo.
             // Non e' legato a state.settings.voice: come la sirena, e' un
             // segnale di campo che deve sentirsi sempre.
+            // Il file e' un beep unico continuo di 3 secondi (~2230 Hz): prima
+            // erano tre beep brevi, troppo poco netti in mezzo al rumore.
             const BUZZER_ALERT_SRC = 'buzzer-alert.mp3';
             let buzzerAlertAudio = null;
             let lastBuzzerAlertAt = -Infinity;

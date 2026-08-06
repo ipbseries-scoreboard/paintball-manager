@@ -158,3 +158,71 @@ test('il file del segnale esiste e dura 3 secondi', () => {
     `il segnale deve durare 3 secondi, misurati ${seconds.toFixed(3)}s`
   );
 });
+
+// Legge un campo di bit dalle informazioni laterali del frame.
+function readBits(buf, base, bitOff, len) {
+  let v = 0;
+  for (let b = 0; b < len; b++) {
+    const p = bitOff + b;
+    v = (v << 1) | ((buf[base + (p >> 3)] >> (7 - (p & 7))) & 1);
+  }
+  return v;
+}
+
+// Un frame senza dati principali (part2_3_length a zero su tutti i granuli e
+// canali) e' un frame muto: basta questo per distinguere suono e pausa senza
+// dover decodificare l'audio.
+function mp3ToneBlocks(buf) {
+  let i = 0;
+  if (buf.slice(0, 3).toString('latin1') === 'ID3') {
+    const size = ((buf[6] & 0x7f) << 21) | ((buf[7] & 0x7f) << 14) | ((buf[8] & 0x7f) << 7) | (buf[9] & 0x7f);
+    i = 10 + size;
+  }
+  const BITRATES = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0];
+  const RATES = [44100, 48000, 32000, 0];
+  const blocks = [];
+  let sounding = 0, current = null;
+  while (i < buf.length - 4) {
+    if (buf[i] === 0xff && (buf[i + 1] & 0xe0) === 0xe0) {
+      const bitrate = BITRATES[(buf[i + 2] & 0xf0) >> 4];
+      const sampleRate = RATES[(buf[i + 2] & 0x0c) >> 2];
+      const padding = (buf[i + 2] & 0x02) >> 1;
+      if (!bitrate || !sampleRate) { i++; continue; }
+      const mono = ((buf[i + 3] & 0xc0) >> 6) === 3;
+      const nch = mono ? 1 : 2;
+      const crc = (buf[i + 1] & 0x01) === 0 ? 2 : 0;
+      const side = i + 4 + crc;
+      // main_data_begin + private_bits + scfsi, poi 59 bit per granulo/canale.
+      const head = mono ? 9 + 5 + 4 : 9 + 3 + 8;
+      let bits = 0;
+      for (let u = 0; u < 2 * nch; u++) bits += readBits(buf, side, head + u * 59, 12);
+
+      const frameSeconds = 1152 / sampleRate;
+      if (bits > 0) {
+        if (!current) { current = { start: sounding, seconds: 0 }; blocks.push(current); }
+        current.seconds += frameSeconds;
+      } else {
+        current = null;
+      }
+      sounding += frameSeconds;
+      i += Math.floor((144000 * bitrate) / sampleRate) + padding;
+    } else {
+      i++;
+    }
+  }
+  return blocks;
+}
+
+test('il segnale e un beep solo, lungo quanto il file', () => {
+  const buf = fs.readFileSync(path.join(ROOT, 'buzzer-alert.mp3'));
+  const blocks = mp3ToneBlocks(buf);
+  assert.strictEqual(
+    blocks.length, 1,
+    `atteso un unico beep continuo, trovati ${blocks.length} blocchi di suono ` +
+    `(${blocks.map(b => `${b.start.toFixed(2)}s+${b.seconds.toFixed(2)}s`).join(', ')})`
+  );
+  assert.ok(
+    blocks[0].seconds > 2.8,
+    `il beep deve coprire i 3 secondi, ne copre ${blocks[0].seconds.toFixed(3)}s`
+  );
+});
