@@ -17,7 +17,238 @@
     "orderMode": "AUTO",
     "maxVisible": 12
   },
-  "players": [],
-  "sourceUpdatedAt": 1785007334067,
-  "updatedAt": 1785007334082
+  "players": [
+    {
+      "playerKey": "TEAM-185_PLAYER-1080",
+      "source": {
+        "type": "IPBA",
+        "playerId": "1080",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=1080",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_1080/profilo/thumb/20240521195057590.jpg",
+        "markupId": "",
+        "stale": false
+      },
+      "originalData": {
+        "fullName": "BARDI SIMONE",
+        "number": "50",
+        "role": "",
+        "age": "27"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 1,
+        "row": "AUTO",
+        "rowPosition": 1
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 78,
+        "cropTop": 0,
+        "cropBottom": 0,
+        "anchor": "BOTTOM_CENTER",
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-185_PLAYER-889",
+      "source": {
+        "type": "IPBA",
+        "playerId": "889",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=889",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_889/profilo/thumb/2024050716500135.jpg",
+        "markupId": "",
+        "stale": false
+      },
+      "originalData": {
+        "fullName": "CAMPIONI CLAUDIO",
+        "number": "80",
+        "role": "FRONT",
+        "age": "32"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 2,
+        "row": "AUTO",
+        "rowPosition": 2
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 78,
+        "cropTop": 0,
+        "cropBottom": 0,
+        "anchor": "BOTTOM_CENTER",
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-185_PLAYER-984",
+      "source": {
+        "type": "IPBA",
+        "playerId": "984",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=984",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_984/profilo/thumb/20240508153946937.jpg",
+        "markupId": "",
+        "stale": false
+      },
+      "originalData": {
+        "fullName": "DILIÈ ALESSIO",
+        "number": "22",
+        "role": "",
+        "age": "31"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 3,
+        "row": "AUTO",
+        "rowPosition": 3
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 78,
+        "cropTop": 0,
+        "cropBottom": 0,
+        "anchor": "BOTTOM_CENTER",
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-185_PLAYER-1224",
+      "source": {
+        "type": "IPBA",
+        "playerId": "1224",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=1224",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_1224/profilo/thumb/20260419104041139.jpg",
+        "markupId": "",
+        "stale": false
+      },
+      "originalData": {
+        "fullName": "FAVARI MATTIA",
+        "number": "28",
+        "role": "BACK",
+        "age": "26"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 4,
+        "row": "AUTO",
+        "rowPosition": 4
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 78,
+        "cropTop": 0,
+        "cropBottom": 0,
+        "anchor": "BOTTOM_CENTER",
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-185_PLAYER-1048",
+      "source": {
+        "type": "IPBA",
+        "playerId": "1048",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=1048",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_1048/profilo/thumb/20240521195046127.jpg",
+        "markupId": "",
+        "stale": false
+      },
+      "originalData": {
+        "fullName": "PANDELLI MATTIA",
+        "number": "21",
+        "role": "BACK",
+        "age": "20"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 5,
+        "row": "AUTO",
+        "rowPosition": 5
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 78,
+        "cropTop": 0,
+        "cropBottom": 0,
+        "anchor": "BOTTOM_CENTER",
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    }
+  ],
+  "sourceUpdatedAt": 1786049637255,
+  "updatedAt": 1786049637256
 }

@@ -17,7 +17,146 @@
     "orderMode": "AUTO",
     "maxVisible": 12
   },
-  "players": [],
-  "sourceUpdatedAt": 1785007337206,
-  "updatedAt": 1785007337212
+  "players": [
+    {
+      "playerKey": "TEAM-192_PLAYER-1209",
+      "source": {
+        "type": "IPBA",
+        "playerId": "1209",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=1209",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_1209/profilo/thumb/20260403165405707.jpg",
+        "markupId": "",
+        "stale": false
+      },
+      "originalData": {
+        "fullName": "SCABORO GABRIEL",
+        "number": "14",
+        "role": "FRONT",
+        "age": "15"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 1,
+        "row": "AUTO",
+        "rowPosition": 1
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 72,
+        "cropTop": 0,
+        "cropBottom": 12,
+        "anchor": "BOTTOM_CENTER",
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-192_PLAYER-1039",
+      "source": {
+        "type": "IPBA",
+        "playerId": "1039",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=1039",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_1039/profilo/thumb/20260728075433.png",
+        "markupId": "",
+        "stale": false
+      },
+      "originalData": {
+        "fullName": "TOMIELLO ANDREA",
+        "number": "8",
+        "role": "BACK",
+        "age": "28"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 2,
+        "row": "AUTO",
+        "rowPosition": 2
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 72,
+        "cropTop": 0,
+        "cropBottom": 12,
+        "anchor": "BOTTOM_CENTER",
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-192_PLAYER-930",
+      "source": {
+        "type": "IPBA",
+        "playerId": "930",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=930",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_930/profilo/thumb/20250325173826892.jpg",
+        "markupId": "",
+        "stale": false
+      },
+      "originalData": {
+        "fullName": "ZAMBON ENRICO",
+        "number": "5",
+        "role": "MID",
+        "age": "28"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 3,
+        "row": "AUTO",
+        "rowPosition": 3
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 72,
+        "cropTop": 0,
+        "cropBottom": 12,
+        "anchor": "BOTTOM_CENTER",
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    }
+  ],
+  "sourceUpdatedAt": 1786049640346,
+  "updatedAt": 1786049640347
 }

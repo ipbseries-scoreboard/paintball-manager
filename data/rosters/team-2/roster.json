@@ -19,52 +19,6 @@
   },
   "players": [
     {
-      "playerKey": "TEAM-2_PLAYER-601",
-      "source": {
-        "type": "IPBA",
-        "playerId": "601",
-        "profileUrl": "https://www.ipba.it/profilo.aspx?id=601",
-        "originalPhotoUrl": "https://www.ipba.it/public/user_601/profilo/thumb/2025032812435452.jpg",
-        "markupId": "",
-        "stale": false
-      },
-      "originalData": {
-        "fullName": "CUMERLATO PAOLO",
-        "number": "88",
-        "role": "MID",
-        "age": "43"
-      },
-      "customData": {
-        "firstName": "",
-        "lastName": "",
-        "displayName": "",
-        "number": "",
-        "role": "",
-        "nickname": "",
-        "visible": true,
-        "order": 2,
-        "row": "AUTO",
-        "rowPosition": 2
-      },
-      "image": {
-        "selectedSource": "ORIGINAL",
-        "customImageUrl": "",
-        "hasTransparency": false,
-        "width": 0,
-        "height": 0,
-        "scale": 1,
-        "offsetX": 0,
-        "offsetY": 0,
-        "bustHeight": 72,
-        "cropTop": 0,
-        "cropBottom": 12,
-        "anchor": "BOTTOM_CENTER",
-        "flipX": false,
-        "shadow": true,
-        "glow": true
-      }
-    },
-    {
       "playerKey": "TEAM-2_PLAYER-958",
       "source": {
         "type": "IPBA",
@@ -183,6 +137,52 @@
         "order": 11,
         "row": "AUTO",
         "rowPosition": 11
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 72,
+        "cropTop": 0,
+        "cropBottom": 12,
+        "anchor": "BOTTOM_CENTER",
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-2_PLAYER-601",
+      "source": {
+        "type": "IPBA",
+        "playerId": "601",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=601",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_601/profilo/thumb/2025032812435452.jpg",
+        "markupId": "",
+        "stale": true
+      },
+      "originalData": {
+        "fullName": "CUMERLATO PAOLO",
+        "number": "88",
+        "role": "MID",
+        "age": "43"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": false,
+        "order": 2,
+        "row": "AUTO",
+        "rowPosition": 2
       },
       "image": {
         "selectedSource": "ORIGINAL",
@@ -571,6 +571,6 @@
       }
     }
   ],
-  "sourceUpdatedAt": 1785007313403,
-  "updatedAt": 1785007313445
+  "sourceUpdatedAt": 1786049616948,
+  "updatedAt": 1786049616950
 }

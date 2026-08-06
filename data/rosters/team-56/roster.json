@@ -17,7 +17,192 @@
     "orderMode": "AUTO",
     "maxVisible": 12
   },
-  "players": [],
-  "sourceUpdatedAt": 1785007318214,
-  "updatedAt": 1785007318218
+  "players": [
+    {
+      "playerKey": "TEAM-56_PLAYER-1129",
+      "source": {
+        "type": "IPBA",
+        "playerId": "1129",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=1129",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_1129/profilo/thumb/20250314184434714.jpg",
+        "markupId": "",
+        "stale": false
+      },
+      "originalData": {
+        "fullName": "COSTA CHRISTOPHER",
+        "number": "9",
+        "role": "FRONT",
+        "age": "26"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 1,
+        "row": "AUTO",
+        "rowPosition": 1
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 72,
+        "cropTop": 0,
+        "cropBottom": 12,
+        "anchor": "BOTTOM_CENTER",
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-56_PLAYER-15",
+      "source": {
+        "type": "IPBA",
+        "playerId": "15",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=15",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_15/profilo/thumb/20250325173751604.jpg",
+        "markupId": "",
+        "stale": false
+      },
+      "originalData": {
+        "fullName": "LEVORATO ENRICO",
+        "number": "77",
+        "role": "BACK",
+        "age": "35"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 2,
+        "row": "AUTO",
+        "rowPosition": 2
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 72,
+        "cropTop": 0,
+        "cropBottom": 12,
+        "anchor": "BOTTOM_CENTER",
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-56_PLAYER-1106",
+      "source": {
+        "type": "IPBA",
+        "playerId": "1106",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=1106",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_1106/profilo/thumb/20250314183937483.jpg",
+        "markupId": "",
+        "stale": false
+      },
+      "originalData": {
+        "fullName": "LORENZI FEDERICO",
+        "number": "2",
+        "role": "FRONT",
+        "age": "25"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 3,
+        "row": "AUTO",
+        "rowPosition": 3
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 72,
+        "cropTop": 0,
+        "cropBottom": 12,
+        "anchor": "BOTTOM_CENTER",
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    },
+    {
+      "playerKey": "TEAM-56_PLAYER-1107",
+      "source": {
+        "type": "IPBA",
+        "playerId": "1107",
+        "profileUrl": "https://www.ipba.it/profilo.aspx?id=1107",
+        "originalPhotoUrl": "https://www.ipba.it/public/user_1107/profilo/thumb/20250314184026542.jpg",
+        "markupId": "",
+        "stale": false
+      },
+      "originalData": {
+        "fullName": "MAGRO LORENZO",
+        "number": "1",
+        "role": "FRONT",
+        "age": "25"
+      },
+      "customData": {
+        "firstName": "",
+        "lastName": "",
+        "displayName": "",
+        "number": "",
+        "role": "",
+        "nickname": "",
+        "visible": true,
+        "order": 4,
+        "row": "AUTO",
+        "rowPosition": 4
+      },
+      "image": {
+        "selectedSource": "ORIGINAL",
+        "customImageUrl": "",
+        "hasTransparency": false,
+        "width": 0,
+        "height": 0,
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0,
+        "bustHeight": 78,
+        "cropTop": 0,
+        "cropBottom": 0,
+        "anchor": "BOTTOM_CENTER",
+        "flipX": false,
+        "shadow": true,
+        "glow": true
+      }
+    }
+  ],
+  "sourceUpdatedAt": 1786049621682,
+  "updatedAt": 1786049621683
 }
