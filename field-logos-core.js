@@ -896,10 +896,39 @@
         });
     }
 
+    // GitHub serve gli stessi file da due domini diversi, e uno solo dei due va
+    // bene qui: raw.githubusercontent.com risponde con "Access-Control-Allow-
+    // Origin: *", mentre github.com no. Un link copiato dall'interfaccia web
+    // (/blob/ e' addirittura una pagina HTML, /raw/ e' un redirect con
+    // l'intestazione vuota) fa fallire il caricamento con crossOrigin anche se
+    // l'immagine, da sola, nel browser si vedrebbe. Invece di lasciare
+    // l'operatore davanti a un errore CORS, l'indirizzo viene riscritto nella
+    // forma servibile.
+    function normalizeLogoUrl(url) {
+        if (typeof url !== 'string') return url;
+        var trimmed = url.trim();
+        var m = /^https?:\/\/(?:www\.)?github\.com\/([^\/?#]+)\/([^\/?#]+)\/(?:blob|raw)\/(.+)$/i.exec(trimmed);
+        if (!m) return trimmed;
+
+        var rest = m[3].replace(/#.*$/, '');
+        var q = rest.indexOf('?');
+        if (q !== -1) {
+            var query = rest.slice(q + 1);
+            rest = rest.slice(0, q);
+            // ?raw=1 serve solo a github.com: altrove sarebbe rumore. Una query
+            // diversa (per esempio un token) va invece conservata.
+            if (query && !/^raw=(1|true)$/i.test(query)) rest += '?' + query;
+        }
+        return 'https://raw.githubusercontent.com/' + m[1] + '/' + m[2] + '/' + rest;
+    }
+
     // Caricamento logo con CORS: senza crossOrigin il canvas verrebbe "tainted"
     // e WebGL/toDataURL fallirebbero. Se il server del logo non manda CORS,
     // distinguiamo l'errore per dare un messaggio chiaro all'operatore.
-    function loadLogoImage(url) {
+    function loadLogoImage(rawUrl) {
+        // Rete di sicurezza: field-logos-overlay.html carica gli url del payload
+        // gia' pubblicato senza ripassare da resolveLogoUrl.
+        var url = normalizeLogoUrl(rawUrl);
         return new Promise(function (resolve, reject) {
             if (!url) { reject(Object.assign(new Error('URL logo mancante'), { code: 'MISSING' })); return; }
             var img = new Image();
@@ -1033,18 +1062,18 @@
     function resolveLogoUrl(teamName, packetLogoUrl, clanConfig, fallbackUrl) {
         var clean = cleanTeamName(teamName);
         if (isPlaceholderName(clean)) return Promise.resolve(null);
-        if (packetLogoUrl) return Promise.resolve(packetLogoUrl);
+        if (packetLogoUrl) return Promise.resolve(normalizeLogoUrl(packetLogoUrl));
         if (clanConfig && clanConfig.length) {
             var tag = clean.trim().toLowerCase();
             var cfg = clanConfig.find(function (c) {
                 return c && c.name && c.name.trim().toLowerCase() === tag;
             });
-            if (cfg && cfg.logoUrl) return Promise.resolve(cfg.logoUrl);
+            if (cfg && cfg.logoUrl) return Promise.resolve(normalizeLogoUrl(cfg.logoUrl));
         }
         return fetchGithubLogoList().then(function (list) {
             var file = findFuzzyGithubLogo(clean, list);
             if (file) return GITHUB_LOGO_RAW + encodeURIComponent(file);
-            return fallbackUrl || null;
+            return fallbackUrl ? normalizeLogoUrl(fallbackUrl) : null;
         });
     }
 
@@ -1080,6 +1109,7 @@
         dataUrlToAlphaMask: dataUrlToAlphaMask,
         shadeToDataUrl: shadeToDataUrl,
         loadImageAny: loadImageAny,
+        normalizeLogoUrl: normalizeLogoUrl,
         loadLogoImage: loadLogoImage,
         compressPayload: compressPayload,
         decompressPayload: decompressPayload,

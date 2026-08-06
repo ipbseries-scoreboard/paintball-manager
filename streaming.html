@@ -2116,6 +2116,25 @@
         let clanConfig = []; // [{ name, logoUrl, rosterUrl }]
         const syncChannel = new BroadcastChannel('pm_sync');
 
+        // Un link al logo copiato dall'interfaccia web di GitHub punta a
+        // github.com, che non manda intestazioni CORS: l'immagine non si carica
+        // nelle pagine e blocca i loghi sul green. Viene riscritto su
+        // raw.githubusercontent.com appena entra, cosi' quello che finisce in
+        // pm_stream_clans e' gia' buono per tutte le altre pagine.
+        function normalizeLogoUrl(url) {
+            const Core = window.FieldLogosCore;
+            return Core && Core.normalizeLogoUrl ? Core.normalizeLogoUrl(url) : url;
+        }
+
+        // Ripara anche le liste salvate prima di questa correzione.
+        function normalizeClanList(list) {
+            if (!Array.isArray(list)) return [];
+            return list.map(clan => {
+                if (!clan || typeof clan !== 'object' || !clan.logoUrl) return clan;
+                return Object.assign({}, clan, { logoUrl: normalizeLogoUrl(clan.logoUrl) });
+            });
+        }
+
         // NEW: Zero-latency Local sync
         syncChannel.onmessage = (event) => {
             if (event.data && event.data.type === 'STATE_UPDATE') {
@@ -2309,7 +2328,7 @@
         // Load Stored Clans
         const storedClans = localStorage.getItem('pm_stream_clans');
         if (storedClans) {
-            try { clanConfig = JSON.parse(storedClans); } catch (e) { clanConfig = []; }
+            try { clanConfig = normalizeClanList(JSON.parse(storedClans)); } catch (e) { clanConfig = []; }
         }
 
         // Load Mascot Animations
@@ -2330,7 +2349,7 @@
             if (e.key === 'pm_stream_clans') {
                 const storedClans = localStorage.getItem('pm_stream_clans');
                 if (storedClans) {
-                    try { clanConfig = JSON.parse(storedClans); } catch (e) { clanConfig = []; }
+                    try { clanConfig = normalizeClanList(JSON.parse(storedClans)); } catch (e) { clanConfig = []; }
                 }
                 if (currentData) updateBoard(currentData);
             }
@@ -2483,7 +2502,7 @@
                         .filter(clan => clan && typeof clan === 'object')
                         .map(clan => ({
                             name: String(clan.name == null ? '' : clan.name).slice(0, 120),
-                            logoUrl: String(clan.logoUrl == null ? '' : clan.logoUrl).slice(0, 4 * 1024 * 1024),
+                            logoUrl: normalizeLogoUrl(String(clan.logoUrl == null ? '' : clan.logoUrl).slice(0, 4 * 1024 * 1024)),
                             rosterUrl: String(clan.rosterUrl == null ? '' : clan.rosterUrl).slice(0, 2048)
                         }));
                 }
@@ -3074,7 +3093,12 @@
             localStorage.removeItem('pm_stream_clans');
             alert("Lista svuotata!");
         }
-        function updateClan(idx, field, val) { clanConfig[idx][field] = val; renderSetupList(); } // Re-render to show preview
+        // Re-render to show preview. Il link del logo viene riscritto qui: e'
+        // il punto in cui l'operatore lo incolla, e da qui finisce salvato.
+        function updateClan(idx, field, val) {
+            clanConfig[idx][field] = field === 'logoUrl' ? normalizeLogoUrl(val) : val;
+            renderSetupList();
+        }
         function removeClan(idx) { clanConfig.splice(idx, 1); renderSetupList(); }
         function saveClans() {
             try {
